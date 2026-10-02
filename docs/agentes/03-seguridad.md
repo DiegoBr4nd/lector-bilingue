@@ -8,7 +8,7 @@
 
 | Skill | Qué aporta | Instalación (la hace Juan) |
 |---|---|---|
-| **security** (oficial de Google, `android/skills`) | Buenas prácticas de seguridad en Android | `android skills add` |
+| **android-intent-security** y **android-permissions-security** (oficiales de Google, `android/skills`) | Intents y componentes exportados seguros; permisos mínimos | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
 | **Trail of Bits** (`trailofbits/skills`) | Firma de seguridad reconocida. Plugins útiles: `static-analysis` (CodeQL, Semgrep), `differential-review` (revisión de cambios con historial git), `insecure-defaults` (configuraciones inseguras por defecto), `c-review` (para el puente C++ del motor) | `/plugin marketplace add trailofbits/skills` y luego `/plugin menu` para instalar cada uno |
 | **Superpowers** → `requesting-code-review` | Revisión contra el plan | Ver `05-metodologia.md` |
 

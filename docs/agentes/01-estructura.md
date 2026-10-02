@@ -8,7 +8,7 @@
 
 | Skill | Qué aporta | Instalación (la hace Juan) |
 |---|---|---|
-| **Android Skills oficiales de Google** (`android/skills`) | Compose, Navigation 3, pruebas, edge-to-edge, R8, seguridad | Con la **Android CLI**: `android skills add <nombre> --project=.` (ver lista con `android skills`) |
+| **Android Skills oficiales de Google** (`android/skills`): `navigation-3`, `adaptive`, `styles`, `testing-setup`, `edge-to-edge` | Navigation 3, diseño adaptable, temas, pruebas y borde a borde | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
 | **compose-agent** (hamen/compose_skill) | Guía y revisión de código Compose mientras se escribe | `/plugin marketplace add hamen/compose_skill` y `/plugin install compose-agent@compose_skill` |
 | **jetpack-compose-audit** (mismo repo) | Auditoría del repo con nota 0-100 (rendimiento, estado, efectos) | `/plugin install jetpack-compose-audit@compose_skill` |
 | **Superpowers** | Proceso: plan, TDD, revisión | Ver `05-metodologia.md` |
@@ -93,7 +93,7 @@ data class EngineConfig(
 
 ### Fase 1 · Proyecto base (1a) + motor (1b) ⭐ (la prueba de fuego)
 **1a**
-1. Crear el proyecto con la Android CLI (`android create`) o con Android Studio: Kotlin, Compose, minSdk 26, paquete `io.github.<usuario>.lectorbilingue`.
+1. Crear el proyecto con Android Studio (*New Project → Empty Activity*) o con Gradle; no dependas de la Android CLI (bloqueada en el Windows de Juan): Kotlin, Compose, minSdk 26, paquete `io.github.<usuario>.lectorbilingue`.
 2. Crear los módulos `:app`, `:core:text`, `:engine:api`, `:engine:opus`.
 
 **1b**

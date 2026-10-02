@@ -16,7 +16,7 @@ Detalles y evidencia: `docs/contexto-y-decisiones.md`.
 - `docs/agentes/04-diseno.md`: interfaz y accesibilidad
 
 ## Fase actual
-**Fase 0 · Preparación** ← Juan actualiza esta línea al pasar cada puerta.
+**Fase 1a · Proyecto base** ← Juan actualiza esta línea al pasar cada puerta.
 
 ## Reglas siempre vigentes
 1. Responder a Juan **en español**, en frases cortas y con viñetas. Juan es nuevo en Kotlin/Android: definir cada término nuevo en una línea, con una analogía si ayuda.

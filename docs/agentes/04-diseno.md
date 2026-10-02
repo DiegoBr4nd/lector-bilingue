@@ -9,7 +9,7 @@
 | Skill | Por qué es la mejor opción | Instalación (la hace Juan) |
 |---|---|---|
 | **material-3** (`hamen/material-3-skill`, Ivan Morgillo) | Hecha para **Jetpack Compose** como plataforma principal. Cubre 30+ componentes, *design tokens* (los valores del diseño: colores, tamaños, tipografía), temas, diseño adaptable y un **modo auditoría** que puntúa la app en 10 categorías de cumplimiento Material 3. ~1,4 mil estrellas, MIT, versión 1.1.1 (jun 2026) | `npx --yes skills add hamen/material-3-skill --skill material-3 -y` o en Claude Code: `/plugin marketplace add hamen/material-3-skill` y `/plugin install material-3@material-3-skill` |
-| **jetpack-compose** y **edge-to-edge** (oficiales de Google, `android/skills`) | Las prácticas oficiales actuales de Compose y de pantallas de borde a borde | `android skills add` |
+| **styles**, **adaptive** y **edge-to-edge** (oficiales de Google, `android/skills`) | Prácticas oficiales de temas/estilos en Compose, diseño adaptable a tamaños de pantalla y pantallas de borde a borde | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
 | **compose-agent** (`hamen/compose_skill`) | Revisa el código de cada pantalla mientras se escribe (rendimiento, estado) | Ver `01-estructura.md` |
 
 **¿Por qué no otras?** Las skills de diseño más famosas (por ejemplo, `frontend-design` de Anthropic) están pensadas para **web** (HTML/CSS/React). Esta app es Android nativo con Compose; las de arriba hablan ese idioma.
