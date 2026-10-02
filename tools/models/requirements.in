@@ -1,0 +1,6 @@
+ctranslate2==4.8.2
+sentencepiece==0.2.2
+huggingface_hub<1
+transformers==4.57.6
+torch
+safetensors

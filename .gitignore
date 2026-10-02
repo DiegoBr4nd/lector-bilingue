@@ -13,3 +13,6 @@ captures/
 # Textos privados de Juan (derechos de autor): nunca a git
 private/
 textos_*.html
+
+# Python
+__pycache__/
