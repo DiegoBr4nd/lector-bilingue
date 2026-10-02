@@ -8,13 +8,13 @@
 
 | Skill | Qué aporta | Instalación (la hace Juan) |
 |---|---|---|
-| **Android CLI** + skill `android-cli` (oficial de Google) | Instalar SDK/NDK, crear proyecto, emuladores, desplegar al teléfono desde la terminal. Google reporta ~70 % menos tokens y tareas 3× más rápidas | Descarga en `d.android.com/tools/agents`; skill con `android skills add` |
-| **agp-9-upgrade** (oficial) | Configuración moderna de Gradle/AGP | `android skills add` |
-| **r8-analyzer** (oficial) | Reglas de R8 (minificación) sin romper JNI | `android skills add` |
-| **testing-setup** (oficial) | Configuración de pruebas | `android skills add` |
+| Skill `android-cli` (oficial de Google) | Referencia de la Android CLI. **Opcional:** en Windows con Smart App Control la CLI no carga; usar Gradle y Android Studio | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
+| **agp-9-upgrade** (oficial) | Configuración moderna de Gradle/AGP | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
+| **r8-analyzer** (oficial) | Reglas de R8 (minificación) sin romper JNI | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
+| **testing-setup** (oficial) | Configuración de pruebas | Ya copiada en `.claude/skills/` (Paso 0.5 del plan maestro) |
 | **Superpowers** | Proceso | Ver `05-metodologia.md` |
 
-> Usa `android skills` para ver los nombres exactos disponibles; el repositorio oficial es `github.com/android/skills` (Apache-2.0).
+> Repositorio oficial: `github.com/android/skills` (Apache-2.0). En el Windows de Juan, *Smart App Control* bloquea la Android CLI (un `.dll` sin firma reconocida): **no dependas de ella**. Usa Gradle y las herramientas del SDK de Android Studio (`adb`, `sdkmanager`). Las skills se copiaron a mano.
 
 ## 2. Piezas que construye este agente
 

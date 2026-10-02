@@ -46,8 +46,8 @@ Instálalos en este orden:
    - Al abrirlo por primera vez, acepta la instalación estándar (SDK, emulador).
    - Trae `adb`, la herramienta que habla con tu Pixel por USB.
    - Tu laptop de 16 GB de RAM es suficiente.
-4. [ ] **Android CLI** (oficial de Google, para agentes) → https://d.android.com/tools/agents
-   - Sigue las instrucciones de esa página. Al terminar, `android --help` debe responder en la terminal.
+4. [ ] *(Opcional)* **Android CLI** (oficial de Google, para agentes) → https://d.android.com/tools/agents
+   - Si Windows la bloquea con "Una directiva de Control de aplicaciones bloqueó este archivo", **sáltala**: no es indispensable.
 5. [ ] **Claude Code**: abre **PowerShell** (no hace falta como administrador) y pega:
    ```powershell
    irm https://claude.ai/install.ps1 | iex
@@ -121,33 +121,44 @@ La primera vez te pedirá iniciar sesión en el navegador. Luego escribe estos c
 ```
 En el menú, instala: `static-analysis`, `differential-review`, `insecure-defaults` y `c-review`.
 
-**Skills oficiales de Android (Google).** Sal de Claude Code (`/exit`) y en PowerShell:
+**Skills oficiales de Android (Google).** Son solo archivos de texto, así que se copian directo del repositorio oficial (no hace falta la Android CLI; en Windows con *Smart App Control* activo, `android skills add` falla al cargar un `.dll`). Sal de Claude Code (`/exit`) y en PowerShell, dentro de la carpeta del proyecto:
 ```powershell
-android skills
+git clone --depth 1 https://github.com/android/skills.git "$env:TEMP\android-skills"
+$skills = @(
+  "jetpack-compose\adaptive",
+  "jetpack-compose\theming\styles",
+  "navigation\navigation-3",
+  "security\android-intent-security",
+  "security\android-permissions-security",
+  "system\edge-to-edge",
+  "testing\testing-setup",
+  "performance\r8-analyzer",
+  "build-system\agp\agp-9-upgrade",
+  "devtools\android-cli"
+)
+New-Item -ItemType Directory -Force ".claude\skills" | Out-Null
+foreach ($s in $skills) { Copy-Item -Recurse -Force "$env:TEMP\android-skills\$s" ".claude\skills\" }
+Copy-Item -Force "$env:TEMP\android-skills\LICENSE.txt" ".claude\skills\ANDROID-SKILLS-LICENSE.txt"
+Get-ChildItem ".claude\skills"
 ```
-Eso muestra la lista. Instala estas en el proyecto (los nombres exactos pueden variar un poco; usa los que muestre la lista):
-```powershell
-android skills add jetpack-compose --project=.
-android skills add navigation --project=.
-android skills add security --project=.
-android skills add edge-to-edge --project=.
-android skills add testing-setup --project=.
-android skills add android-cli --project=.
-android skills add r8-analyzer --project=.
-```
+Debes ver 10 carpetas. Súbelas al repo (`git add .claude/skills` → `git commit -m "chore: android skills oficiales"` → `git push`).
 
 ### Paso 0.6 · Verificar
-Vuelve a abrir `claude` y escribe:
+Vuelve a abrir `claude` y escribe `@agent-` (sin enviar): el autocompletado debe mostrar los 4 subagentes **estructura, infraestructura, seguridad, diseno**.
+También puedes preguntar: *"¿Qué subagentes de proyecto tienes disponibles?"*
+
+> ℹ️ En Claude Code 2.1.198 o más nuevo, el comando `/agents` aparece como **"(removed)"**: ya no abre un menú. Es normal y no significa que tus agentes se borraron.
+
+Para revisar que los archivos no tengan errores de formato (en PowerShell):
+```powershell
+claude plugin validate .claude/agents
 ```
-/agents
-```
-Debes ver los 4 subagentes: **estructura, infraestructura, seguridad, diseno**.
 
 ### ✅ Puerta de la Fase 0
 - [ ] `claude --version` responde.
 - [ ] `adb devices` muestra el Pixel.
 - [ ] El repo está en GitHub con el kit.
-- [ ] `/agents` muestra los 4 agentes.
+- [ ] `@agent-` muestra los 4 agentes.
 - [ ] Las skills están instaladas (`/plugin` las lista).
 
 Cuando todo esté en verde, cambia en `CLAUDE.md` la línea de **Fase actual** a `Fase 1a · Proyecto base`.
@@ -239,7 +250,7 @@ y guía paso a paso para que YO cree el keystore, firme y envíe a F-Droid y Goo
 |---|---|
 | `@agent-seguridad revisa esta rama` | Pedir revisión de seguridad a mano |
 | `@agent-diseno muéstrame bocetos de X` | Pedir propuestas de diseño |
-| `/agents` | Ver o editar los subagentes |
+| `@agent-` (sin enviar) | Ver los subagentes disponibles |
 | `/plugin` | Ver las skills y plugins instalados |
 | `/clear` | Empezar una conversación limpia (útil al cambiar de tarea) |
 
