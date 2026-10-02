@@ -1,0 +1,118 @@
+# 25 textos sustitutos para pruebas y benchmark del proyecto lector-bilingue.
+# Escritos para este proyecto; licencia GPL-3.0-or-later como el resto del repositorio.
+# Formato: párrafos separados por una línea en blanco; una oración por línea.
+
+The lighthouse keeper climbed the stairs every evening, counting each step as his father had taught him.
+Ninety-one, always ninety-one.
+Tonight the wind pulled at the shutters, and the sea below sounded like a crowd murmuring behind a closed door.
+He lit the lamp and waited.
+
+Marta stood at the kitchen window and watched the snow cover the garden.
+"You're late," her brother said from the doorway.
+"I know."
+"Did the train break down again?!"
+She smiled without turning around, because the truth was far stranger than any excuse.
+
+The village had no name on the map, only a small grey square where the road bent toward the river.
+People there measured time by the ringing of the church bell, not by clocks.
+Strangers found this charming for a day... then they grew restless and left before the second sunrise.
+
+When the old actor finally walked onto the stage, nobody in the theatre dared to cough.
+He looked at the empty seats in the balcony as if they were full of friends.
+Then he began to speak, softly at first, and the whole room leaned forward to catch every word.
+
+Rain fell on the harbour for three days.
+The fishermen mended their nets in silence, while the gulls argued over scraps on the wet stones.
+On the fourth morning the clouds broke apart, and a thin yellow light spread across the water like spilled honey.
+
+I had a great time at the party, but I'm completely beat now.
+My neighbour kept going on and on about his new car, and I just couldn't get a word in edgewise.
+Anyway, I told him I'd call it a night around 11 p.m. because of work.
+He didn't take the hint.
+
+Look, I'm not trying to rain on your parade, but this plan is a long shot.
+You're bending over backwards for people who wouldn't lift a finger for you.
+Why not sleep on it first?
+If you still feel the same way tomorrow, I'll back you up one hundred percent.
+
+We were running late, so Dad floored it, and we made it to the airport with five minutes to spare.
+My sister was freaking out the whole way.
+She kept saying we'd miss the flight, but it turned out the plane was delayed anyway.
+Typical!
+
+It's a piece of cake, honestly.
+You just throw everything into a big pot, let it simmer for about 40 minutes, and bingo, dinner is served.
+Don't sweat it if the sauce looks funny at first.
+Mine always does.
+
+Mr. Alvarez handed me a coffee and said I looked like I had seen a ghost.
+"Pretty much," I answered.
+"My landlord just raised the rent by 12.5 percent, and I only found out this morning."
+He whistled and shook his head.
+
+Recent studies suggest that sleep plays a central role in consolidating memory.
+In one experiment, participants who slept after learning a list of words recalled significantly more of them than those who stayed awake (the difference was nearly 20 percent).
+The authors caution, however, that the sample was small.
+Further research is needed.
+
+Dr. Okafor argues that cities grew not because of trade alone but because of shared institutions.
+Her book follows the work of J. R. Hicks and other economists who studied early markets.
+Many of her claims remain contested, e.g. the role of religious temples in storing grain.
+Still, the evidence she presents is hard to ignore.
+
+The history of printing is often told as a story of sudden invention, yet the reality was slower and messier.
+Movable type existed in East Asia centuries before it reached Europe.
+What changed in the fifteenth century was not the idea but the economy around it, as paper became cheap and literacy spread among merchants.
+
+Why did the empire collapse so quickly?
+Historians have offered many answers: plague, taxation, civil war, and the loss of distant provinces.
+No single cause is convincing on its own.
+It seems more likely that several pressures arrived at once, and the system had no room left to bend.
+
+This Agreement shall be governed by the laws of the State of New York, without regard to its conflict of law provisions.
+Any dispute arising under this Agreement shall be submitted to the exclusive jurisdiction of the courts located in that State.
+The parties hereby waive any objection to such venue.
+
+The Tenant shall pay the monthly rent of $1,250.00 on or before the fifth day of each month.
+Failure to do so for more than 10 days shall constitute a material breach.
+In such case, the Landlord may terminate the lease upon written notice (including notice sent by email).
+Late fees shall apply as described below.
+
+Mrs. Whitfield, hereinafter "the Seller", agrees to transfer the property described in Exhibit A to the Buyer, free of any lien or encumbrance.
+The Buyer shall inspect the property no later than 9 a.m. on the day of closing.
+Any defects discovered thereafter shall be the responsibility of the Buyer.
+
+All personal data collected by the Company shall be processed solely for the purposes stated in this Policy.
+You may request access to, correction of, or deletion of your data at any time.
+Requests must be submitted in writing, and the Company will respond within 30 days.
+Should you have any questions, please contact our office.
+
+To install the package, run the setup script as an administrator, e.g. from a terminal with elevated rights.
+The script downloads version 2.4.1 of the library and verifies its checksum.
+If the check fails, the installation stops immediately.
+Do not ignore this warning.
+
+A cache stores recently used data so that future requests can be served faster.
+When the cache is full, the system must decide which entry to discard.
+A common strategy removes the least recently used item first, although other policies can perform better for specific workloads.
+
+The server returned an error because the request body was larger than the 2.5 MB limit.
+Did the client retry the upload?!
+According to the logs, it tried three times and gave up.
+We should add a clear message so users know what went wrong.
+
+Neural networks learn by adjusting millions of numeric weights to reduce a measured error.
+Each adjustment is small... but repeated billions of times it produces surprisingly capable behaviour.
+Engineers still debate why this works so well, and a full theory remains out of reach.
+
+Actually, the library was closed on Monday, so I could not return the book.
+I was a bit embarrassed when the clerk told me the fine had reached 4.50 dollars.
+Anyway, she was kind about it.
+
+My boss gave me a very sensible piece of advice: assist your colleagues first, and your own work will follow.
+I was not sure at first, but it turned out to be true.
+Now I actually enjoy helping others.
+
+He was embarrassed to admit that he had walked past the library three times without noticing it.
+"It's right there," his friend said, pointing at the corner.
+Actually, the sign had fallen off last winter, and nobody had fixed it.
