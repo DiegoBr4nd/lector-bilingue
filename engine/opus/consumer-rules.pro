@@ -1,1 +1,4 @@
-# Reglas de R8 para quien use :engine:opus. La Tarea 4 agrega las del puente JNI.
+# Los métodos native se buscan por nombre desde C++: R8 no debe renombrarlos ni quitarlos.
+-keepclasseswithmembernames,includedescriptorclasses class io.github.diegobr4nd.lectorbilingue.engine.opus.Ct2NativeBridge {
+    native <methods>;
+}

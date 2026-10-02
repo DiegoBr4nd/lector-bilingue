@@ -5,14 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# La puerta se mide con el APK debug: el nativo va optimizado siempre.
-set(CMAKE_C_FLAGS_DEBUG "-O2 -g0" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g0" CACHE STRING "" FORCE)
+# La puerta se mide con el APK debug: el nativo va optimizado siempre, y sin
+# assert (NDEBUG) para que la medición no quede sesgada.
 # El toolchain del NDK define CMAKE_<LANG>_FLAGS_DEBUG como variable normal
-# ("-fno-limit-debug-info", sin -O), que tapa la del caché: sin estas dos líneas
-# compile_commands.json no tiene ningún -O y todo se compila con -O0.
-set(CMAKE_C_FLAGS_DEBUG "-O2 -g0")
-set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g0")
+# ("-fno-limit-debug-info", sin -O), que taparía un valor del caché: por eso se
+# fijan como variables normales. Sin esto todo se compila con -O0.
+set(CMAKE_C_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-O2 -g0 -DNDEBUG")
 
 get_filename_component(REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 set(THIRD_PARTY "${REPO_ROOT}/native/third_party")
@@ -44,6 +43,8 @@ add_subdirectory("${THIRD_PARTY}/abseil-cpp" absl EXCLUDE_FROM_ALL)
 # SentencePiece incluye "third_party/absl/...": copiamos los encabezados de Abseil
 # a esa forma dentro de la carpeta de compilación (sin enlaces simbólicos).
 set(SPM_ABSL_SHIM "${CMAKE_CURRENT_BINARY_DIR}/spm_absl")
+# Se borra antes de copiar: si Abseil cambia de versión no quedan encabezados viejos.
+file(REMOVE_RECURSE "${SPM_ABSL_SHIM}")
 file(COPY "${THIRD_PARTY}/abseil-cpp/absl" DESTINATION "${SPM_ABSL_SHIM}/third_party"
   FILES_MATCHING PATTERN "*.h" PATTERN "*.inc")
 
@@ -62,3 +63,6 @@ add_library(ct2bridge SHARED ct2bridge.cpp)
 target_include_directories(ct2bridge PRIVATE "${THIRD_PARTY}/sentencepiece/src" "${SPM_ABSL_SHIM}")
 target_link_libraries(ct2bridge PRIVATE ctranslate2 sentencepiece-static log)
 target_link_options(ct2bridge PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)
+# Solo se exportan las funciones JNI (JNIEXPORT); las plantillas de CTranslate2
+# instanciadas en el puente quedan ocultas.
+set_target_properties(ct2bridge PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
