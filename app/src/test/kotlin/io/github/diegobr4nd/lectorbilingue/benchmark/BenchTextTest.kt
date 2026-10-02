@@ -10,5 +10,7 @@ class BenchTextTest {
         assertEquals(listOf("A."), BenchText.parse("# c\n\n\n  A.  \n\n# d\n"))
     @Test fun `acepta saltos de linea de Windows`() =
         assertEquals(listOf("A. B.", "C."), BenchText.parse("A.\r\nB.\r\n\r\nC.\r\n"))
+    @Test fun `ignora la marca BOM al inicio`() =
+        assertEquals(listOf("A."), BenchText.parse("\uFEFF# c\nA."))
     @Test fun `cuenta palabras`() = assertEquals(4, BenchText.countWords("  It's a  fine day. "))
 }

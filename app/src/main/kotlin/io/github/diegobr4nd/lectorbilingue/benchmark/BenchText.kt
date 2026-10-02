@@ -7,7 +7,7 @@ object BenchText {
     fun parse(content: String): List<String> {
         val paragraphs = mutableListOf<String>()
         val current = mutableListOf<String>()
-        for (raw in content.lineSequence()) {
+        for (raw in content.removePrefix("\uFEFF").lineSequence()) {
             val line = raw.trim()
             when {
                 line.startsWith("#") -> Unit
