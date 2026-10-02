@@ -9,3 +9,7 @@ captures/
 .cxx/
 *.keystore
 *.jks
+
+# Textos privados de Juan (derechos de autor): nunca a git
+private/
+textos_*.html
