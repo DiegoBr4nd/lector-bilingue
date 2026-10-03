@@ -47,7 +47,8 @@
 
 **Debilidades conocidas:**
 - Lo coloquial es el punto débil de ambos motores locales. Mejora futura: glosario de modismos.
-- La nota de OPUS se midió con **beam 4**. En la app se usará **beam 1** para tocar y traducir (más rápido); hay que verificar cuánto baja la calidad (ver tarea de calidad en `01-estructura.md`).
+- La nota de OPUS se midió con **beam 4**. Comparación a ciegas beam 1 vs beam 4 (fase 2a, ver abajo): beam 1 pierde poco.
+- Traducir **párrafos enteros** de una vez puede hacer que el modelo invente contenido o se salte oraciones; **oración por oración** no (comprobado en la fase 2a). La app siempre parte en oraciones.
 - Español: algunos modelos producen español de España ("furgoneta", "estropear"). El objetivo es español latino neutro.
 
 ### Ajustes del motor medidos en Pixel 7 (CTranslate2, int8)
@@ -55,10 +56,27 @@
 | Ajuste | Palabras/s | Párrafo típico | Uso recomendado |
 |---|---|---|---|
 | beam 1, 4 hilos | 21,9 | 0,9 s | Tocar y traducir |
-| beam 4, 4 hilos | 8,1 | 2,9 s | Libro completo en segundo plano (opcional) |
+| beam 4, 4 hilos | 8,1 | 2,9 s | Libro completo en segundo plano |
 | beam 1, 8 hilos | 5,5 | 3,9 s | **No usar**: los núcleos lentos frenan todo |
 
 > **Regla:** usar como máximo tantos hilos como núcleos rápidos tenga el teléfono (normalmente 4).
+
+### Decisión: beam por uso (fase 2a, 2026-10-02, decidido por Juan)
+
+| Uso | Beam | Por qué |
+|---|---|---|
+| Tocar y traducir | **1** | Respuesta inmediata (~1 s por párrafo típico en la app) |
+| Libro completo en segundo plano | **4** | Nadie espera mirando la pantalla; ganamos calidad |
+
+**Evidencia** (25 textos privados de Juan, evaluación a ciegas 1-5, traducidos en el Pixel 7 con la tubería de la app):
+
+| | Nota promedio | Textos ganados | Palabras/s* | Mediana* | Peor caso* |
+|---|---|---|---|---|---|
+| Beam 1 | 4,08 | 0 | 12,7 | 1.547 ms | 3.736 ms |
+| Beam 4 | 4,32 | 5 | 5,6 | 4.094 ms | 7.566 ms |
+| Empates | | 20 | | | |
+
+\* Medido en una prueba instrumentada, sin acceso a los 2 núcleos más rápidos (grupo "foreground" del sistema). En la app visible, beam 1 da 21,4 palabras/s y 975 ms (puerta 1b); beam 4 se estima en ~9,5 palabras/s y ~2,5 s por párrafo.
 
 ## 3. Distribución y negocio
 
