@@ -71,6 +71,7 @@ fun EngineTestScreen(
                 PackageManager.PERMISSION_GRANTED
             if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.downloadModel()
         },
+        onCancelDownload = viewModel::cancelDownload,
         onImport = { importPicker.launch(arrayOf("application/zip")) },
         modifier = modifier,
     )
@@ -84,6 +85,7 @@ fun EngineTestContent(
     onBenchmark: () -> Unit,
     onDownload: () -> Unit = {},
     onImport: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val ready = state.modelStatus == ModelStatus.READY
@@ -99,7 +101,7 @@ fun EngineTestContent(
         ) {
             Text(stringResource(R.string.engine_test_title), style = MaterialTheme.typography.titleLarge)
             ModelStatusCard(state)
-            ModelManagerCard(state, onDownload, onImport)
+            ModelManagerCard(state, onDownload, onImport, onCancelDownload)
             OutlinedTextField(
                 value = state.input,
                 onValueChange = onInputChange,
@@ -154,7 +156,7 @@ private fun ModelStatusCard(state: EngineTestUiState) {
                     Text(stringResource(R.string.model_missing_hint))
                 }
                 ModelStatus.ERROR -> Text(
-                    stringResource(R.string.model_error, state.errorMessage ?: stringResource(R.string.error_generic)),
+                    stringResource(R.string.model_error),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -163,7 +165,12 @@ private fun ModelStatusCard(state: EngineTestUiState) {
 }
 
 @Composable
-private fun ModelManagerCard(state: EngineTestUiState, onDownload: () -> Unit, onImport: () -> Unit) {
+private fun ModelManagerCard(
+    state: EngineTestUiState,
+    onDownload: () -> Unit,
+    onImport: () -> Unit,
+    onCancelDownload: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
@@ -204,16 +211,20 @@ private fun ModelManagerCard(state: EngineTestUiState, onDownload: () -> Unit, o
                     Text(stringResource(R.string.download_preparing))
                 }
             }
+            if (state.downloading) {
+                OutlinedButton(onClick = onCancelDownload, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.cancel_download_button))
+                }
+            }
             OutlinedButton(
                 onClick = onImport,
                 enabled = !state.modelBusy,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.import_button)) }
             state.modelMessage?.let {
-                val isError = it != ModelMessage.IMPORT_OK && it != ModelMessage.CANCELLED
                 Text(
                     stringResource(it.textRes()),
-                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    color = if (it.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -233,6 +244,7 @@ private fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.CATALOG -> R.string.msg_catalog
     ModelMessage.FILES -> R.string.msg_files
     ModelMessage.INVALID_ZIP -> R.string.msg_invalid_zip
+    ModelMessage.IMPORT_NO_MATCH -> R.string.msg_import_no_match
     ModelMessage.IMPORT_OK -> R.string.msg_import_ok
     ModelMessage.UNKNOWN -> R.string.msg_unknown
 }

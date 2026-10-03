@@ -4,6 +4,7 @@ import io.github.diegobr4nd.lectorbilingue.models.Catalog
 import io.github.diegobr4nd.lectorbilingue.models.CatalogException
 import io.github.diegobr4nd.lectorbilingue.models.CatalogModel
 import io.github.diegobr4nd.lectorbilingue.models.DownloadInProgressException
+import io.github.diegobr4nd.lectorbilingue.models.DownloadState
 import io.github.diegobr4nd.lectorbilingue.models.IntegrityException
 import io.github.diegobr4nd.lectorbilingue.models.ModelFile
 import io.github.diegobr4nd.lectorbilingue.models.ModelFileException
@@ -11,9 +12,12 @@ import io.github.diegobr4nd.lectorbilingue.models.NetworkPolicyException
 import io.github.diegobr4nd.lectorbilingue.models.SignatureException
 import java.io.IOException
 import java.time.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ModelActionsTest {
     private fun model(id: String, pair: String, engine: String, vararg sizes: Long) = CatalogModel(
@@ -76,4 +80,37 @@ class ModelActionsTest {
         assertEquals(0.5f, ModelActions.fraction(50, 100))
         assertEquals(1f, ModelActions.fraction(200, 100))
     }
+
+    @Test fun `importar zip roto es zip invalido y no red`() {
+        assertEquals(ModelMessage.INVALID_ZIP, ModelActions.classifyImport(IOException("zip inválido")))
+        assertEquals(ModelMessage.FILES, ModelActions.classifyImport(ModelFileException("x")))
+        assertEquals(ModelMessage.IMPORT_NO_MATCH, ModelActions.classifyImport(CatalogException("x")))
+        assertEquals(ModelMessage.INTEGRITY, ModelActions.classifyImport(IntegrityException("x")))
+        assertEquals(ModelMessage.DOWNLOAD_BUSY, ModelActions.classifyImport(DownloadInProgressException()))
+        assertEquals(ModelMessage.UNKNOWN, ModelActions.classifyImport(RuntimeException("x")))
+    }
+
+    @Test fun `solo cancelar e importar bien no son errores`() {
+        val ok = ModelMessage.entries.filter { !it.isError }.toSet()
+        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK), ok)
+    }
+
+    private val mine = UUID.randomUUID()
+    private fun st(status: DownloadState.Status, id: UUID?) = DownloadState(status, 0, 0, null, id)
+
+    @Test fun `estado final viejo se ignora`() =
+        assertFalse(ModelActions.acceptDownloadState(st(DownloadState.Status.SUCCEEDED, UUID.randomUUID()), mine, false))
+
+    @Test fun `estado final de mi peticion se acepta de inmediato`() =
+        assertTrue(ModelActions.acceptDownloadState(st(DownloadState.Status.FAILED, mine), mine, false))
+
+    @Test fun `activo y luego final se acepta`() {
+        assertTrue(ModelActions.acceptDownloadState(st(DownloadState.Status.RUNNING, mine), mine, false))
+        assertTrue(ModelActions.acceptDownloadState(st(DownloadState.Status.SUCCEEDED, UUID.randomUUID()), mine, true))
+    }
+
+    @Test fun `trabajo activo conservado con otro id se acepta`() =
+        assertTrue(ModelActions.acceptDownloadState(st(DownloadState.Status.RUNNING, UUID.randomUUID()), mine, false))
+
+    @Test fun `sin estado se acepta`() = assertTrue(ModelActions.acceptDownloadState(null, mine, false))
 }

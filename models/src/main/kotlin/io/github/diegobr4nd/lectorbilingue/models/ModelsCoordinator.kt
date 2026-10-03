@@ -82,14 +82,21 @@ internal class ModelsCoordinator(private val io: CoroutineDispatcher = Dispatche
  * Estado de una descarga para la interfaz, leído de un `WorkInfo`. [error] solo en [Status.FAILED] y
  * siempre uno de [DownloadOutcome.CODES] (un valor desconocido se vuelve `desconocido`): nunca texto libre.
  */
-data class DownloadState(val status: Status, val bytes: Long, val total: Long, val error: String?) {
+data class DownloadState(
+    val status: Status,
+    val bytes: Long,
+    val total: Long,
+    val error: String?,
+    /** Id de la petición de WorkManager a la que pertenece este estado (null si no se conoce). */
+    val workId: java.util.UUID? = null,
+) {
 
     enum class Status { QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
     companion object {
-        fun from(info: WorkInfo): DownloadState = from(info.state, info.progress, info.outputData)
+        fun from(info: WorkInfo): DownloadState = from(info.state, info.progress, info.outputData, info.id)
 
-        internal fun from(state: WorkInfo.State, progress: Data, output: Data): DownloadState {
+        internal fun from(state: WorkInfo.State, progress: Data, output: Data, id: java.util.UUID? = null): DownloadState {
             val status = when (state) {
                 WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> Status.QUEUED
                 WorkInfo.State.RUNNING -> Status.RUNNING
@@ -107,6 +114,7 @@ data class DownloadState(val status: Status, val bytes: Long, val total: Long, v
                 progress.getLong(DownloadWork.KEY_BYTES, 0L),
                 progress.getLong(DownloadWork.KEY_TOTAL, 0L),
                 error,
+                id,
             )
         }
     }

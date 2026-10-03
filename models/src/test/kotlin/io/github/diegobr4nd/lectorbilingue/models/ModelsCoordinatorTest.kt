@@ -130,6 +130,14 @@ class ModelsCoordinatorTest {
     }
 
     @Test
+    fun downloadState_llevaElIdDeLaPeticion() {
+        val id = java.util.UUID.randomUUID()
+        val s = DownloadState.from(WorkInfo.State.SUCCEEDED, workDataOf(), workDataOf(), id)
+        assertEquals(id, s.workId)
+        assertEquals(null, DownloadState.from(WorkInfo.State.SUCCEEDED, workDataOf(), workDataOf()).workId)
+    }
+
+    @Test
     fun downloadState_progresoEnCurso() {
         val s = DownloadState.from(WorkInfo.State.RUNNING, workDataOf("bytes" to 40L, "total" to 100L), workDataOf())
         assertEquals(DownloadState(DownloadState.Status.RUNNING, 40L, 100L, null), s)

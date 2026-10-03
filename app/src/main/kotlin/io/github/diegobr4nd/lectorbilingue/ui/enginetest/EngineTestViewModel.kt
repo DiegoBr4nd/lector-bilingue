@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchText
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkResult
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkRunner
@@ -15,6 +16,7 @@ import io.github.diegobr4nd.lectorbilingue.models.DownloadState
 import io.github.diegobr4nd.lectorbilingue.models.Models
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,8 +59,10 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     private val _state = MutableStateFlow(EngineTestUiState(modelPath = engine.modelDir(pair).path))
     val state: StateFlow<EngineTestUiState> = _state.asStateFlow()
 
+    private fun app(): Application = getApplication()
+
     private var downloadJob: Job? = null
-    private val activeStatuses = setOf(DownloadState.Status.QUEUED, DownloadState.Status.RUNNING)
+    private var activeModelId: String? = null
 
     init {
         viewModelScope.launch {
@@ -78,7 +82,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         _state.update { it.copy(modelStatus = ModelStatus.LOADING) }
         runCatching { engine.load(pair, EngineConfig()) }
             .onSuccess { _state.update { it.copy(modelStatus = ModelStatus.READY) } }
-            .onFailure { e -> _state.update { it.copy(modelStatus = ModelStatus.ERROR, errorMessage = e.message) } }
+            .onFailure { e -> _state.update { it.copy(modelStatus = ModelStatus.ERROR, errorMessage = app().getString(R.string.model_error)) } }
     }
 
     /** Tamaño del modelo según el catálogo guardado (sin red). Si hay una descarga en curso, la retoma. */
@@ -89,15 +93,15 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         } ?: return
         _state.update { it.copy(modelSizeMb = ModelActions.megabytes(model.totalSize)) }
         if (runCatching { Models.isDownloading(app, model.id) }.getOrDefault(false)) {
-            _state.update { it.copy(modelBusy = true, downloading = true) }
-            observeDownload(model.id)
+            _state.update { if (it.modelBusy) it else it.copy(modelBusy = true, downloading = true) }
+            activeModelId = model.id
+            observeDownload(model.id, null)
         }
     }
 
     /** Descarga el modelo en-es: catálogo guardado o, si no hay, el de la red; luego encola y observa. */
     fun downloadModel() {
-        if (_state.value.modelBusy) return
-        _state.update { it.copy(modelBusy = true, modelMessage = null, downloadFraction = null) }
+        if (!tryStartModelOperation()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
             val (picked, problem) = try {
@@ -128,7 +132,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 return@launch
             }
             _state.update { it.copy(modelSizeMb = ModelActions.megabytes(picked.totalSize), downloading = true) }
-            try {
+            val requestId = try {
                 Models.enqueueDownload(app, picked.id)
             } catch (e: CancellationException) {
                 throw e
@@ -136,21 +140,20 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 _state.update { it.copy(modelBusy = false, downloading = false, modelMessage = ModelMessage.UNKNOWN) }
                 return@launch
             }
-            observeDownload(picked.id, awaitFresh = true)
+            activeModelId = picked.id
+            observeDownload(picked.id, requestId)
         }
     }
 
     /** Sigue el progreso por modelo (no por id de petición: con KEEP el id devuelto puede no ser el activo). */
-    private fun observeDownload(modelId: String, awaitFresh: Boolean = false) {
-        var fresh = !awaitFresh
+    private fun observeDownload(modelId: String, requestId: UUID?) {
+        // Sin requestId (retomada al abrir la app) no hay estados viejos que ignorar.
+        var seenActive = requestId == null
         downloadJob?.cancel()
         downloadJob = viewModelScope.launch {
             Models.downloadInfo(getApplication(), modelId).collect { info ->
-                // Tras encolar, el primer estado puede ser el de una descarga anterior ya terminada:
-                // se ignoran los estados finales hasta ver uno en cola o en curso.
-                val terminal = info != null && info.status !in activeStatuses
-                if (!fresh && terminal) return@collect
-                fresh = true
+                if (!ModelActions.acceptDownloadState(info, requestId, seenActive)) return@collect
+                if (ModelActions.isActive(info)) seenActive = true
                 when (info?.status) {
                     null, DownloadState.Status.QUEUED -> _state.update { it.copy(downloadFraction = null) }
                     DownloadState.Status.RUNNING ->
@@ -174,25 +177,47 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** Cancela la descarga en curso; el estado CANCELLED llega por el observador. */
+    fun cancelDownload() {
+        val id = activeModelId ?: return
+        runCatching { Models.cancelDownload(app(), id) }
+    }
+
+    /** Marca "operación de modelos en marcha" de forma atómica; false si ya había una. */
+    private fun tryStartModelOperation(): Boolean {
+        var started = false
+        _state.update {
+            started = !it.modelBusy
+            if (started) it.copy(modelBusy = true, modelMessage = null, downloadFraction = null) else it
+        }
+        return started
+    }
+
     private fun endDownload(message: ModelMessage) = _state.update {
         it.copy(modelBusy = false, downloading = false, downloadFraction = null, modelMessage = message)
     }
 
     /** Importa un modelo desde un .zip que eligió el usuario y recarga el motor. */
     fun importModel(uri: Uri) {
-        if (_state.value.modelBusy) return
-        _state.update { it.copy(modelBusy = true, modelMessage = null) }
+        if (!tryStartModelOperation()) return
         viewModelScope.launch {
             val app = getApplication<Application>()
             val problem: ModelMessage? = try {
-                val input = withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri) }
-                    ?: throw IOException()
-                input.use { Models.importModel(app, it) }
-                null
+                val hasCatalog = withContext(Dispatchers.IO) {
+                    runCatching { Models.catalogRepository(app).current() }.getOrNull() != null
+                }
+                if (!hasCatalog) {
+                    ModelMessage.NO_CATALOG
+                } else {
+                    val input = withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri) }
+                        ?: throw IOException()
+                    input.use { Models.importModel(app, it) }
+                    null
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ModelActions.classify(e)
+                ModelActions.classifyImport(e)
             }
             if (problem == null) {
                 loadEngine()
@@ -216,7 +241,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     val ms = (System.nanoTime() - start) / 1_000_000
                     _state.update { it.copy(output = out, lastMillis = ms, busy = false) }
                 }
-                .onFailure { e -> _state.update { it.copy(errorMessage = e.message, busy = false) } }
+                .onFailure { e -> _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
         }
     }
 
@@ -229,7 +254,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 source to BenchmarkRunner().run(paragraphs, ::translateParagraph)
             }.onSuccess { (source, result) ->
                 _state.update { it.copy(benchmark = result, benchSource = source, busy = false) }
-            }.onFailure { e -> _state.update { it.copy(errorMessage = e.message, busy = false) } }
+            }.onFailure { e -> _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
         }
     }
 
