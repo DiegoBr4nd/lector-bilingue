@@ -124,8 +124,9 @@ Requiere el modelo y los textos ya copiados (ver "Copiar al teléfono") y la app
 export MSYS_NO_PATHCONV=1
 adb shell am force-stop io.github.diegobr4nd.lectorbilingue
 adb shell am instrument -w -e class io.github.diegobr4nd.lectorbilingue.CalidadBeamTest -e calidad 1 io.github.diegobr4nd.lectorbilingue.test/androidx.test.runner.AndroidJUnitRunner
-adb shell run-as io.github.diegobr4nd.lectorbilingue cat files/bench/comparacion.json > private/comparacion.json
+adb exec-out run-as io.github.diegobr4nd.lectorbilingue cat files/bench/comparacion.json > private/comparacion.json
 ```
+Corre estos comandos en Git Bash (no en PowerShell 5.1: su `>` escribe UTF-16 y dañaría el archivo).
 La prueba traduce cada texto con beam 1 y con beam 4 y guarda el resultado y los tiempos en `comparacion.json`.
 
 ### 2. Generar la página de evaluación
@@ -133,6 +134,7 @@ La prueba traduce cada texto con beam 1 y con beam 4 y guarda el resultado y los
 python tools/bench/make_eval_html.py private/textos.txt private/comparacion.json private/evaluacion.html private/evaluacion-clave.json
 ```
 Solo imprime conteos. Crea dos archivos: la página (sin la clave dentro) y la clave aparte.
+Si los archivos ya existen, el script se niega a reemplazarlos; hay que añadir `--force`. Ojo: regenerar crea una clave nueva y las notas guardadas en la página anterior se pierden (la clave vieja ya no sirve).
 
 ### 3. Evaluar y revelar
 - Abre `private/evaluacion.html` en el navegador (doble clic).
