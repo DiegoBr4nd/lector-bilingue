@@ -29,6 +29,15 @@ internal object ModelFiles {
         return f
     }
 
+    private val FILE_NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
+
+    /**
+     * Regla única para nombres de archivo de modelo (catálogo, `.installed.json`, entradas de zip):
+     * `^[A-Za-z0-9._-]{1,128}$`, sin `..` y sin `.` inicial (evita `.`, `..` y `.installed.json`).
+     */
+    fun isValidFileName(name: String): Boolean =
+        FILE_NAME.matches(name) && !name.contains("..") && !name.startsWith(".")
+
     /** Un solo componente de ruta: sin separadores, sin NUL, y distinto de `.` y `..`. */
     fun requireSimpleName(name: String) {
         require(

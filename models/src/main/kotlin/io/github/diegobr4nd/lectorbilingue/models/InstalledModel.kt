@@ -29,7 +29,6 @@ data class InstalledModel(
     companion object {
         private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
         private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
-        private val NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
         private val ENGINES = setOf("opus", "firefox")
         private const val MAX_TEXT = 256
         private const val MAX_FILES = 32
@@ -62,7 +61,7 @@ data class InstalledModel(
             require(arr.length() in 1..MAX_FILES) { ".installed.json: files" }
             val files = (0 until arr.length()).map { i ->
                 val name = arr.opt(i) as? String ?: throw IllegalArgumentException(".installed.json: files")
-                require(NAME.matches(name) && !name.contains("..") && !name.startsWith(".")) { ".installed.json: files" }
+                require(ModelFiles.isValidFileName(name)) { ".installed.json: files" }
                 name
             }
             require(files.toSet().size == files.size) { ".installed.json: files" }

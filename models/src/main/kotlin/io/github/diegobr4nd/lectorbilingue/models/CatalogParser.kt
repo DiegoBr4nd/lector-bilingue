@@ -36,7 +36,6 @@ object CatalogParser {
     private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
     private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
     private val ENGINES = setOf("opus", "firefox")
-    private val NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
     private val SHA256 = Regex("^[0-9a-f]{64}$")
     private val URL_REST = Regex("^([A-Za-z0-9._-]{1,128})/([A-Za-z0-9._-]{1,128})$")
 
@@ -102,8 +101,8 @@ object CatalogParser {
 
     private fun parseFile(o: JSONObject, at: String): ModelFile {
         val name = string(o, "name", "$at.name")
-        // Sin punto inicial: evita ".", ".." y chocar con ".installed.json" del instalador.
-        if (!NAME.matches(name) || name.contains("..") || name.startsWith(".")) fail("$at.name")
+        // Regla compartida (sin `..`, sin punto inicial): ver ModelFiles.isValidFileName.
+        if (!ModelFiles.isValidFileName(name)) fail("$at.name")
         val size = long(o, "size", "$at.size")
         if (size !in 1..MAX_FILE_SIZE) fail("$at.size")
         val sha256 = string(o, "sha256", "$at.sha256")
