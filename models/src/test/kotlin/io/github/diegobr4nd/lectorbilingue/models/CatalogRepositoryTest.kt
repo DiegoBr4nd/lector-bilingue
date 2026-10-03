@@ -13,11 +13,13 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CatalogRepositoryTest {
 
@@ -44,6 +46,9 @@ class CatalogRepositoryTest {
     /** Lo que sirve el servidor de prueba: (catalog.json, catalog.json.minisig). */
     @Volatile private var servido: Pair<ByteArray, ByteArray> = Pair(ByteArray(0), ByteArray(0))
 
+    /** Retraso (ms) antes de enviar las cabeceras de la firma: simula una red atascada. */
+    @Volatile private var retrasoMs = 0L
+
     /** Lo que devuelve el catálogo "incrustado en el APK". */
     private var incrustado: (() -> Pair<ByteArray, String>?) = { null }
 
@@ -57,7 +62,11 @@ class CatalogRepositoryTest {
                     "/catalogo/catalog.json.minisig" -> servido.second
                     else -> return MockResponse.Builder().code(404).build()
                 }
-                return MockResponse.Builder().code(200).body(Buffer().write(body)).build()
+                val builder = MockResponse.Builder().code(200).body(Buffer().write(body))
+                if (request.url.encodedPath.endsWith(".minisig") && retrasoMs > 0) {
+                    builder.headersDelay(retrasoMs, TimeUnit.MILLISECONDS)
+                }
+                return builder.build()
             }
         }
         server.start()
@@ -222,8 +231,9 @@ class CatalogRepositoryTest {
         aceptarViejo()
         servir(viejoBis, viejoBisSig)
 
-        assertFailsWith<CatalogException> { repo.refresh() }
+        val e = assertFailsWith<CatalogException> { repo.refresh() }
 
+        assertEquals("catálogo con la misma fecha y otro contenido", e.message)
         assertContentEquals(viejo, guardadoCatalogo().readBytes())
         assertContentEquals(viejoSig, guardadaFirma().readBytes())
     }
@@ -332,7 +342,7 @@ class CatalogRepositoryTest {
     }
 
     @Test
-    fun current_catalogoGuardadoGigante_seIgnoraSinLeerloEntero() {
+    fun current_catalogoGuardadoMayorQueElTope_seIgnora() {
         servir(nuevo, nuevoSig)
         repo.refresh()
         guardadoCatalogo().writeBytes(ByteArray(CatalogParser.MAX_BYTES + 1))
@@ -381,12 +391,47 @@ class CatalogRepositoryTest {
 
         assertFailsWith<IOException> { repo.refresh() }
 
-        // En disco quedó la firma nueva con el catálogo viejo: no verifica, así que no se acepta.
+        // En disco quedó la firma nueva con el catálogo viejo (par mezclado, no verifica) y el
+        // catálogo nuevo aún en catalog.json.tmp: se acepta solo el par que sí verifica (tmp + firma).
         assertContentEquals(nuevoSig, guardadaFirma().readBytes())
         assertContentEquals(viejo, guardadoCatalogo().readBytes())
+        assertContentEquals(nuevo, File(dir, "catalog.json.tmp").readBytes())
+        assertEquals(fechaNueva, repo.current()?.generated)
+        assertEquals(fechaNueva, newRepo().current()?.generated)
+    }
+
+    @Test
+    fun corteEntreLosDosRenombres_elPisoAntirretrocesoNoBaja() {
+        aceptarViejo()
+        servir(nuevo, nuevoSig)
+        repo.afterSignatureRename = { throw IOException("corte simulado") }
+        assertFailsWith<IOException> { repo.refresh() }
+        repo.afterSignatureRename = {}
+        servir(viejo, viejoSig)
+
+        val e = assertFailsWith<CatalogException> { repo.refresh() }
+
+        assertEquals("catálogo más antiguo", e.message)
+    }
+
+    @Test
+    fun corteEntreLosDosRenombres_sinElTemporal_elParMezcladoNoSeAcepta() {
+        aceptarViejo()
+        servir(nuevo, nuevoSig)
+        repo.afterSignatureRename = { throw IOException("corte simulado") }
+        assertFailsWith<IOException> { repo.refresh() }
+        File(dir, "catalog.json.tmp").delete()
+
         assertNull(repo.current())
-        // Con el incrustado presente, se cae a él.
         incrustado = { Pair(viejo, String(viejoSig)) }
+        assertEquals(fechaVieja, repo.current()?.generated)
+    }
+
+    @Test
+    fun temporalQueNoCasaConLaFirma_seIgnora() {
+        aceptarViejo()
+        File(dir, "catalog.json.tmp").writeBytes(nuevo)
+
         assertEquals(fechaVieja, repo.current()?.generated)
     }
 
@@ -399,6 +444,36 @@ class CatalogRepositoryTest {
         repo.afterSignatureRename = {}
 
         assertEquals(fechaNueva, repo.refresh().generated)
+        assertEquals(fechaNueva, repo.current()?.generated)
+        // El refresh repara el par principal y borra el temporal.
+        assertContentEquals(nuevo, guardadoCatalogo().readBytes())
+        assertEquals(setOf("catalog.json", "catalog.json.minisig"), dir.list()!!.toSet())
+    }
+
+    // ---------------------------------------------------------------- concurrencia
+
+    @Test
+    fun current_noSeBloqueaMientrasRefreshEsperaALaRed() {
+        aceptarViejo()
+        servir(nuevo, nuevoSig)
+        retrasoMs = 3_000
+        val hilo = Thread { runCatching { repo.refresh() } }
+        hilo.start()
+        try {
+            // Espera a que refresh() esté ya pidiendo el catálogo (atascado en la red).
+            server.takeRequest()
+            server.takeRequest()
+            Thread.sleep(100)
+
+            val inicio = System.nanoTime()
+            val actual = repo.current()
+            val ms = (System.nanoTime() - inicio) / 1_000_000
+
+            assertEquals(fechaVieja, actual?.generated)
+            assertTrue(ms < 1_000, "current() tardó $ms ms")
+        } finally {
+            hilo.join(10_000)
+        }
         assertEquals(fechaNueva, repo.current()?.generated)
     }
 }

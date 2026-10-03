@@ -19,11 +19,16 @@ import java.nio.file.StandardCopyOption
  * archivo de estado).
  *
  * Persistencia: se escriben `catalog.json.minisig.tmp` y `catalog.json.tmp` (con `fsync`), luego se renombra
- * la firma y por último el catálogo. Si la app muere entre los dos renombres queda una firma nueva con el
- * catálogo viejo: ese par no verifica, así que [current] lo ignora y cae al incrustado, y el siguiente
- * [refresh] lo repara. Nunca se acepta un par mezclado.
+ * la firma y por último el catálogo. Si la app muere entre los dos renombres queda la firma nueva junto al
+ * catálogo viejo (par mezclado, no verifica) y el catálogo nuevo aún en `catalog.json.tmp`. Al leer, si el
+ * par principal no verifica se prueba `(catalog.json.tmp, catalog.json.minisig)`, verificado como cualquier
+ * otro par: así el piso del antirretroceso no baja, y el siguiente [refresh] repara el par principal.
+ * Nunca se acepta un par mezclado. No se hace `fsync` de la carpeta tras los renombres (Java no lo expone de
+ * forma portable): en el peor caso, tras un corte de luz, se vuelve a un par anterior, que se re-verifica al
+ * leer como siempre.
  *
- * [current] y [refresh] se sincronizan entre sí (un mismo objeto por proceso).
+ * Bloqueo: la descarga, la firma y la validación de [refresh] van FUERA del candado; solo el antirretroceso,
+ * el guardado y el cálculo del resultado van dentro. Así [current] (llamado desde la UI) nunca espera a la red.
  */
 class CatalogRepository(
     private val dir: File,
@@ -43,16 +48,22 @@ class CatalogRepository(
         private const val TMP_SUFFIX = ".tmp"
     }
 
-    /** Un catálogo verificado junto con los bytes exactos que se firmaron. */
-    private class Verified(val bytes: ByteArray, val catalog: Catalog)
+    /**
+     * Un catálogo verificado junto con los bytes exactos que se firmaron.
+     * [recovered] = viene de `catalog.json.tmp` (corte entre renombres): hay que reparar el par principal.
+     */
+    private class Verified(val bytes: ByteArray, val catalog: Catalog, val recovered: Boolean = false)
 
     private val lock = Any()
 
-    /** Solo pruebas: se llama entre el renombre de la firma y el del catálogo (simula un corte). */
+    /**
+     * SOLO PARA PRUEBAS (no usar en código de la app): se llama entre el renombre de la firma y el del
+     * catálogo. Si lanza, simula que la app murió ahí (se conserva `catalog.json.tmp`).
+     */
     internal var afterSignatureRename: () -> Unit = {}
 
     /** El mejor catálogo válido conocido sin red: guardado o incrustado (el más nuevo). */
-    fun current(): Catalog? = synchronized(lock) { best()?.catalog }
+    fun current(): Catalog? = synchronized(lock) { newest(loadSaved(), loadBundled())?.catalog }
 
     /**
      * Descarga, verifica, aplica antirretroceso y guarda. Devuelve el catálogo vigente tras la operación.
@@ -61,39 +72,51 @@ class CatalogRepository(
      * Ante cualquier fallo no toca lo guardado y relanza ([IOException], [NetworkPolicyException],
      * [SignatureException] o [CatalogException]).
      */
-    fun refresh(): Catalog = synchronized(lock) {
+    fun refresh(): Catalog {
+        // Fuera del candado: red, firma y validación solo usan valores locales.
         val bytes = fetcher.fetchBytes(catalogUrl, CatalogParser.MAX_BYTES)
-        val signature = String(fetcher.fetchBytes("$catalogUrl.minisig", MAX_SIGNATURE_BYTES), Charsets.UTF_8)
-        verifier.verify(bytes, signature)
-        val catalog = CatalogParser.parse(bytes)
+        val signatureBytes = fetcher.fetchBytes("$catalogUrl.minisig", MAX_SIGNATURE_BYTES)
+        verifier.verify(bytes, String(signatureBytes, Charsets.UTF_8))
+        val downloaded = CatalogParser.parse(bytes)
 
-        var sameAsKnown = false
-        for (known in listOfNotNull(loadSaved(), loadBundled())) {
-            val cmp = catalog.generated.compareTo(known.catalog.generated)
-            if (cmp < 0) throw CatalogException("catálogo más antiguo")
-            if (cmp == 0) {
-                if (!bytes.contentEquals(known.bytes)) throw CatalogException("catálogo con la misma fecha y otro contenido")
-                sameAsKnown = true
+        return synchronized(lock) {
+            val saved = loadSaved()
+            val inApk = loadBundled()
+            var sameAsKnown = false
+            for (known in listOfNotNull(saved, inApk)) {
+                val cmp = downloaded.generated.compareTo(known.catalog.generated)
+                if (cmp < 0) throw CatalogException("catálogo más antiguo")
+                if (cmp == 0) {
+                    if (!bytes.contentEquals(known.bytes)) throw CatalogException("catálogo con la misma fecha y otro contenido")
+                    // Igual a un par recuperado del temporal: se guarda igual para reparar el par principal.
+                    if (!known.recovered) sameAsKnown = true
+                }
+            }
+            if (sameAsKnown) {
+                newest(saved, inApk)!!.catalog
+            } else {
+                persist(bytes, signatureBytes)
+                downloaded
             }
         }
-        if (!sameAsKnown) persist(bytes, signature)
-        best()?.catalog ?: catalog
     }
 
-    private fun best(): Verified? {
-        val saved = loadSaved()
-        val inApk = loadBundled()
-        return when {
-            saved == null -> inApk
-            inApk == null -> saved
-            inApk.catalog.generated > saved.catalog.generated -> inApk
-            else -> saved
-        }
+    /** El más nuevo de los dos; en empate, el guardado. */
+    private fun newest(saved: Verified?, inApk: Verified?): Verified? = when {
+        saved == null -> inApk
+        inApk == null -> saved
+        inApk.catalog.generated > saved.catalog.generated -> inApk
+        else -> saved
     }
 
     private fun loadSaved(): Verified? {
-        val catalogFile = File(dir, CATALOG_FILE)
         val signatureFile = File(dir, SIGNATURE_FILE)
+        return loadPair(File(dir, CATALOG_FILE), signatureFile)
+            ?: loadPair(File(dir, CATALOG_FILE + TMP_SUFFIX), signatureFile)
+                ?.let { Verified(it.bytes, it.catalog, recovered = true) }
+    }
+
+    private fun loadPair(catalogFile: File, signatureFile: File): Verified? {
         if (!catalogFile.isFile || !signatureFile.isFile) return null
         if (catalogFile.length() > CatalogParser.MAX_BYTES || signatureFile.length() > MAX_SIGNATURE_BYTES) return null
         return verifyOrNull {
@@ -109,26 +132,30 @@ class CatalogRepository(
      */
     private fun verifyOrNull(read: () -> Pair<ByteArray, String>?): Verified? = try {
         val (bytes, signature) = read() ?: return null
-        if (bytes.size > CatalogParser.MAX_BYTES || signature.length > MAX_SIGNATURE_BYTES) return null
+        // Tope de la firma en bytes UTF-8 (no en caracteres UTF-16).
+        if (bytes.size > CatalogParser.MAX_BYTES || signature.toByteArray(Charsets.UTF_8).size > MAX_SIGNATURE_BYTES) return null
         verifier.verify(bytes, signature)
         Verified(bytes, CatalogParser.parse(bytes))
     } catch (e: Exception) {
         null
     }
 
-    private fun persist(bytes: ByteArray, signature: String) {
+    private fun persist(bytes: ByteArray, signature: ByteArray) {
         if (!dir.isDirectory && !dir.mkdirs()) throw IOException("no se pudo crear la carpeta del catálogo")
         val catalogTmp = File(dir, CATALOG_FILE + TMP_SUFFIX)
         val signatureTmp = File(dir, SIGNATURE_FILE + TMP_SUFFIX)
+        var signatureRenamed = false
         try {
-            writeSynced(signatureTmp, signature.toByteArray(Charsets.UTF_8))
+            writeSynced(signatureTmp, signature)
             writeSynced(catalogTmp, bytes)
             move(signatureTmp, File(dir, SIGNATURE_FILE))
+            signatureRenamed = true
             afterSignatureRename()
             move(catalogTmp, File(dir, CATALOG_FILE))
         } finally {
-            catalogTmp.delete()
             signatureTmp.delete()
+            // Tras renombrar la firma, catalog.json.tmp es la pareja de la firma vigente: se conserva.
+            if (!signatureRenamed) catalogTmp.delete()
         }
     }
 
