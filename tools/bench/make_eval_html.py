@@ -101,14 +101,35 @@ def build_eval(paragraphs: list[str], comparison: dict, seed: int | None = None)
         .replace("@@N@@", str(len(items)))
         .replace("@@VELOCIDAD@@", json.dumps(_speed(paragraphs, items)))
     )
-    return html, {"version": 1, "key": key}
+    return html, {"version": 1, "page": page_id, "key": key}
+
+
+def _bajo_private(path: Path) -> bool:
+    return "private" in Path(path).resolve().parts
 
 
 def main(argv: list[str]) -> int:
+    argv = list(argv)
+    force = "--force" in argv
+    argv = [a for a in argv if a != "--force"]
     if len(argv) != 4:
-        print("Uso: make_eval_html.py textos.txt comparacion.json evaluacion.html evaluacion-clave.json", file=sys.stderr)
+        print(
+            "Uso: make_eval_html.py [--force] textos.txt comparacion.json evaluacion.html evaluacion-clave.json",
+            file=sys.stderr,
+        )
         return 2
     textos, comp, out_html, out_key = (Path(a) for a in argv)
+    existentes = [p for p in (out_html, out_key) if p.exists()]
+    if existentes and not force:
+        print(
+            "Ya existe un archivo de salida. Si lo regeneras se crea una clave nueva y se pierden las notas "
+            "guardadas en la página anterior. Usa --force si de verdad quieres reemplazarlo.",
+            file=sys.stderr,
+        )
+        return 1
+    for p in (out_html, out_key):
+        if not _bajo_private(p):
+            print("Aviso: una salida no está dentro de una carpeta 'private'; podría acabar en git.", file=sys.stderr)
     paragraphs = read_bench_paragraphs(textos)
     comparison = json.loads(comp.read_text(encoding="utf-8"))
     html, key = build_eval(paragraphs, comparison)
@@ -123,6 +144,7 @@ _TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Evaluación a ciegas de traducciones</title>
 <style>
 :root { color-scheme: light dark; }
@@ -165,7 +187,8 @@ button { font: inherit; padding: 6px 14px; }
 <script>
 (function () {
   "use strict";
-  var ID = "lb-eval-@@ID@@";
+  var ID_PAGINA = "@@ID@@";
+  var ID = "lb-eval-" + ID_PAGINA;
   var N = @@N@@;
   var notas = {};
   var claveTexto = null;
@@ -190,6 +213,36 @@ button { font: inherit; padding: 6px 14px; }
     lector.readAsText(f, "utf-8");
   });
 
+  // @@PURE-START
+  function validarClave(clave, n, pagina) {
+    if (!clave || typeof clave !== "object" || clave.version !== 1 || clave.page !== pagina) return false;
+    if (!Array.isArray(clave.key) || clave.key.length !== n) return false;
+    var vistos = {}, b1 = "beam" + "1", b4 = "beam" + "4";
+    for (var i = 0; i < clave.key.length; i++) {
+      var e = clave.key[i];
+      if (!e || !Number.isInteger(e.index) || e.index < 0 || e.index >= n || vistos[e.index]) return false;
+      vistos[e.index] = true;
+      if (!((e.A === b1 && e.B === b4) || (e.A === b4 && e.B === b1))) return false;
+    }
+    return true;
+  }
+
+  function calcularResultados(notas, clave) {
+    var suma1 = 0, suma4 = 0, gana1 = 0, gana4 = 0, empates = 0, completos = 0;
+    clave.key.forEach(function (e) {
+      var sa = notas["A" + e.index], sb = notas["B" + e.index];
+      if (!sa || !sb) return;
+      var p = {}; p[String(e.A).replace(/^beam/, "")] = Number(sa); p[String(e.B).replace(/^beam/, "")] = Number(sb);
+      suma1 += p["1"]; suma4 += p["4"]; completos++;
+      if (p["1"] > p["4"]) gana1++; else if (p["4"] > p["1"]) gana4++; else empates++;
+    });
+    return {
+      prom1: completos ? suma1 / completos : 0, prom4: completos ? suma4 / completos : 0,
+      gana1: gana1, gana4: gana4, empates: empates, completos: completos
+    };
+  }
+  // @@PURE-END
+
   function aviso(t) { document.getElementById("aviso").textContent = t; }
   function num(v) { return String(v).replace(/^beam/, ""); }
   function fmt(x) { return (Math.round(x * 100) / 100).toLocaleString("es"); }
@@ -209,26 +262,17 @@ button { font: inherit; padding: 6px 14px; }
     if (claveTexto === null) { aviso("Primero elige el archivo de clave."); return; }
     var clave;
     try { clave = JSON.parse(claveTexto); } catch (e) { aviso("El archivo de clave no es JSON válido."); return; }
-    if (!clave || clave.version !== 1 || !Array.isArray(clave.key) || clave.key.length !== N) {
-      aviso("La clave no corresponde a esta página."); return;
-    }
-    var suma = { "1": 0, "4": 0 }, gana = { "1": 0, "4": 0 }, empates = 0, contados = 0;
-    clave.key.forEach(function (e) {
-      var sa = notas["A" + e.index], sb = notas["B" + e.index];
-      if (!sa || !sb) return;
-      var p = {}; p[num(e.A)] = Number(sa); p[num(e.B)] = Number(sb);
-      suma["1"] += p["1"]; suma["4"] += p["4"]; contados++;
-      if (p["1"] > p["4"]) gana["1"]++; else if (p["4"] > p["1"]) gana["4"]++; else empates++;
-    });
+    if (!validarClave(clave, N, ID_PAGINA)) { aviso("La clave no corresponde a esta página."); return; }
+    var r = calcularResultados(notas, clave);
     var cont = document.getElementById("puntajes");
     cont.textContent = "";
-    if (contados === 0) { aviso("Aún no hay textos con nota para A y B."); return; }
-    aviso(contados + " de " + N + " textos con nota.");
+    if (r.completos === 0) { aviso("Aún no hay textos con nota para A y B."); return; }
+    aviso(r.completos + " de " + N + " textos con nota.");
     cont.appendChild(tabla([
       ["", "Nota promedio", "Textos ganados"],
-      ["Beam 1", fmt(suma["1"] / contados), String(gana["1"])],
-      ["Beam 4", fmt(suma["4"] / contados), String(gana["4"])],
-      ["Empates", "", String(empates)]
+      ["Beam 1", fmt(r.prom1), String(r.gana1)],
+      ["Beam 4", fmt(r.prom4), String(r.gana4)],
+      ["Empates", "", String(r.empates)]
     ]));
     var v = JSON.parse(document.getElementById("velocidad").textContent);
     var vt = document.getElementById("velocidad-tabla");

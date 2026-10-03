@@ -43,8 +43,8 @@ def add_eos(tokens: list[str]) -> list[str]:
 
 def read_bench_paragraphs(path: Path) -> list[str]:
     paragraphs, current = [], []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("#"):
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if line.strip().startswith("#"):
             continue
         if line.strip():
             current.append(line.strip())
@@ -59,8 +59,8 @@ def read_bench_paragraphs(path: Path) -> list[str]:
 def read_bench_sentences(path: Path) -> list[list[str]]:
     """Como read_bench_paragraphs, pero cada párrafo es la lista de sus líneas (una oración por línea)."""
     paragraphs, current = [], []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("#"):
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if line.strip().startswith("#"):
             continue
         if line.strip():
             current.append(line.strip())

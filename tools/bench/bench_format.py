@@ -10,8 +10,8 @@ from pathlib import Path
 
 def read_bench_paragraphs(path: Path) -> list[str]:
     paragraphs, current = [], []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        if line.startswith("#"):
+    for line in Path(path).read_text(encoding="utf-8-sig").splitlines():
+        if line.strip().startswith("#"):
             continue
         if line.strip():
             current.append(line.strip())
