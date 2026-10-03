@@ -2,7 +2,7 @@
 
 Uso (lo corre .github/workflows/model.yml):
     python tools/models/convert_opus.py --out out
-Resultado: out/en-es/ (modelo + LICENSE + ATTRIBUTION.txt + SHA256SUMS),
+Resultado: out/en-es/ (modelo + LICENSE + ATTRIBUTION.txt + MODEL_CARD.md + SHA256SUMS),
 out/en-es.tar.zst y out/reference-outputs.txt.
 """
 import argparse
@@ -17,6 +17,20 @@ REVISION = "8f4d4924189681076e9c642b2fd85278d793fd4d"
 PAIR = "en-es"
 ROOT = Path(__file__).resolve().parents[2]
 BENCH_FILE = ROOT / "bench" / "sustitutos.txt"
+
+# SHA-256 de los archivos de la revisión fijada (fuente: API de Hugging Face para
+# los archivos LFS y descarga directa de la misma revisión para los pequeños).
+EXPECTED_SHA256 = {
+    "README.md": "c42997ca3767c6750c346d1da84758a9755422c7f5c5294f12a8f4d92f8a94bc",
+    "config.json": "40cf2a78774927cd8374514a73c96a3fc2285748fae1bcdfe197e1dc1cc54692",
+    "generation_config.json": "8f8c2aeb22e87bcb1ea19cb206f4d9341d178574ab41778ab104ee7cf8db8379",
+    "model.safetensors": "1cc0d454aed713ccd07b4cb7801f08f72c1f885c79c6fd76d2b0d99ea0d3cd2b",
+    "source.spm": "b1763341d3a71262ed5aacc3f8287d3c3c2f2ae82295e11d03aea80879c98009",
+    "special_tokens_map.json": "09059cedc26bc46bc09a52f05b92d4922e11917e87f3b92059bb1a63a59ab2c4",
+    "target.spm": "c70086dcac73d9c759cca0b5f195a073033906dcd29433d6c5fe74e66b2cc8da",
+    "tokenizer_config.json": "87237f0fcc8644b8acf407ddc3fd941748c4392c6083fa6f1d81da0ca66d2f23",
+    "vocab.json": "ee2728c5deb7c2dbe255df52b02b45285fda8a7c4dafc236e6d2af5dbeab5a36",
+}
 
 CC_BY_4_0 = """Creative Commons Attribution 4.0 International (CC BY 4.0)
 https://creativecommons.org/licenses/by/4.0/legalcode
@@ -42,6 +56,24 @@ def read_bench_paragraphs(path: Path) -> list[str]:
     return paragraphs
 
 
+def verify_downloaded(directory: Path, expected: dict[str, str]) -> None:
+    """Aborta (RuntimeError) si falta un archivo o su SHA-256 difiere. Solo nombra archivos."""
+    bad = []
+    for name, want in sorted(expected.items()):
+        f = directory / name
+        if not f.is_file():
+            bad.append(f"{name} (falta)")
+            continue
+        h = hashlib.sha256()
+        with f.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != want:
+            bad.append(f"{name} (SHA-256 distinto)")
+    if bad:
+        raise RuntimeError("La descarga no coincide con lo esperado: " + ", ".join(bad))
+
+
 def write_sha256sums(directory: Path) -> None:
     lines = []
     for f in sorted(p for p in directory.rglob("*") if p.is_file() and p.name != "SHA256SUMS"):
@@ -56,7 +88,8 @@ def write_attribution(directory: Path, revision: str) -> None:
         "Modelo de traducción OPUS-MT tc-big inglés → español.\n"
         f"Fuente: https://huggingface.co/{REPO_ID} (revisión {revision})\n"
         "Autores: Helsinki-NLP / OPUS-MT, Jörg Tiedemann et al.\n"
-        "Licencia: CC-BY-4.0. Convertido a CTranslate2 int8 por el proyecto lector-bilingue.\n",
+        "Licencia: CC-BY-4.0. Convertido a CTranslate2 int8 por el proyecto lector-bilingue.\n"
+        "Se distribuye sin garantías; ver la sección 5 de la licencia CC-BY-4.0.\n",
         encoding="utf-8",
     )
 
@@ -107,11 +140,13 @@ def main(argv: list[str]) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     src = download(out / "hf")
+    verify_downloaded(src, EXPECTED_SHA256)
     model_dir = out / PAIR
     if model_dir.exists():
         shutil.rmtree(model_dir)
     convert(src, model_dir)
     write_attribution(model_dir, REVISION)
+    shutil.copyfile(src / "README.md", model_dir / "MODEL_CARD.md")
 
     if BENCH_FILE.exists():
         outputs = reference_outputs(model_dir, read_bench_paragraphs(BENCH_FILE))

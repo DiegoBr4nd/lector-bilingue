@@ -1,8 +1,15 @@
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
-from convert_opus import add_eos, read_bench_paragraphs, write_attribution, write_sha256sums
+from convert_opus import (
+    add_eos,
+    read_bench_paragraphs,
+    verify_downloaded,
+    write_attribution,
+    write_sha256sums,
+)
 
 
 class HelpersTest(unittest.TestCase):
@@ -33,10 +40,36 @@ class HelpersTest(unittest.TestCase):
     def test_attribution_menciona_licencia_y_fuente(self):
         with tempfile.TemporaryDirectory() as d:
             write_attribution(Path(d), "abc123")
-            text = (Path(d) / "ATTRIBUTION.txt").read_text()
+            text = (Path(d) / "ATTRIBUTION.txt").read_text(encoding="utf-8")
             self.assertIn("CC-BY-4.0", text)
             self.assertIn("Helsinki-NLP/opus-mt-tc-big-en-es", text)
             self.assertIn("abc123", text)
+            self.assertIn("Se distribuye sin garantías; ver la sección 5 de la licencia CC-BY-4.0.", text)
+
+
+class VerifyDownloadedTest(unittest.TestCase):
+    @staticmethod
+    def _sha(data: bytes) -> str:
+        return hashlib.sha256(data).hexdigest()
+
+    def test_coincide(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.json").write_bytes(b"uno")
+            verify_downloaded(Path(d), {"a.json": self._sha(b"uno")})
+
+    def test_difiere_nombra_el_archivo(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.json").write_bytes(b"CAMBIADO-secreto")
+            with self.assertRaises(RuntimeError) as cm:
+                verify_downloaded(Path(d), {"a.json": self._sha(b"uno")})
+            self.assertIn("a.json", str(cm.exception))
+            self.assertNotIn("secreto", str(cm.exception))
+
+    def test_falta_nombra_el_archivo(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(RuntimeError) as cm:
+                verify_downloaded(Path(d), {"b.spm": self._sha(b"x")})
+            self.assertIn("b.spm", str(cm.exception))
 
 
 if __name__ == "__main__":
