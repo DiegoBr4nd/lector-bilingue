@@ -21,6 +21,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -304,6 +305,7 @@ class ModelDownloaderTest {
             }
         }
         val e = assertFailsWith<IOException> { downloader.download(twoFiles()) { _, _ -> } }
+        assertIs<ModelFileException>(e, "los errores de archivos no se confunden con los de red")
         val msg = e.message.orEmpty()
         assertFalse(msg.contains('/') || msg.contains('\\'), "el mensaje lleva una ruta")
         assertFalse(msg.contains(tmp.root.name))
@@ -316,6 +318,7 @@ class ModelDownloaderTest {
         server.enqueue(MockResponse.Builder().code(500).build())
         val e = assertFailsWith<IOException> { downloader.download(twoFiles()) { _, _ -> } }
         assertTrue(e.message.orEmpty().contains("HTTP 500"))
+        assertFalse(e is ModelFileException, "un error de red no es un error de archivos")
     }
 
     // ---------------------------------------------------------------- carpeta temporal contenida

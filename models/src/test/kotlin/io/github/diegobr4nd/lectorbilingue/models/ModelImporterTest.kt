@@ -477,6 +477,7 @@ class ModelImporterTest {
         val imp = ModelImporter(notDir, ModelInstaller(notDir))
         val e = assertFailsWith<IOException> { imp.import(ByteArrayInputStream(validZip()), defaultCatalog()) }
         assertEquals("error de archivos al importar el modelo", e.message)
+        kotlin.test.assertIs<ModelFileException>(e)
         assertNoPath(e)
     }
 

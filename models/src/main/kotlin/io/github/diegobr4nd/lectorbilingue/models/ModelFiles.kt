@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.models
 
 import java.io.File
 import java.io.FileInputStream
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -9,6 +10,13 @@ import java.security.MessageDigest
 
 /** Un archivo descargado o instalado no coincide con el catálogo. El mensaje nombra el archivo, nunca hashes ni rutas. */
 class IntegrityException(message: String) : Exception(message)
+
+/**
+ * Error de archivos del almacén de modelos (disco lleno, permisos, carpeta rara…). Siempre con un
+ * mensaje fijo y sin causa: los de java.io/nio llevan rutas internas. Es una [IOException] para que
+ * quien llame la trate como tal, pero se distingue de los errores de red (que sí se reintentan).
+ */
+class ModelFileException(message: String) : IOException(message)
 
 /** Utilidades compartidas por [ModelDownloader] y [ModelInstaller] (rutas seguras, SHA-256, borrado). */
 internal object ModelFiles {

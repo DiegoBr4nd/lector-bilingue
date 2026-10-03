@@ -86,7 +86,7 @@ class ModelDownloader(private val modelsDir: File, private val fetcher: HttpFetc
      * Las excepciones de java.io/java.nio llevan rutas internas en el mensaje: se sustituyen por un
      * mensaje fijo y SIN causa. Los errores de red de [HttpFetcher] no pasan por aquí (ya van sin rutas).
      */
-    private fun fileError() = IOException("error de archivos al descargar el modelo")
+    private fun fileError() = ModelFileException("error de archivos al descargar el modelo")
 
     private fun fetchOne(file: ModelFile, target: File, part: File, progress: (Long) -> Unit) {
         val targetPath = target.toPath()

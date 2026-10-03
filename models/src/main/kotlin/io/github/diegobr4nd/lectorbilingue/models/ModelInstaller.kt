@@ -44,9 +44,9 @@ class ModelInstaller internal constructor(
             return installChecked(model, staging)
         } catch (e: IOException) {
             // Todo aquí son operaciones de archivos: sus mensajes (y causas) llevan rutas internas.
-            throw IOException("error de archivos al instalar el modelo")
+            throw ModelFileException("error de archivos al instalar el modelo")
         } catch (e: DirectoryIteratorException) {
-            throw IOException("error de archivos al instalar el modelo")
+            throw ModelFileException("error de archivos al instalar el modelo")
         }
     }
 

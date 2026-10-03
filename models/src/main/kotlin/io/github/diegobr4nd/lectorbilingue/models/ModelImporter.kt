@@ -170,7 +170,7 @@ class ModelImporter internal constructor(
         tmpRoot.delete()
     }
 
-    private fun fileError() = IOException("error de archivos al importar el modelo")
+    private fun fileError() = ModelFileException("error de archivos al importar el modelo")
 
     private fun notInCatalog() = CatalogException("el zip no corresponde a ningún modelo del catálogo")
 

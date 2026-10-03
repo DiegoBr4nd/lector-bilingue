@@ -2,6 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Descarga de modelos (único uso de red). Ver docs/agentes/03-seguridad.md. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- La descarga corre como servicio en primer plano de tipo dataSync (WorkManager). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Notificación de progreso de la descarga (Android 13+ la pide en tiempo de ejecución). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -34,5 +42,13 @@
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"
                 tools:node="remove" />
         </provider>
+
+        <!-- El servicio de WorkManager que hace de "primer plano" para DownloadWorker (WorkManager llega por :models, por eso MissingClass). -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge"
+            tools:replace="android:foregroundServiceType"
+            tools:ignore="MissingClass" />
     </application>
 </manifest>

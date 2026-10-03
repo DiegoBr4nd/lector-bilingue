@@ -17,6 +17,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ModelInstallerTest {
@@ -164,6 +165,7 @@ class ModelInstallerTest {
             atomicMove(from, to)
         }
         val e = assertFailsWith<IOException> { installer.install(model(), st) }
+        assertIs<ModelFileException>(e)
         assertNoPath(e)
         val dir = File(modelsDir, "en-es")
         assertEquals("viejo", File(dir, "model.bin").readText())
