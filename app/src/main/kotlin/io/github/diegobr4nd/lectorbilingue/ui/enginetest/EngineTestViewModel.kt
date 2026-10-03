@@ -11,7 +11,9 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.engine.opus.OpusEngine
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,6 +101,8 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     override fun onCleared() {
-        engine.unload()
+        // unload() espera el candado nativo y podría bloquear el hilo principal; se hace
+        // fuera de él, en un scope que sobrevive al ViewModel (que ya se está destruyendo).
+        CoroutineScope(Dispatchers.Default + NonCancellable).launch { engine.unload() }
     }
 }

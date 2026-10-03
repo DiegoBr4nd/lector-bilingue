@@ -9,17 +9,19 @@
     <string name="model_error">No se pudo cargar el modelo: %1$s</string>
     <string name="input_label">Texto en inglés</string>
     <string name="translate_button">Traducir</string>
-    <string name="elapsed_ms">%1$d ms</string>
+    <string name="elapsed_ms">Tardó %1$d ms</string>
     <string name="benchmark_button">Benchmark</string>
     <string name="bench_source_private">Textos privados</string>
     <string name="bench_source_substitutes">Textos sustitutos</string>
     <string name="bench_source">Fuente: %1$s</string>
     <string name="bench_paragraphs">Párrafos: %1$d</string>
     <string name="bench_words">Palabras: %1$d</string>
-    <string name="bench_speed">Velocidad: %1$s palabras/s (meta 15) %2$s</string>
-    <string name="bench_median">Mediana por párrafo: %1$d ms (meta 2000) %2$s</string>
-    <string name="bench_max">Párrafo más lento: %1$d ms</string>
-    <string name="mark_ok">✅</string>
-    <string name="mark_fail">❌</string>
+    <string name="bench_speed">Velocidad: %1$.1f palabras/s (meta 15): %2$s</string>
+    <string name="bench_median">Tiempo típico por párrafo (mediana): %1$d ms (meta 2000): %2$s</string>
+    <string name="bench_max">Peor caso (párrafo más lento): %1$d ms</string>
+    <string name="mark_ok">✅ cumple</string>
+    <string name="mark_fail">❌ no cumple</string>
+    <string name="working_description">Trabajando, espera un momento</string>
+    <string name="bench_measuring">Midiendo… puede tardar un minuto</string>
     <string name="error_generic">Error desconocido</string>
 </resources>

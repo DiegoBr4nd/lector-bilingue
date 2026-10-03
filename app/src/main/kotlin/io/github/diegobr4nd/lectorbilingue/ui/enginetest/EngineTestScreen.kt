@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -21,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +62,7 @@ fun EngineTestContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -86,10 +90,14 @@ fun EngineTestContent(
                 Button(onClick = onBenchmark, enabled = !state.busy && ready) {
                     Text(stringResource(R.string.benchmark_button))
                 }
-                if (state.busy) CircularProgressIndicator()
+                if (state.busy) {
+                    val working = stringResource(R.string.working_description)
+                    CircularProgressIndicator(Modifier.semantics { contentDescription = working })
+                    Text(stringResource(R.string.bench_measuring), style = MaterialTheme.typography.bodyMedium)
+                }
             }
             state.benchmark?.let { BenchmarkCard(it, state.benchSource) }
-            state.errorMessage?.let {
+            state.errorMessage?.takeIf { state.modelStatus != ModelStatus.ERROR }?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
         }
@@ -105,7 +113,8 @@ private fun ModelStatusCard(state: EngineTestUiState) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    CircularProgressIndicator()
+                    val working = stringResource(R.string.working_description)
+                    CircularProgressIndicator(Modifier.semantics { contentDescription = working })
                     Text(stringResource(R.string.model_loading))
                 }
                 ModelStatus.READY -> Text(stringResource(R.string.model_ready))
@@ -133,24 +142,20 @@ private fun BenchmarkCard(result: BenchmarkResult, source: BenchSource?) {
                 BenchSource.SUBSTITUTES -> stringResource(R.string.bench_source_substitutes)
                 null -> ""
             }
-            Text(stringResource(R.string.bench_source, sourceName))
-            Text(stringResource(R.string.bench_paragraphs, result.paragraphs))
-            Text(stringResource(R.string.bench_words, result.words))
+            val detail = MaterialTheme.typography.bodyMedium
+            val muted = MaterialTheme.colorScheme.onSurfaceVariant
             Text(
-                stringResource(
-                    R.string.bench_speed,
-                    "%.1f".format(result.wordsPerSecond),
-                    if (result.meetsSpeedGoal) ok else fail,
-                ),
+                stringResource(R.string.bench_speed, result.wordsPerSecond, if (result.meetsSpeedGoal) ok else fail),
+                style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                stringResource(
-                    R.string.bench_median,
-                    result.medianMillis,
-                    if (result.meetsLatencyGoal) ok else fail,
-                ),
+                stringResource(R.string.bench_median, result.medianMillis, if (result.meetsLatencyGoal) ok else fail),
+                style = MaterialTheme.typography.titleMedium,
             )
-            Text(stringResource(R.string.bench_max, result.maxMillis))
+            Text(stringResource(R.string.bench_max, result.maxMillis), style = detail, color = muted)
+            Text(stringResource(R.string.bench_source, sourceName), style = detail, color = muted)
+            Text(stringResource(R.string.bench_paragraphs, result.paragraphs), style = detail, color = muted)
+            Text(stringResource(R.string.bench_words, result.words), style = detail, color = muted)
         }
     }
 }
