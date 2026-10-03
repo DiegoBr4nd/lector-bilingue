@@ -1,17 +1,20 @@
 package io.github.diegobr4nd.lectorbilingue.models
 
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import mockwebserver3.SocketEffect
 import okio.Buffer
 import org.junit.After
+import org.junit.Assume
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertContentEquals
@@ -126,6 +129,22 @@ class ModelDownloaderTest {
         downloader.download(m, p.cb)
         assertTrue(p.values.isNotEmpty())
         assertTrue(p.values.all { it.second == m.totalSize })
+        assertMonotonic(p.downloaded())
+        assertEquals(m.totalSize, p.downloaded().last())
+    }
+
+    @Test
+    fun download_progresoNoRetrocedeSiElServidorObligaAReiniciar() {
+        val half = bodyA.size / 2
+        staging().mkdirs()
+        File(staging(), "model.bin.part").writeBytes(bodyA.copyOfRange(0, half))
+        server.enqueue(ok(bodyA)) // ignora el Range: 200 con el archivo entero → reinicio
+        server.enqueue(ok(bodyB))
+        val m = twoFiles()
+        val p = Progress()
+        val dir = downloader.download(m, p.cb)
+        assertEquals("bytes=$half-", take().headers["Range"])
+        assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
         assertMonotonic(p.downloaded())
         assertEquals(m.totalSize, p.downloaded().last())
     }
@@ -271,6 +290,84 @@ class ModelDownloaderTest {
         server.enqueue(ok(bytes(bodyA.size, seed = 4)))
         assertFailsWith<IntegrityException> { downloader.download(m) { _, _ -> } }
         assertFalse(File(staging(), "model.bin.part").exists())
+    }
+
+    // ---------------------------------------------------------------- errores sin rutas
+
+    @Test
+    fun download_errorDeArchivosNoFiltraRutas() {
+        // Al llegar la petición se borra la carpeta temporal: abrir el .part falla con una ruta en el mensaje.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                staging().deleteRecursively()
+                return ok(bodyA)
+            }
+        }
+        val e = assertFailsWith<IOException> { downloader.download(twoFiles()) { _, _ -> } }
+        val msg = e.message.orEmpty()
+        assertFalse(msg.contains('/') || msg.contains('\\'), "el mensaje lleva una ruta")
+        assertFalse(msg.contains(tmp.root.name))
+        assertFalse(msg.contains("opus-en-es-1"))
+        assertNull(e.cause)
+    }
+
+    @Test
+    fun download_erroresDeRedConservanSuMensaje() {
+        server.enqueue(MockResponse.Builder().code(500).build())
+        val e = assertFailsWith<IOException> { downloader.download(twoFiles()) { _, _ -> } }
+        assertTrue(e.message.orEmpty().contains("HTTP 500"))
+    }
+
+    // ---------------------------------------------------------------- carpeta temporal contenida
+
+    @Test
+    fun download_unArchivoLlamadoTmpSeReemplazaPorUnaCarpeta() {
+        File(modelsDir, ".tmp").writeText("no soy una carpeta")
+        server.enqueue(ok(bodyA))
+        server.enqueue(ok(bodyB))
+        val dir = downloader.download(twoFiles()) { _, _ -> }
+        assertTrue(Files.isDirectory(File(modelsDir, ".tmp").toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertEquals(listOf("model.bin", "vocab.spm"), names(dir))
+    }
+
+    @Test
+    fun download_tmpEnlaceSimbolicoSeReemplazaSinTocarElDestino() {
+        val outside = tmp.newFolder("fuera")
+        File(outside, "testigo").writeText("intacto")
+        val created = try {
+            Files.createSymbolicLink(File(modelsDir, ".tmp").toPath(), outside.toPath())
+            true
+        } catch (e: Exception) {
+            false // Windows sin privilegios: no se pueden crear enlaces.
+        }
+        Assume.assumeTrue(created)
+        server.enqueue(ok(bodyA))
+        server.enqueue(ok(bodyB))
+        val dir = downloader.download(twoFiles()) { _, _ -> }
+        assertFalse(Files.isSymbolicLink(File(modelsDir, ".tmp").toPath()))
+        assertEquals(listOf("testigo"), names(outside))
+        assertEquals("intacto", File(outside, "testigo").readText())
+        assertEquals(listOf("model.bin", "vocab.spm"), names(dir))
+    }
+
+    @Test
+    fun download_carpetaDelModeloEnlaceSimbolicoSeReemplazaSinTocarElDestino() {
+        val outside = tmp.newFolder("fuera2")
+        File(outside, "testigo").writeText("intacto")
+        File(modelsDir, ".tmp").mkdirs()
+        val created = try {
+            Files.createSymbolicLink(staging().toPath(), outside.toPath())
+            true
+        } catch (e: Exception) {
+            false
+        }
+        Assume.assumeTrue(created)
+        server.enqueue(ok(bodyA))
+        server.enqueue(ok(bodyB))
+        val dir = downloader.download(twoFiles()) { _, _ -> }
+        assertFalse(Files.isSymbolicLink(staging().toPath()))
+        assertEquals(listOf("testigo"), names(outside))
+        assertEquals(listOf("model.bin", "vocab.spm"), names(dir))
     }
 
     // ---------------------------------------------------------------- nombres y rutas

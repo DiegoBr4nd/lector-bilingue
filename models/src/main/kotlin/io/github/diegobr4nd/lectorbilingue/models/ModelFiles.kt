@@ -23,10 +23,29 @@ internal object ModelFiles {
      * el parser ya rechaza `..`, `/` y nombres raros). Si no → [IllegalArgumentException].
      */
     fun child(dir: File, name: String): File {
-        require(name.isNotEmpty() && '/' !in name && '\\' !in name && '\u0000' !in name) { "nombre no válido" }
+        requireSimpleName(name)
         val f = File(dir, name)
         require(f.canonicalFile.parentFile == dir.canonicalFile) { "nombre no válido" }
         return f
+    }
+
+    /** Un solo componente de ruta: sin separadores, sin NUL, y distinto de `.` y `..`. */
+    fun requireSimpleName(name: String) {
+        require(
+            name.isNotEmpty() && name != "." && name != ".." &&
+                '/' !in name && '\\' !in name && '\u0000' !in name,
+        ) { "nombre no válido" }
+    }
+
+    /**
+     * Deja [dir] como carpeta real: si es un archivo o un enlace simbólico, borra ese archivo/enlace
+     * (nunca el destino del enlace) y crea la carpeta; si no existe, la crea. El padre debe existir.
+     */
+    fun ensureRealDir(dir: File) {
+        val p = dir.toPath()
+        if (Files.isDirectory(p, LinkOption.NOFOLLOW_LINKS)) return
+        if (existsNoFollow(p)) Files.delete(p)
+        Files.createDirectory(p)
     }
 
     /** Nombres únicos y sin choques con los `.part` de otro archivo del mismo modelo. */

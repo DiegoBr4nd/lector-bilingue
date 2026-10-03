@@ -30,6 +30,7 @@ data class InstalledModel(
         private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
         private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
         private val NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
+        private val ENGINES = setOf("opus", "firefox")
         private const val MAX_TEXT = 256
         private const val MAX_FILES = 32
 
@@ -54,7 +55,7 @@ data class InstalledModel(
             val pair = string(o, "pair")
             require(PAIR.matches(pair)) { ".installed.json: pair" }
             val engine = string(o, "engine")
-            require(engine.isNotEmpty() && engine.length <= MAX_TEXT) { ".installed.json: engine" }
+            require(engine in ENGINES) { ".installed.json: engine" }
             val modelVersion = string(o, "modelVersion")
             require(modelVersion.isNotEmpty() && modelVersion.length <= MAX_TEXT) { ".installed.json: modelVersion" }
             val arr = o.opt("files") as? JSONArray ?: throw IllegalArgumentException(".installed.json: files")

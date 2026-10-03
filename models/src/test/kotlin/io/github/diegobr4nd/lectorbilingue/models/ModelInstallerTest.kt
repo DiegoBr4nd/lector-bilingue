@@ -1,12 +1,14 @@
 package io.github.diegobr4nd.lectorbilingue.models
 
 import org.json.JSONObject
+import org.junit.Assume
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -15,7 +17,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ModelInstallerTest {
@@ -64,6 +65,15 @@ class ModelInstallerTest {
             InstalledModel("opus-en-es-1", "en-es", "opus", "1.0", listOf("model.bin")).toJson(),
         )
         return dir
+    }
+
+    /** El mensaje no puede llevar rutas internas ni nombres de carpetas temporales. */
+    private fun assertNoPath(e: Throwable) {
+        val msg = e.message.orEmpty()
+        assertFalse(msg.contains('/') || msg.contains('\\'), "el mensaje lleva una ruta")
+        assertFalse(msg.contains(tmp.root.name), "el mensaje lleva la carpeta temporal")
+        assertFalse(msg.contains("opus-en-es-2"), "el mensaje lleva el id de la carpeta")
+        assertEquals(null, e.cause, "la causa podría llevar rutas")
     }
 
     private fun atomicMove(from: Path, to: Path) {
@@ -148,14 +158,13 @@ class ModelInstallerTest {
         previous()
         val st = staging()
         var calls = 0
-        val boom = IOException("fallo simulado")
         val installer = ModelInstaller(modelsDir) { from, to ->
             calls++
-            if (calls == 2) throw boom
+            if (calls == 2) throw AtomicMoveNotSupportedException(from.toString(), to.toString(), "x")
             atomicMove(from, to)
         }
         val e = assertFailsWith<IOException> { installer.install(model(), st) }
-        assertSame(boom, e)
+        assertNoPath(e)
         val dir = File(modelsDir, "en-es")
         assertEquals("viejo", File(dir, "model.bin").readText())
         assertEquals("opus-en-es-1", InstalledModel.fromJson(File(dir, ".installed.json").readText()).id)
@@ -177,6 +186,39 @@ class ModelInstallerTest {
         // El .installed.json que quedó en staging no impide reintentar.
         ModelInstaller(modelsDir).install(model(), st)
         assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
+    }
+
+    @Test
+    fun install_falloDelPrimerRenombradoNoFiltraRutas() {
+        previous()
+        val st = staging()
+        val installer = ModelInstaller(modelsDir) { from, to ->
+            throw AtomicMoveNotSupportedException(from.toString(), to.toString(), "x")
+        }
+        val e = assertFailsWith<IOException> { installer.install(model(), st) }
+        assertNoPath(e)
+        assertEquals("viejo", File(modelsDir, "en-es/model.bin").readText())
+    }
+
+    @Test
+    fun install_tmpQueEsEnlaceSimbolicoSeRechaza() {
+        val outside = tmp.newFolder("fuera")
+        val realStaging = File(outside, "opus-en-es-2").apply { mkdirs() }
+        File(realStaging, "model.bin").writeBytes(bodyA)
+        File(realStaging, "vocab.spm").writeBytes(bodyB)
+        val link = File(modelsDir, ".tmp").toPath()
+        val created = try {
+            Files.createSymbolicLink(link, outside.toPath())
+            true
+        } catch (e: Exception) {
+            false // Windows sin privilegios: no se pueden crear enlaces.
+        }
+        Assume.assumeTrue(created)
+        assertFailsWith<IntegrityException> {
+            ModelInstaller(modelsDir).install(model(), File(modelsDir, ".tmp/opus-en-es-2"))
+        }
+        assertFalse(File(modelsDir, "en-es").exists())
+        assertTrue(File(realStaging, "model.bin").isFile, "no se mueve nada desde fuera de modelsDir")
     }
 
     // ---------------------------------------------------------------- re-verificación
@@ -261,6 +303,7 @@ class ModelInstallerTest {
             """{"id":"x","pair":"en-es","engine":"opus","modelVersion":"1","files":["../a"]}""",
             """{"id":"x","pair":"../x","engine":"opus","modelVersion":"1","files":["a"]}""",
             """{"id":"x","pair":"en-es","engine":7,"modelVersion":"1","files":["a"]}""",
+            """{"id":"x","pair":"en-es","engine":"otro","modelVersion":"1","files":["a"]}""",
         )
         for (text in bad) {
             assertFailsWith<IllegalArgumentException>(text) { InstalledModel.fromJson(text) }

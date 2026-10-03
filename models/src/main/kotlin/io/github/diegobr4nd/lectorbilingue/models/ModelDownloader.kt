@@ -1,11 +1,14 @@
 package io.github.diegobr4nd.lectorbilingue.models
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
+import java.nio.file.DirectoryIteratorException
+import java.nio.file.FileSystemException
 import java.nio.file.Files
-import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import kotlin.math.max
 
 /**
  * Descarga los archivos de un modelo a `modelsDir/.tmp/<id>/`, reanudando lo que quedó a medias
@@ -20,43 +23,70 @@ import java.nio.file.StandardCopyOption
  * Al final la carpeta contiene solo los archivos del modelo (se borra cualquier otra cosa).
  *
  * Progreso: `onProgress(bajado, total)`, donde `bajado` incluye lo que ya estaba en disco.
- * Es monótono dentro de un intento y termina en `total` ([CatalogModel.totalSize]); solo puede
- * bajar cuando el servidor obliga a reiniciar un archivo desde cero (ignora el `Range`).
+ * Siempre es monótono y termina en `total` ([CatalogModel.totalSize]); si el servidor obliga a
+ * reiniciar un archivo desde cero (ignora el `Range`), el valor se queda quieto hasta recuperarse.
  *
- * Los errores de red ([IOException], [NetworkPolicyException]) se propagan tal cual y dejan el
- * `.part` para reanudar en el siguiente intento. No es seguro llamar dos veces a la vez con el mismo modelo.
+ * Contención: `modelsDir/.tmp` y `.tmp/<id>` deben ser carpetas reales; si son un archivo o un
+ * enlace simbólico se borra ese archivo/enlace (nunca su destino) y se crea la carpeta.
+ *
+ * Errores: los de red ([IOException] de [HttpFetcher], [NetworkPolicyException]) se propagan tal
+ * cual y dejan el `.part` para reanudar en el siguiente intento. Los de archivos (que en java.io/nio
+ * llevan rutas) salen como `IOException("error de archivos al descargar el modelo")` sin causa. No es seguro llamar dos veces a la vez con el mismo modelo.
  */
 class ModelDownloader(private val modelsDir: File, private val fetcher: HttpFetcher) {
 
     /** Baja (reanudando) y verifica cada archivo en modelsDir/.tmp/<id>/. Devuelve esa carpeta verificada. */
     fun download(model: CatalogModel, onProgress: (downloaded: Long, total: Long) -> Unit): File {
-        ModelFiles.checkNames(model)
-        val tmpRoot = File(modelsDir, ModelFiles.TMP_DIR)
-        val staging = ModelFiles.child(tmpRoot, model.id)
         // Se validan todos los nombres antes de tocar el disco o la red.
+        ModelFiles.checkNames(model)
+        ModelFiles.requireSimpleName(model.id)
+        model.files.forEach { ModelFiles.requireSimpleName(it.name) }
+        try {
+            return downloadChecked(model, onProgress)
+        } catch (e: FileSystemException) {
+            throw fileError()
+        } catch (e: FileNotFoundException) {
+            throw fileError()
+        } catch (e: DirectoryIteratorException) {
+            throw fileError()
+        }
+    }
+
+    private fun downloadChecked(model: CatalogModel, onProgress: (Long, Long) -> Unit): File {
+        val tmpRoot = File(modelsDir, ModelFiles.TMP_DIR)
+        Files.createDirectories(modelsDir.toPath())
+        ModelFiles.ensureRealDir(tmpRoot)
+        ModelFiles.ensureRealDir(File(tmpRoot, model.id))
+        val staging = ModelFiles.child(tmpRoot, model.id)
         val targets = model.files.map { f ->
             Triple(f, ModelFiles.child(staging, f.name), ModelFiles.child(staging, f.name + ModelFiles.PART_SUFFIX))
         }
-        if (ModelFiles.existsNoFollow(staging.toPath()) &&
-            !Files.isDirectory(staging.toPath(), LinkOption.NOFOLLOW_LINKS)
-        ) {
-            ModelFiles.deleteTree(staging.toPath())
-        }
-        if (!staging.isDirectory && !staging.mkdirs()) throw IOException("no se pudo crear la carpeta de descarga")
 
         val finalNames = model.files.map { it.name }.toSet()
         removeStray(staging, finalNames + finalNames.map { it + ModelFiles.PART_SUFFIX })
 
         val total = model.totalSize
+        // Lo emitido nunca baja: si el servidor obliga a reiniciar un archivo, la barra se queda quieta
+        // hasta que lo nuevo supera lo ya mostrado.
+        var lastEmitted = 0L
         var completed = 0L
         for ((file, target, part) in targets) {
             val base = completed
-            fetchOne(file, target, part) { current -> onProgress(base + current, total) }
+            fetchOne(file, target, part) { current ->
+                lastEmitted = max(lastEmitted, base + current)
+                onProgress(lastEmitted, total)
+            }
             completed += file.size
         }
         removeStray(staging, finalNames)
         return staging
     }
+
+    /**
+     * Las excepciones de java.io/java.nio llevan rutas internas en el mensaje: se sustituyen por un
+     * mensaje fijo y SIN causa. Los errores de red de [HttpFetcher] no pasan por aquí (ya van sin rutas).
+     */
+    private fun fileError() = IOException("error de archivos al descargar el modelo")
 
     private fun fetchOne(file: ModelFile, target: File, part: File, progress: (Long) -> Unit) {
         val targetPath = target.toPath()

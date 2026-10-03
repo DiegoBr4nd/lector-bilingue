@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.models
 
 import java.io.File
 import java.io.IOException
+import java.nio.file.DirectoryIteratorException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -15,8 +16,12 @@ import java.nio.file.StandardCopyOption
  * 2. Escribe `.installed.json` dentro de la carpeta temporal.
  * 3. Reemplazo: si ya hay un modelo en `<pair>/`, se renombra a `.old-<pair>-<nanoTime>`; luego la
  *    carpeta temporal se renombra (atómico) a `<pair>/`; al final se borra la vieja. Si el segundo
- *    renombrado falla, la vieja vuelve a `<pair>/` y se relanza el error: el modelo anterior sigue
+ *    renombrado falla, la vieja vuelve a `<pair>/` y se lanza el error: el modelo anterior sigue
  *    disponible y la descarga verificada queda en `.tmp/<id>/` para reintentar.
+ *
+ * Contención: `.tmp` y `.tmp/<id>` deben ser carpetas reales (no enlaces); si no → [IntegrityException].
+ * Errores de archivos: como los de java.io/nio llevan rutas internas, salen siempre como
+ * `IOException("error de archivos al instalar el modelo")`, sin causa.
  *
  * Ventana conocida: entre los dos renombrados `<pair>/` no existe un instante; quien lea el modelo
  * debe tolerar "no instalado" momentáneamente. Si el proceso muere justo ahí, queda `.old-<pair>-*`
@@ -31,13 +36,32 @@ class ModelInstaller internal constructor(
     /** Re-verifica tamaños y SHA-256 en [staging], escribe .installed.json y lo instala en modelsDir/<pair>/ de forma atómica. */
     fun install(model: CatalogModel, staging: File): InstalledModel {
         ModelFiles.checkNames(model)
+        ModelFiles.requireSimpleName(model.id)
+        ModelFiles.requireSimpleName(model.pair)
+        model.files.forEach { ModelFiles.requireSimpleName(it.name) }
+        try {
+            return installChecked(model, staging)
+        } catch (e: IOException) {
+            // Todo aquí son operaciones de archivos: sus mensajes (y causas) llevan rutas internas.
+            throw IOException("error de archivos al instalar el modelo")
+        } catch (e: DirectoryIteratorException) {
+            throw IOException("error de archivos al instalar el modelo")
+        }
+    }
+
+    private fun installChecked(model: CatalogModel, staging: File): InstalledModel {
         val tmpRoot = File(modelsDir, ModelFiles.TMP_DIR)
-        val expectedStaging = ModelFiles.child(tmpRoot, model.id)
-        require(staging.canonicalFile == expectedStaging.canonicalFile) { "carpeta temporal inesperada" }
-        val stagingPath = expectedStaging.toPath()
-        if (!Files.isDirectory(stagingPath, LinkOption.NOFOLLOW_LINKS)) {
+        val rawStaging = File(tmpRoot, model.id)
+        require(staging.canonicalFile == rawStaging.canonicalFile) { "carpeta temporal inesperada" }
+        // Contención: .tmp y .tmp/<id> deben ser carpetas reales (no enlaces); la comparación canónica
+        // de arriba sola no basta, porque un enlace en .tmp se resuelve igual en ambos lados.
+        if (!Files.isDirectory(tmpRoot.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+            !Files.isDirectory(rawStaging.toPath(), LinkOption.NOFOLLOW_LINKS)
+        ) {
             throw IntegrityException("la descarga no está completa")
         }
+        val expectedStaging = ModelFiles.child(tmpRoot, model.id)
+        val stagingPath = expectedStaging.toPath()
         val pairDir = ModelFiles.child(modelsDir, model.pair)
 
         // Un .installed.json en staging solo puede venir de un intento anterior fallido: se reescribe.
