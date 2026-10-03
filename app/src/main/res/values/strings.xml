@@ -4,8 +4,8 @@
     <string name="engine_test_title">Prueba del motor (temporal)</string>
     <string name="model_loading">Cargando modelo…</string>
     <string name="model_ready">Modelo en-es listo</string>
-    <string name="model_missing">Modelo no encontrado en %1$s</string>
-    <string name="model_missing_hint">Cópialo con los comandos de docs/build.md</string>
+    <string name="model_missing">Modelo no encontrado</string>
+    <string name="model_missing_hint">Descárgalo o impórtalo con los botones de abajo</string>
     <string name="model_error">No se pudo cargar el modelo. Impórtalo o descárgalo de nuevo</string>
     <string name="input_label">Texto en inglés</string>
     <string name="translate_button">Traducir</string>
@@ -31,7 +31,9 @@
     <string name="download_progress_description">Progreso de la descarga del modelo</string>
     <string name="download_progress_percent">Descargando… %1$d %%</string>
     <string name="download_preparing">Preparando la descarga…</string>
-    <string name="msg_no_catalog">No hay catálogo disponible todavía</string>
+    <string name="msg_no_catalog">Aún no hay modelos para descargar, o no hay conexión. Inténtalo más tarde.</string>
+    <string name="msg_no_catalog_import">Para importar hace falta el catálogo de modelos, y aún no hay uno.</string>
+    <string name="msg_download_ok">Modelo descargado e instalado</string>
     <string name="msg_no_model">El catálogo no trae el modelo en-es</string>
     <string name="msg_download_busy">Hay una descarga en curso: espera o cancélala</string>
     <string name="msg_cancelled">Descarga cancelada</string>
@@ -46,4 +48,10 @@
     <string name="msg_unknown">Ocurrió un error inesperado</string>
     <string name="cancel_download_button">Cancelar descarga</string>
     <string name="msg_import_no_match">Este zip no corresponde a ningún modelo del catálogo</string>
+    <string name="download_again_button">Descargar de nuevo</string>
+    <string name="download_queued">Esperando conexión a internet…</string>
+    <string name="cancelling">Cancelando…</string>
+    <string name="phase_importing">Importando el modelo…</string>
+    <string name="phase_catalog">Buscando el catálogo…</string>
+    <string name="model_busy_description">Operación de modelos en curso</string>
 </resources>

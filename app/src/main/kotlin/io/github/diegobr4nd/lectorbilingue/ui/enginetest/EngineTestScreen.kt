@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -141,6 +141,8 @@ fun EngineTestContent(
 private fun ModelStatusCard(state: EngineTestUiState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Región "viva": TalkBack anuncia el cambio de estado del modelo sin que el usuario lo busque.
+            val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             when (state.modelStatus) {
                 ModelStatus.LOADING -> Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -148,16 +150,17 @@ private fun ModelStatusCard(state: EngineTestUiState) {
                 ) {
                     val working = stringResource(R.string.working_description)
                     CircularProgressIndicator(Modifier.semantics { contentDescription = working })
-                    Text(stringResource(R.string.model_loading))
+                    Text(stringResource(R.string.model_loading), modifier = live)
                 }
-                ModelStatus.READY -> Text(stringResource(R.string.model_ready))
-                ModelStatus.MISSING -> {
-                    Text(stringResource(R.string.model_missing, state.modelPath))
+                ModelStatus.READY -> Text(stringResource(R.string.model_ready), modifier = live)
+                ModelStatus.MISSING -> Column(modifier = live) {
+                    Text(stringResource(R.string.model_missing))
                     Text(stringResource(R.string.model_missing_hint))
                 }
                 ModelStatus.ERROR -> Text(
                     stringResource(R.string.model_error),
                     color = MaterialTheme.colorScheme.error,
+                    modifier = live,
                 )
             }
         }
@@ -179,8 +182,12 @@ private fun ModelManagerCard(
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(
-                    state.modelSizeMb?.let { stringResource(R.string.download_button_size, it) }
-                        ?: stringResource(R.string.download_button),
+                    if (state.modelStatus == ModelStatus.READY) {
+                        stringResource(R.string.download_again_button)
+                    } else {
+                        state.modelSizeMb?.let { stringResource(R.string.download_button_size, it) }
+                            ?: stringResource(R.string.download_button)
+                    },
                 )
             }
             Text(
@@ -196,10 +203,7 @@ private fun ModelManagerCard(
                         progress = { fraction },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .semantics {
-                                contentDescription = description
-                                progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
-                            },
+                            .semantics { contentDescription = description },
                     )
                     Text(stringResource(R.string.download_progress_percent, (fraction * 100).toInt()))
                 } else {
@@ -208,12 +212,32 @@ private fun ModelManagerCard(
                             .fillMaxWidth()
                             .semantics { contentDescription = description },
                     )
-                    Text(stringResource(R.string.download_preparing))
+                    Text(
+                        stringResource(
+                            if (state.downloadQueued) R.string.download_queued else R.string.download_preparing,
+                        ),
+                    )
                 }
+            } else if (state.modelBusy && state.phase != ModelPhase.NONE) {
+                val busyDescription = stringResource(R.string.model_busy_description)
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = busyDescription },
+                )
+                Text(
+                    stringResource(
+                        if (state.phase == ModelPhase.IMPORTING) R.string.phase_importing else R.string.phase_catalog,
+                    ),
+                )
             }
             if (state.downloading) {
-                OutlinedButton(onClick = onCancelDownload, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(stringResource(R.string.cancel_download_button))
+                OutlinedButton(
+                    onClick = onCancelDownload,
+                    enabled = !state.cancelling,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(if (state.cancelling) R.string.cancelling else R.string.cancel_download_button))
                 }
             }
             OutlinedButton(
@@ -225,6 +249,7 @@ private fun ModelManagerCard(
                 Text(
                     stringResource(it.textRes()),
                     color = if (it.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
         }
@@ -234,6 +259,7 @@ private fun ModelManagerCard(
 @StringRes
 private fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.NO_CATALOG -> R.string.msg_no_catalog
+    ModelMessage.NO_CATALOG_IMPORT -> R.string.msg_no_catalog_import
     ModelMessage.NO_MODEL -> R.string.msg_no_model
     ModelMessage.DOWNLOAD_BUSY -> R.string.msg_download_busy
     ModelMessage.CANCELLED -> R.string.msg_cancelled
@@ -246,6 +272,7 @@ private fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.INVALID_ZIP -> R.string.msg_invalid_zip
     ModelMessage.IMPORT_NO_MATCH -> R.string.msg_import_no_match
     ModelMessage.IMPORT_OK -> R.string.msg_import_ok
+    ModelMessage.DOWNLOAD_OK -> R.string.msg_download_ok
     ModelMessage.UNKNOWN -> R.string.msg_unknown
 }
 

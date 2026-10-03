@@ -178,4 +178,6 @@ minisign -G -p reserva.pub -s /c/Users/JUAN/llaves/reserva.key
 3. Publica una versión nueva de la app que **quite** la llave comprometida y agregue una tercera de reserva (créala antes, igual que arriba). Hasta que la gente actualice, la llave robada todavía sería aceptada, así que actúa rápido.
 4. Pide al agente de seguridad que revise el caso y borra de los releases todo lo que no reconozcas.
 
+**El catálogo no caduca.** Con una llave robada, alguien podría firmar un catálogo con fecha muy lejana (por ejemplo 2099). Los teléfonos que no se hayan actualizado rechazarían entonces todos los catálogos legítimos, hasta instalar una versión nueva de la app que quite esa llave. Por eso publicar esa versión es obligatorio y urgente.
+
 **Si pierdes la llave actual pero no se filtró**: usa la de reserva igual que arriba y crea una nueva reserva.

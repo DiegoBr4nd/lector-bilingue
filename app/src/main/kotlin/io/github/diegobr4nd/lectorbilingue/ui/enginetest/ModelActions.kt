@@ -14,8 +14,9 @@ import java.util.UUID
 
 /** Mensajes fijos (cada uno tiene su texto en strings.xml). Nunca se muestra el texto de una excepción. */
 enum class ModelMessage(val isError: Boolean = true) {
-    NO_CATALOG, NO_MODEL, DOWNLOAD_BUSY, CANCELLED(isError = false), NETWORK, POLICY, SIGNATURE, INTEGRITY,
-    CATALOG, FILES, INVALID_ZIP, IMPORT_NO_MATCH, IMPORT_OK(isError = false), UNKNOWN,
+    NO_CATALOG, NO_CATALOG_IMPORT, NO_MODEL, DOWNLOAD_BUSY, CANCELLED(isError = false), NETWORK, POLICY,
+    SIGNATURE, INTEGRITY, CATALOG, FILES, INVALID_ZIP, IMPORT_NO_MATCH, IMPORT_OK(isError = false),
+    DOWNLOAD_OK(isError = false), UNKNOWN,
 }
 
 /** Lógica pura (sin Android) de los botones de modelos: se prueba en la JVM. */
@@ -73,6 +74,14 @@ object ModelActions {
         is CatalogException -> ModelMessage.CATALOG
         is IllegalArgumentException -> ModelMessage.INVALID_ZIP
         else -> ModelMessage.UNKNOWN
+    }
+
+    /** Mensaje con el que termina una descarga (null si el estado no es final). */
+    fun finalMessage(info: DownloadState?): ModelMessage? = when (info?.status) {
+        DownloadState.Status.SUCCEEDED -> ModelMessage.DOWNLOAD_OK
+        DownloadState.Status.CANCELLED -> ModelMessage.CANCELLED
+        DownloadState.Status.FAILED -> fromCode(info.error)
+        else -> null
     }
 
     /** Código de error de la descarga (integridad, firma…) a mensaje fijo. */

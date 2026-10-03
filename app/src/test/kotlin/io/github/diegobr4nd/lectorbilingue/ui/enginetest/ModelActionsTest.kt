@@ -90,9 +90,25 @@ class ModelActionsTest {
         assertEquals(ModelMessage.UNKNOWN, ModelActions.classifyImport(RuntimeException("x")))
     }
 
-    @Test fun `solo cancelar e importar bien no son errores`() {
+    @Test fun `solo cancelar, importar bien y descargar bien no son errores`() {
         val ok = ModelMessage.entries.filter { !it.isError }.toSet()
-        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK), ok)
+        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK, ModelMessage.DOWNLOAD_OK), ok)
+    }
+
+    @Test fun `mensaje final de la descarga segun el estado`() {
+        fun info(status: DownloadState.Status, error: String? = null) = DownloadState(status, 0, 0, error, null)
+        assertEquals(ModelMessage.DOWNLOAD_OK, ModelActions.finalMessage(info(DownloadState.Status.SUCCEEDED)))
+        assertEquals(ModelMessage.CANCELLED, ModelActions.finalMessage(info(DownloadState.Status.CANCELLED)))
+        assertEquals(ModelMessage.INTEGRITY, ModelActions.finalMessage(info(DownloadState.Status.FAILED, "integridad")))
+        assertEquals(ModelMessage.UNKNOWN, ModelActions.finalMessage(info(DownloadState.Status.FAILED, null)))
+        assertNull(ModelActions.finalMessage(info(DownloadState.Status.QUEUED)))
+        assertNull(ModelActions.finalMessage(info(DownloadState.Status.RUNNING)))
+        assertNull(ModelActions.finalMessage(null))
+    }
+
+    @Test fun `importar sin catalogo tiene su propio mensaje`() {
+        assertTrue(ModelMessage.NO_CATALOG_IMPORT.isError)
+        assertTrue(ModelMessage.NO_CATALOG_IMPORT != ModelMessage.NO_CATALOG)
     }
 
     private val mine = UUID.randomUUID()

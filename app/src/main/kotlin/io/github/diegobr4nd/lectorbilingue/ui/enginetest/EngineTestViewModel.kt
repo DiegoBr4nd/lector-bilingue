@@ -32,6 +32,9 @@ import kotlinx.coroutines.withContext
 enum class ModelStatus { LOADING, READY, MISSING, ERROR }
 enum class BenchSource { PRIVATE, SUBSTITUTES }
 
+/** Qué hace la app mientras hay una operación de modelos y aún no hay descarga en marcha. */
+enum class ModelPhase { NONE, LOOKING_UP_CATALOG, IMPORTING }
+
 data class EngineTestUiState(
     val modelStatus: ModelStatus = ModelStatus.LOADING,
     val modelPath: String = "",
@@ -49,6 +52,12 @@ data class EngineTestUiState(
     /** Avance de la descarga 0..1; null mientras no se conoce. Solo tiene sentido con [downloading]. */
     val downloadFraction: Float? = null,
     val downloading: Boolean = false,
+    /** Fase previa a la descarga (buscar catálogo) o importación; solo se muestra con [modelBusy] y sin [downloading]. */
+    val phase: ModelPhase = ModelPhase.NONE,
+    /** La descarga está encolada, esperando conexión (aún no corre). */
+    val downloadQueued: Boolean = false,
+    /** Se tocó "Cancelar" y aún no llega el estado final. */
+    val cancelling: Boolean = false,
     val modelMessage: ModelMessage? = null,
 )
 
@@ -93,15 +102,15 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         } ?: return
         _state.update { it.copy(modelSizeMb = ModelActions.megabytes(model.totalSize)) }
         if (runCatching { Models.isDownloading(app, model.id) }.getOrDefault(false)) {
-            _state.update { if (it.modelBusy) it else it.copy(modelBusy = true, downloading = true) }
             activeModelId = model.id
+            _state.update { if (it.modelBusy) it else it.copy(modelBusy = true, downloading = true) }
             observeDownload(model.id, null)
         }
     }
 
     /** Descarga el modelo en-es: catálogo guardado o, si no hay, el de la red; luego encola y observa. */
     fun downloadModel() {
-        if (!tryStartModelOperation()) return
+        if (!tryStartModelOperation(ModelPhase.LOOKING_UP_CATALOG)) return
         viewModelScope.launch {
             val app = getApplication<Application>()
             val (picked, problem) = try {
@@ -128,19 +137,26 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 null to ModelActions.classify(e)
             }
             if (picked == null) {
-                _state.update { it.copy(modelBusy = false, modelMessage = problem) }
+                _state.update { it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = problem) }
                 return@launch
             }
-            _state.update { it.copy(modelSizeMb = ModelActions.megabytes(picked.totalSize), downloading = true) }
+            // El id activo va ANTES de mostrar el botón Cancelar: así un toque siempre encuentra a qué cancelar.
+            activeModelId = picked.id
+            _state.update {
+                it.copy(modelSizeMb = ModelActions.megabytes(picked.totalSize), downloading = true, phase = ModelPhase.NONE)
+            }
             val requestId = try {
                 Models.enqueueDownload(app, picked.id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(modelBusy = false, downloading = false, modelMessage = ModelMessage.UNKNOWN) }
+                _state.update {
+                    it.copy(modelBusy = false, downloading = false, cancelling = false, modelMessage = ModelMessage.UNKNOWN)
+                }
                 return@launch
             }
-            activeModelId = picked.id
+            // Si ya tocaron Cancelar mientras se encolaba, esa cancelación no tenía qué cancelar todavía.
+            if (_state.value.cancelling) runCatching { Models.cancelDownload(app, picked.id) }
             observeDownload(picked.id, requestId)
         }
     }
@@ -155,13 +171,24 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 if (!ModelActions.acceptDownloadState(info, requestId, seenActive)) return@collect
                 if (ModelActions.isActive(info)) seenActive = true
                 when (info?.status) {
-                    null, DownloadState.Status.QUEUED -> _state.update { it.copy(downloadFraction = null) }
+                    null -> _state.update { it.copy(downloadFraction = null) }
+                    DownloadState.Status.QUEUED ->
+                        _state.update { it.copy(downloadFraction = null, downloadQueued = true) }
                     DownloadState.Status.RUNNING ->
-                        _state.update { it.copy(downloadFraction = ModelActions.fraction(info.bytes, info.total)) }
+                        _state.update {
+                            it.copy(downloadFraction = ModelActions.fraction(info.bytes, info.total), downloadQueued = false)
+                        }
                     DownloadState.Status.SUCCEEDED -> {
-                        _state.update { it.copy(downloading = false, downloadFraction = null) }
+                        _state.update {
+                            it.copy(downloading = false, downloadFraction = null, downloadQueued = false, cancelling = false)
+                        }
                         loadEngine()
-                        _state.update { it.copy(modelBusy = false) }
+                        _state.update {
+                            it.copy(
+                                modelBusy = false,
+                                modelMessage = if (it.modelStatus == ModelStatus.READY) ModelActions.finalMessage(info) else null,
+                            )
+                        }
                         downloadJob?.cancel()
                     }
                     DownloadState.Status.FAILED -> {
@@ -180,26 +207,37 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     /** Cancela la descarga en curso; el estado CANCELLED llega por el observador. */
     fun cancelDownload() {
         val id = activeModelId ?: return
-        runCatching { Models.cancelDownload(app(), id) }
+        if (_state.value.cancelling) return
+        _state.update { it.copy(cancelling = true) }
+        if (runCatching { Models.cancelDownload(app(), id) }.isFailure) {
+            _state.update { it.copy(cancelling = false) }
+        }
     }
 
     /** Marca "operación de modelos en marcha" de forma atómica; false si ya había una. */
-    private fun tryStartModelOperation(): Boolean {
+    private fun tryStartModelOperation(phase: ModelPhase): Boolean {
         var started = false
         _state.update {
             started = !it.modelBusy
-            if (started) it.copy(modelBusy = true, modelMessage = null, downloadFraction = null) else it
+            if (started) {
+                it.copy(modelBusy = true, modelMessage = null, downloadFraction = null, phase = phase, cancelling = false)
+            } else {
+                it
+            }
         }
         return started
     }
 
     private fun endDownload(message: ModelMessage) = _state.update {
-        it.copy(modelBusy = false, downloading = false, downloadFraction = null, modelMessage = message)
+        it.copy(
+            modelBusy = false, downloading = false, downloadFraction = null, downloadQueued = false,
+            cancelling = false, phase = ModelPhase.NONE, modelMessage = message,
+        )
     }
 
     /** Importa un modelo desde un .zip que eligió el usuario y recarga el motor. */
     fun importModel(uri: Uri) {
-        if (!tryStartModelOperation()) return
+        if (!tryStartModelOperation(ModelPhase.IMPORTING)) return
         viewModelScope.launch {
             val app = getApplication<Application>()
             val problem: ModelMessage? = try {
@@ -207,7 +245,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     runCatching { Models.catalogRepository(app).current() }.getOrNull() != null
                 }
                 if (!hasCatalog) {
-                    ModelMessage.NO_CATALOG
+                    ModelMessage.NO_CATALOG_IMPORT
                 } else {
                     val input = withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri) }
                         ?: throw IOException()
@@ -221,9 +259,9 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             }
             if (problem == null) {
                 loadEngine()
-                _state.update { it.copy(modelBusy = false, modelMessage = ModelMessage.IMPORT_OK) }
+                _state.update { it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = ModelMessage.IMPORT_OK) }
             } else {
-                _state.update { it.copy(modelBusy = false, modelMessage = problem) }
+                _state.update { it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = problem) }
             }
         }
     }

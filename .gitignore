@@ -16,3 +16,6 @@ textos_*.html
 
 # Python
 __pycache__/
+
+# Claves privadas de minisign; nunca al repo
+*.key

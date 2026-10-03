@@ -699,4 +699,25 @@ class HttpFetcherTest {
         assertNull(HttpFetcher.parseContentRange("items 0-9/10"))
         assertNull(HttpFetcher.parseContentRange("bytes -1-9/10"))
     }
+
+    @Test
+    fun fetchBytes_servidorLentoSuperaElPlazoTotal() {
+        val slow = HttpFetcher(
+            policy = localPolicy(),
+            connectTimeoutMs = 5_000,
+            readTimeoutMs = 5_000,
+            fetchDeadlineMs = 500,
+        )
+        // 10 bytes por segundo: nunca lanza el timeout de lectura, pero tarda más del plazo total.
+        server.enqueue(
+            MockResponse.Builder().code(200).body(buffer(bytes(1000)))
+                .throttleBody(10, 1, TimeUnit.SECONDS).build(),
+        )
+        val start = System.nanoTime()
+        val e = assertFailsWith<IOException> { slow.fetchBytes(url("/catalog.json"), 4096) }
+        val elapsedMs = (System.nanoTime() - start) / 1_000_000
+        assertTrue(elapsedMs < 3_000, "tardó $elapsedMs ms")
+        assertTrue(e.message!!.contains(server.hostName) || e.message!!.contains("127.0.0.1"), e.message)
+        assertFalse(e.message!!.contains("/catalog.json"))
+    }
 }

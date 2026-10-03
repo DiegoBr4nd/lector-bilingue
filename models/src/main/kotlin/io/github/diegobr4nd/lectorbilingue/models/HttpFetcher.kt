@@ -53,21 +53,41 @@ class HttpFetcher internal constructor(
     private val policy: HostPolicy,
     private val connectTimeoutMs: Int,
     private val readTimeoutMs: Int,
+    private val fetchDeadlineMs: Long,
     private val openOutput: (file: File, append: Boolean) -> OutputStream,
 ) {
+    internal constructor(
+        policy: HostPolicy,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+        openOutput: (file: File, append: Boolean) -> OutputStream,
+    ) : this(policy, connectTimeoutMs, readTimeoutMs, 60_000L, openOutput)
+
     constructor(
         policy: HostPolicy = GitHubHostPolicy,
         connectTimeoutMs: Int = 15_000,
         readTimeoutMs: Int = 30_000,
-    ) : this(policy, connectTimeoutMs, readTimeoutMs, ::FileOutputStream)
+        fetchDeadlineMs: Long = 60_000,
+    ) : this(policy, connectTimeoutMs, readTimeoutMs, fetchDeadlineMs, ::FileOutputStream)
 
     /**
      * Descarga completa a memoria con tope (catálogo y firma). Solo acepta 200.
      * No tiene forma de cancelarse a mitad: es solo para archivos pequeños (unos pocos MiB como mucho).
+     *
+     * Tiene un plazo total ([fetchDeadlineMs], 60 s por defecto) para toda la descarga: un servidor que
+     * gotea un byte cada pocos segundos no dispara el timeout de lectura, pero aquí se corta igual con
+     * un IOException de mensaje fijo (solo el host). Un vigilante cierra la conexión al vencer el plazo.
      */
     fun fetchBytes(url: String, maxBytes: Int): ByteArray {
         require(maxBytes >= 0) { "maxBytes negativo" }
+        val deadline = System.nanoTime() + fetchDeadlineMs * 1_000_000L
         val conn = open(url, rangeStart = null)
+        val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val watchdog = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "fetch-deadline").apply { isDaemon = true }
+        }
+        val remainingMs = ((deadline - System.nanoTime()) / 1_000_000L).coerceAtLeast(0L)
+        watchdog.schedule({ timedOut.set(true); conn.disconnect() }, remainingMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         try {
             val code = conn.responseCode
             if (code != HttpURLConnection.HTTP_OK) throw httpError(code, conn.url)
@@ -75,11 +95,19 @@ class HttpFetcher internal constructor(
             if (declared > maxBytes) throw tooBig(conn.url)
             val out = ByteArrayOutputStream(if (declared in 0..maxBytes) declared.toInt() else 8192)
             val total = conn.inputStream.use { input ->
-                copyCapped(input, maxBytes.toLong(), { tooBig(conn.url) }) { buf, n -> out.write(buf, 0, n) }
+                copyCapped(input, maxBytes.toLong(), { tooBig(conn.url) }) { buf, n ->
+                    if (System.nanoTime() > deadline) throw deadlineExceeded(conn.url)
+                    out.write(buf, 0, n)
+                }
             }
             if (declared >= 0 && total != declared) throw incomplete(conn.url)
             return out.toByteArray()
+        } catch (e: IOException) {
+            // Si fue el vigilante quien cerró la conexión, el error de lectura es "plazo vencido".
+            if (timedOut.get() && e.message?.startsWith("la descarga de ") != true) throw deadlineExceeded(conn.url)
+            throw e
         } finally {
+            watchdog.shutdownNow()
             conn.disconnect()
         }
     }
@@ -299,6 +327,8 @@ class HttpFetcher internal constructor(
     }
 
     private fun httpError(code: Int, url: URL) = IOException("HTTP $code desde ${url.host}")
+
+    private fun deadlineExceeded(url: URL) = IOException("la descarga de ${url.host} superó el plazo total")
 
     private fun incomplete(url: URL) = IOException("respuesta incompleta desde ${url.host}")
 
