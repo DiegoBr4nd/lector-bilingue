@@ -286,7 +286,7 @@ Java_io_github_diegobr4nd_lectorbilingue_engine_opus_Ct2NativeBridge_nativeUtf8B
         return nullptr;
     }
     try {
-        std::string raw(static_cast<size_t>(len), ' ');
+        std::string raw(static_cast<size_t>(len), '\0');
         if (len > 0) env->GetByteArrayRegion(bytes, 0, len, reinterpret_cast<jbyte*>(raw.data()));
         if (env->ExceptionCheck()) return nullptr;
         return toJava(env, raw);
