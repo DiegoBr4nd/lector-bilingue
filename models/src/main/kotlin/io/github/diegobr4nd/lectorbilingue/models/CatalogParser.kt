@@ -13,6 +13,11 @@ import org.json.JSONTokener
  * Cualquier regla rota rechaza el catálogo entero con [CatalogException].
  * Los mensajes solo nombran el campo y su posición (p. ej. `models[0].files[1].sha256`),
  * nunca el valor recibido. Los campos desconocidos se ignoran (compatibilidad hacia adelante).
+ *
+ * Confianza: la firma minisign del catálogo se verifica ANTES de llamar a [parse]; ella es el
+ * ancla de confianza, y esta validación es una segunda defensa. El `org.json` de Android es más
+ * permisivo que la biblioteca usada en las pruebas JVM (acepta claves repetidas quedándose con
+ * la última, y comentarios), así que el generador del catálogo nunca debe emitir claves repetidas.
  */
 object CatalogParser {
     const val MAX_BYTES = 1 shl 20
@@ -25,6 +30,9 @@ object CatalogParser {
     const val MAX_FILE_SIZE = 1L shl 31
 
     /** El id se usa como carpeta (`.tmp/<id>/`): empieza por letra o dígito y no lleva `..`. */
+    /** Fecha máxima de `generated`: un valor muy lejano bloquearía el antirretroceso para siempre. */
+    private val MAX_GENERATED: Instant = Instant.parse("2101-01-01T00:00:00Z")
+
     private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
     private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
     private val ENGINES = setOf("opus", "firefox")
@@ -41,6 +49,9 @@ object CatalogParser {
             value as? JSONObject ?: throw CatalogException("JSON inválido")
         } catch (e: JSONException) {
             throw CatalogException("JSON inválido")
+        } catch (e: StackOverflowError) {
+            // El org.json de Android no limita el anidamiento: "[[[[…" agota la pila.
+            throw CatalogException("JSON inválido")
         }
 
         val version = int(root, "version", "version")
@@ -53,6 +64,7 @@ object CatalogParser {
         } catch (e: DateTimeParseException) {
             fail("generated")
         }
+        if (!generated.isBefore(MAX_GENERATED)) fail("generated")
 
         val modelsJson = array(root, "models", "models")
         if (modelsJson.length() > MAX_MODELS) fail("models")
@@ -90,7 +102,8 @@ object CatalogParser {
 
     private fun parseFile(o: JSONObject, at: String): ModelFile {
         val name = string(o, "name", "$at.name")
-        if (!NAME.matches(name) || name.contains("..")) fail("$at.name")
+        // Sin punto inicial: evita ".", ".." y chocar con ".installed.json" del instalador.
+        if (!NAME.matches(name) || name.contains("..") || name.startsWith(".")) fail("$at.name")
         val size = long(o, "size", "$at.size")
         if (size !in 1..MAX_FILE_SIZE) fail("$at.size")
         val sha256 = string(o, "sha256", "$at.sha256")

@@ -61,9 +61,10 @@ La app obtiene sus modelos de traducción de forma segura, sin depender de copia
 }
 ```
 Reglas de validación (`CatalogParser`), cualquier violación rechaza el catálogo entero:
-- `version == 1`; `generated` en ISO-8601 UTC.
+- `version == 1`; `generated` en ISO-8601 UTC (termina en `Z`) y con año ≤ 2100.
 - `id` único, `^[a-z0-9][a-z0-9.-]{0,63}$` y sin `..` (se usa como nombre de carpeta); `pair` = `^[a-z]{2,3}-[a-z]{2,3}$` (mismas reglas que `LanguagePair`); `engine` ∈ {`opus`, `firefox`}.
-- `files`: 1–32 entradas; `name` = `^[A-Za-z0-9._-]{1,128}$`, sin `..`, único dentro del modelo; `size` entre 1 byte y 2 GiB; `sha256` = 64 hex minúsculas; `url` HTTPS con host `github.com` y ruta que empiece por `/DiegoBr4nd/lector-bilingue-modelos/releases/download/`.
+- `files`: 1–32 entradas; `name` = `^[A-Za-z0-9._-]{1,128}$`, sin `..`, sin `.` inicial, único dentro del modelo; `size` entre 1 byte y 2 GiB; `sha256` = 64 hex minúsculas; `url` HTTPS con host `github.com` y ruta que empiece por `/DiegoBr4nd/lector-bilingue-modelos/releases/download/`.
+- `url` exactamente `<prefijo><tag>/<name>`, con `<name>` igual al `name` del archivo (sin `..`, `%`, `\`, `?`, `#` ni espacios).
 - Tamaño del JSON ≤ 1 MiB; ≤ 200 modelos.
 
 ### 3.2 Firma

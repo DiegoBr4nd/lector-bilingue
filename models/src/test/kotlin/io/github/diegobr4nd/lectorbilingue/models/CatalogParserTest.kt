@@ -44,11 +44,22 @@ class CatalogParserTest {
 
     private fun parse(o: JSONObject): Catalog = CatalogParser.parse(o.toString().toByteArray(Charsets.UTF_8))
 
-    private fun rechaza(o: JSONObject): CatalogException =
-        assertFailsWith<CatalogException> { parse(o) }
+    /** Si se da [campo], el mensaje debe terminar en esa ruta: así se comprueba QUÉ regla saltó. */
+    private fun rechaza(o: JSONObject, campo: String? = null): CatalogException =
+        rechazaBytes(o.toString().toByteArray(Charsets.UTF_8), campo)
 
-    private fun rechazaBytes(b: ByteArray): CatalogException =
-        assertFailsWith<CatalogException> { CatalogParser.parse(b) }
+    private fun rechazaBytes(b: ByteArray, campo: String? = null): CatalogException {
+        val e = assertFailsWith<CatalogException> { CatalogParser.parse(b) }
+        if (campo != null) {
+            assertTrue(e.message!!.endsWith(": $campo"), "se esperaba la regla de $campo, saltó: ${e.message}")
+        }
+        return e
+    }
+
+    private val ID0 = "models[0].id"
+    private val NAME0 = "models[0].files[0].name"
+    private val SIZE0 = "models[0].files[0].size"
+    private val URL0 = "models[0].files[0].url"
 
     // ---------- Casos válidos ----------
 
@@ -143,6 +154,18 @@ class CatalogParserTest {
     @Test fun `generated con espacios`() {
         val o = valido(); o.put("generated", " 2026-10-03T00:00:00Z"); rechaza(o)
     }
+    @Test fun `generated despues del 2100`() {
+        val o = valido(); o.put("generated", "2101-01-01T00:00:00Z"); rechaza(o, "generated")
+    }
+    @Test fun `generated el ultimo segundo de 2100 es valido`() {
+        val o = valido(); o.put("generated", "2100-12-31T23:59:59Z")
+        assertEquals(Instant.parse("2100-12-31T23:59:59Z"), parse(o).generated)
+    }
+    @Test fun `JSON muy anidado no revienta la pila`() {
+        // Menos de 1 MiB para que sí llegue al parser.
+        val e = rechazaBytes(ByteArray(CatalogParser.MAX_BYTES - 16) { '['.code.toByte() })
+        assertEquals("JSON inválido", e.message)
+    }
     @Test fun `generated numerico`() { val o = valido(); o.put("generated", 1); rechaza(o) }
     @Test fun `models no es arreglo`() { val o = valido(); o.put("models", JSONObject()); rechaza(o) }
     @Test fun `201 modelos`() {
@@ -195,20 +218,20 @@ class CatalogParserTest {
     @Test fun `modelo que no es objeto`() {
         val o = valido(); o.put("models", JSONArray().put("x")); rechaza(o)
     }
-    @Test fun `id con mayusculas`() { val o = valido(); o.m0().put("id", "Opus-en-es"); rechaza(o) }
-    @Test fun `id vacio`() { val o = valido(); o.m0().put("id", ""); rechaza(o) }
-    @Test fun `id de 65 caracteres`() { val o = valido(); o.m0().put("id", "a".repeat(65)); rechaza(o) }
+    @Test fun `id con mayusculas`() { val o = valido(); o.m0().put("id", "Opus-en-es"); rechaza(o, ID0) }
+    @Test fun `id vacio`() { val o = valido(); o.m0().put("id", ""); rechaza(o, ID0) }
+    @Test fun `id de 65 caracteres`() { val o = valido(); o.m0().put("id", "a".repeat(65)); rechaza(o, ID0) }
     @Test fun `id de 64 caracteres es valido`() {
         val o = valido(); o.m0().put("id", "a".repeat(64)); parse(o)
     }
-    @Test fun `id con barra`() { val o = valido(); o.m0().put("id", "a/b"); rechaza(o) }
-    @Test fun `id punto`() { val o = valido(); o.m0().put("id", "."); rechaza(o) }
-    @Test fun `id dos puntos`() { val o = valido(); o.m0().put("id", ".."); rechaza(o) }
-    @Test fun `id que empieza por guion`() { val o = valido(); o.m0().put("id", "-x"); rechaza(o) }
-    @Test fun `id que empieza por punto`() { val o = valido(); o.m0().put("id", ".x"); rechaza(o) }
-    @Test fun `id con dos puntos en medio`() { val o = valido(); o.m0().put("id", "a..b"); rechaza(o) }
+    @Test fun `id con barra`() { val o = valido(); o.m0().put("id", "a/b"); rechaza(o, ID0) }
+    @Test fun `id punto`() { val o = valido(); o.m0().put("id", "."); rechaza(o, ID0) }
+    @Test fun `id dos puntos`() { val o = valido(); o.m0().put("id", ".."); rechaza(o, ID0) }
+    @Test fun `id que empieza por guion`() { val o = valido(); o.m0().put("id", "-x"); rechaza(o, ID0) }
+    @Test fun `id que empieza por punto`() { val o = valido(); o.m0().put("id", ".x"); rechaza(o, ID0) }
+    @Test fun `id con dos puntos en medio`() { val o = valido(); o.m0().put("id", "a..b"); rechaza(o, ID0) }
     @Test fun `id repetido`() {
-        val o = valido(); o.getJSONArray("models").put(modelo(pair = "en-fr")); rechaza(o)
+        val o = valido(); o.getJSONArray("models").put(modelo(pair = "en-fr")); rechaza(o, "models[1].id")
     }
     @Test fun `pair con ruta`() { val o = valido(); o.m0().put("pair", "../x"); rechaza(o) }
     @Test fun `pair con mayusculas`() { val o = valido(); o.m0().put("pair", "EN-es"); rechaza(o) }
@@ -236,31 +259,42 @@ class CatalogParserTest {
     @Test fun `archivo que no es objeto`() {
         val o = valido(); o.m0().put("files", JSONArray().put(1)); rechaza(o)
     }
-    @Test fun `name con barra`() { val o = valido(); o.f(0).put("name", "a/model.bin"); rechaza(o) }
-    @Test fun `name con barra invertida`() { val o = valido(); o.f(0).put("name", "a\\model.bin"); rechaza(o) }
-    @Test fun `name igual a dos puntos`() { val o = valido(); o.f(0).put("name", ".."); rechaza(o) }
+    @Test fun `name con barra`() { val o = valido(); o.f(0).put("name", "a/model.bin"); rechaza(o, NAME0) }
+    @Test fun `name con barra invertida`() { val o = valido(); o.f(0).put("name", "a\\model.bin"); rechaza(o, NAME0) }
+    @Test fun `name igual a dos puntos`() { val o = valido(); o.f(0).put("name", ".."); rechaza(o, NAME0) }
     @Test fun `name con dos puntos en medio`() {
-        val o = valido(); o.f(0).put("name", "a..b").put("url", "${prefijo}t/a..b"); rechaza(o)
+        val o = valido(); o.f(0).put("name", "a..b").put("url", "${prefijo}t/a..b"); rechaza(o, NAME0)
     }
-    @Test fun `name vacio`() { val o = valido(); o.f(0).put("name", ""); rechaza(o) }
-    @Test fun `name de 129 caracteres`() { val o = valido(); o.f(0).put("name", "a".repeat(129)); rechaza(o) }
-    @Test fun `name repetido`() { val o = valido(); o.f(1).put("name", "model.bin"); rechaza(o) }
+    @Test fun `name vacio`() { val o = valido(); o.f(0).put("name", ""); rechaza(o, NAME0) }
+    @Test fun `name de 129 caracteres`() { val o = valido(); o.f(0).put("name", "a".repeat(129)); rechaza(o, NAME0) }
+    @Test fun `name repetido`() {
+        val o = valido(); o.f(1).put("name", "model.bin").put("url", "${prefijo}t/model.bin")
+        rechaza(o, "models[0].files[1].name")
+    }
+    @Test fun `name punto`() { val o = valido(); o.f(0).put("name", ".").put("url", "${prefijo}t/."); rechaza(o, NAME0) }
+    @Test fun `name que choca con el registro del instalador`() {
+        val o = valido(); o.f(0).put("name", ".installed.json").put("url", "${prefijo}t/.installed.json")
+        rechaza(o, NAME0)
+    }
+    @Test fun `name oculto`() {
+        val o = valido(); o.f(0).put("name", ".hidden").put("url", "${prefijo}t/.hidden"); rechaza(o, NAME0)
+    }
     @Test fun `mismo name en modelos distintos es valido`() {
         val o = valido(); o.getJSONArray("models").put(modelo(id = "otro", pair = "en-fr"))
         assertEquals(2, parse(o).models.size)
     }
-    @Test fun `size 0`() { val o = valido(); o.f(0).put("size", 0); rechaza(o) }
-    @Test fun `size negativo`() { val o = valido(); o.f(0).put("size", -5); rechaza(o) }
-    @Test fun `size 2 a la 31 mas 1`() { val o = valido(); o.f(0).put("size", (1L shl 31) + 1); rechaza(o) }
-    @Test fun `size como string`() { val o = valido(); o.f(0).put("size", "10"); rechaza(o) }
-    @Test fun `size decimal`() { val o = valido(); o.f(0).put("size", 1.5); rechaza(o) }
+    @Test fun `size 0`() { val o = valido(); o.f(0).put("size", 0); rechaza(o, SIZE0) }
+    @Test fun `size negativo`() { val o = valido(); o.f(0).put("size", -5); rechaza(o, SIZE0) }
+    @Test fun `size 2 a la 31 mas 1`() { val o = valido(); o.f(0).put("size", (1L shl 31) + 1); rechaza(o, SIZE0) }
+    @Test fun `size como string`() { val o = valido(); o.f(0).put("size", "10"); rechaza(o, SIZE0) }
+    @Test fun `size decimal`() { val o = valido(); o.f(0).put("size", 1.5); rechaza(o, SIZE0) }
     @Test fun `size fuera del rango de Long`() {
         val s = valido().toString().replace("235883903", "99999999999999999999999")
-        rechazaBytes(s.toByteArray())
+        rechazaBytes(s.toByteArray(), SIZE0)
     }
     @Test fun `size con exponente`() {
         val s = valido().toString().replace("235883903", "1e3")
-        rechazaBytes(s.toByteArray())
+        rechazaBytes(s.toByteArray(), SIZE0)
     }
     @Test fun `sha256 con mayusculas`() { val o = valido(); o.f(0).put("sha256", "A".repeat(64)); rechaza(o) }
     @Test fun `sha256 de 63 caracteres`() { val o = valido(); o.f(0).put("sha256", "a".repeat(63)); rechaza(o) }
@@ -272,36 +306,36 @@ class CatalogParserTest {
     private fun conUrl(url: String): JSONObject = valido().also { it.f(0).put("url", url) }
 
     @Test fun `url http`() {
-        rechaza(conUrl("http://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("http://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
     @Test fun `url otro host`() {
-        rechaza(conUrl("https://evil.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("https://evil.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
     @Test fun `url host con sufijo`() {
-        rechaza(conUrl("https://github.com.evil.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("https://github.com.evil.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
     @Test fun `url otro repo`() {
-        rechaza(conUrl("https://github.com/otro/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("https://github.com/otro/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
     @Test fun `url con mayusculas en el esquema`() {
-        rechaza(conUrl("HTTPS://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("HTTPS://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
     @Test fun `url con usuario`() {
-        rechaza(conUrl("https://x@github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"))
+        rechaza(conUrl("https://x@github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/t/model.bin"), URL0)
     }
-    @Test fun `url con dos puntos para subir`() { rechaza(conUrl("${prefijo}../../x/model.bin")) }
-    @Test fun `url con punto codificado`() { rechaza(conUrl("${prefijo}%2e%2e/model.bin")) }
-    @Test fun `url con punto codificado en mayusculas`() { rechaza(conUrl("${prefijo}%2E%2E/model.bin")) }
-    @Test fun `url con barra invertida`() { rechaza(conUrl("${prefijo}t\\model.bin")) }
-    @Test fun `url con consulta`() { rechaza(conUrl("${prefijo}t/model.bin?x=1")) }
-    @Test fun `url con fragmento`() { rechaza(conUrl("${prefijo}t/model.bin#x")) }
-    @Test fun `url con espacio`() { rechaza(conUrl("${prefijo}t /model.bin")) }
-    @Test fun `url con etiqueta punto`() { rechaza(conUrl("${prefijo}./model.bin")) }
-    @Test fun `url sin etiqueta`() { rechaza(conUrl("${prefijo}model.bin")) }
-    @Test fun `url con directorio extra`() { rechaza(conUrl("${prefijo}t/sub/model.bin")) }
-    @Test fun `url con etiqueta vacia`() { rechaza(conUrl("$prefijo/model.bin")) }
-    @Test fun `url cuyo archivo no coincide con name`() { rechaza(conUrl("${prefijo}t/otro.bin")) }
-    @Test fun `url como numero`() { val o = valido(); o.f(0).put("url", 5); rechaza(o) }
+    @Test fun `url con dos puntos para subir`() { rechaza(conUrl("${prefijo}../../x/model.bin"), URL0) }
+    @Test fun `url con punto codificado`() { rechaza(conUrl("${prefijo}%2e%2e/model.bin"), URL0) }
+    @Test fun `url con punto codificado en mayusculas`() { rechaza(conUrl("${prefijo}%2E%2E/model.bin"), URL0) }
+    @Test fun `url con barra invertida`() { rechaza(conUrl("${prefijo}t\\model.bin"), URL0) }
+    @Test fun `url con consulta`() { rechaza(conUrl("${prefijo}t/model.bin?x=1"), URL0) }
+    @Test fun `url con fragmento`() { rechaza(conUrl("${prefijo}t/model.bin#x"), URL0) }
+    @Test fun `url con espacio`() { rechaza(conUrl("${prefijo}t /model.bin"), URL0) }
+    @Test fun `url con etiqueta punto`() { rechaza(conUrl("${prefijo}./model.bin"), URL0) }
+    @Test fun `url sin etiqueta`() { rechaza(conUrl("${prefijo}model.bin"), URL0) }
+    @Test fun `url con directorio extra`() { rechaza(conUrl("${prefijo}t/sub/model.bin"), URL0) }
+    @Test fun `url con etiqueta vacia`() { rechaza(conUrl("$prefijo/model.bin"), URL0) }
+    @Test fun `url cuyo archivo no coincide con name`() { rechaza(conUrl("${prefijo}t/otro.bin"), URL0) }
+    @Test fun `url como numero`() { val o = valido(); o.f(0).put("url", 5); rechaza(o, URL0) }
 
     // ---------- Mensajes ----------
 
