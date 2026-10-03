@@ -99,8 +99,12 @@ Si la copia queda a medias (carpeta `en-es/` incompleta), la prueba del teléfon
 ### Prueba en el teléfono
 ```bash
 ./gradlew installFdroidDebug installFdroidDebugAndroidTest
+export MSYS_NO_PATHCONV=1
+adb shell am force-stop io.github.diegobr4nd.lectorbilingue
 adb shell am instrument -w io.github.diegobr4nd.lectorbilingue.test/androidx.test.runner.AndroidJUnitRunner
 ```
+Cierra la app antes (`force-stop`): la pantalla de prueba carga su propio motor en el mismo proceso y falsea la medición de memoria.
+
 No uses `connectedAndroidTest`: desinstala la app al terminar y con ella se borra el modelo copiado. Sin el modelo, las pruebas que lo necesitan se saltan solas.
 
 ### Pruebas de las herramientas Python

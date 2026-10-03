@@ -71,9 +71,18 @@ class OpusOnDeviceTest {
     @Test fun cienCiclosNoPierdenMemoria() = runBlocking<Unit> {
         val engine = OpusEngine(File(filesDir, "models"))
         assumeTrue("modelo no copiado", engine.isModelPresent(pair))
+        assumeTrue(
+            "otro motor ya cargado en el proceso (cierra la app: adb shell am force-stop io.github.diegobr4nd.lectorbilingue)",
+            OpusEngine.loadedEngineCount() == 0,
+        )
         fun cycle() = runBlocking {
             engine.load(pair, EngineConfig())
             try {
+                assertEquals(
+                    1,
+                    OpusEngine.loadedEngineCount(),
+                    "Otro motor se cargó durante la medición (¿se abrió la app?); la medición no es válida",
+                )
                 engine.translate(listOf("Hi."))
             } finally {
                 engine.unload()
