@@ -8,6 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import kotlin.test.Test
@@ -19,10 +20,14 @@ import kotlin.test.assertTrue
 class OpusEngineTest {
     @get:Rule val tmp = TemporaryFolder()
     private val enEs = LanguagePair("en", "es")
+    private val created = mutableListOf<OpusEngine>()
+    private val baseCount = OpusEngine.loadedEngineCount()
+
+    @After fun descargarTodo() = created.forEach { it.unload() }
 
     private fun engineWithModel(bridge: FakeNativeBridge = FakeNativeBridge()): Pair<OpusEngine, FakeNativeBridge> {
         File(tmp.root, "en-es").mkdirs()
-        return OpusEngine(tmp.root, bridge, Dispatchers.Default) to bridge
+        return OpusEngine(tmp.root, bridge, Dispatchers.Default).also { created += it } to bridge
     }
 
     @Test fun `id es opus`() = assertEquals("opus", OpusEngine(tmp.root, FakeNativeBridge()).id)
@@ -113,5 +118,40 @@ class OpusEngineTest {
         engine.load(enEs, EngineConfig())
         (1..20).map { async(Dispatchers.Default) { engine.translate(listOf("S$it.")) } }.awaitAll()
         assertEquals(1, bridge.maxConcurrent)
+    }
+
+    private fun delta() = OpusEngine.loadedEngineCount() - baseCount
+
+    @Test fun `contador sube con load, no cambia al recargar y baja con unload`() = runTest {
+        val (engine, _) = engineWithModel()
+        assertEquals(0, delta())
+        engine.load(enEs, EngineConfig())
+        assertEquals(1, delta())
+        engine.load(enEs, EngineConfig(beamSize = 4))
+        assertEquals(1, delta())
+        engine.unload()
+        assertEquals(0, delta())
+        engine.unload()
+        assertEquals(0, delta())
+    }
+
+    @Test fun `dos motores cargados cuentan dos`() = runTest {
+        val (a, _) = engineWithModel()
+        val (b, _) = engineWithModel()
+        a.load(enEs, EngineConfig())
+        b.load(enEs, EngineConfig())
+        assertEquals(2, delta())
+        a.unload()
+        assertEquals(1, delta())
+    }
+
+    @Test fun `fallo al recargar deja contador en cero y translate falla`() = runTest {
+        val (engine, bridge) = engineWithModel()
+        engine.load(enEs, EngineConfig())
+        assertEquals(1, delta())
+        bridge.failOnLoad = true
+        assertFailsWith<IllegalStateException> { engine.load(enEs, EngineConfig()) }
+        assertEquals(0, delta())
+        assertFailsWith<IllegalStateException> { engine.translate(listOf("Hi.")) }
     }
 }

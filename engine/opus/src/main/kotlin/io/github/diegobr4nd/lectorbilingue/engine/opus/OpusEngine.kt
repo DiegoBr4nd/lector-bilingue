@@ -8,6 +8,7 @@ import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge.Companion.MA
 import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge.Companion.MAX_SENTENCE_CHARS
 import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge.Companion.MAX_THREADS
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,6 +45,7 @@ class OpusEngine(
             synchronized(lock) {
                 releaseLocked()
                 handle = bridge.load(dir.path, config.threads, config.beamSize)
+                if (handle != 0L) loadedCount.incrementAndGet()
             }
         }
     }
@@ -73,6 +75,14 @@ class OpusEngine(
         if (handle != 0L) {
             bridge.unload(handle)
             handle = 0L
+            loadedCount.decrementAndGet()
         }
+    }
+
+    companion object {
+        private val loadedCount = AtomicInteger(0)
+
+        /** Número de motores con modelo cargado en este proceso; útil para diagnóstico y pruebas. */
+        fun loadedEngineCount(): Int = loadedCount.get()
     }
 }

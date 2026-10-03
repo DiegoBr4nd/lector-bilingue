@@ -11,8 +11,10 @@ class FakeNativeBridge(private val delayMillis: Long = 0) : NativeBridge {
     @Volatile var maxConcurrent = 0
         private set
     private var nextHandle = 1L
+    @Volatile var failOnLoad = false
 
     @Synchronized override fun load(modelDir: String, threads: Int, beamSize: Int): Long {
+        if (failOnLoad) error("fallo simulado al cargar")
         loads += Triple(modelDir, threads, beamSize)
         return nextHandle++
     }
