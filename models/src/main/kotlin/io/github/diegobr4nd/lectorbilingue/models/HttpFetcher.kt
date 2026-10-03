@@ -89,9 +89,13 @@ class HttpFetcher(
      * - Llama a [onReset] cada vez que el archivo se trunca a cero, **después** de truncarlo (el
      *   servidor ignoró el `Range`, respondió un rango que no empieza donde esperábamos, o el parcial
      *   ya ocupaba [maxBytes] o más). Quien calcule un hash incremental debe reiniciarlo ahí.
+     * - **Verificar antes:** si [target] quizá ya está completo (cualquier tamaño, no solo [maxBytes]),
+     *   quien llama debe comprobarlo (tamaño y SHA-256) ANTES de llamar: pedir `Range` desde el final
+     *   haría que el servidor responda 416 → IOException.
      * - Si el parcial ya mide [maxBytes] o más, NO se pide `Range` (daría 416 para siempre): se trunca
-     *   y se descarga desde cero. Por eso quien llama debe comprobar (tamaño y SHA-256) un archivo que
-     *   quizá ya esté completo ANTES de llamar a esta función.
+     *   y se descarga desde cero.
+     * - Un 206 cuyo Content-Range tiene total conocido debe terminar en `total - 1`; si no →
+     *   IOException sin escribir nada (el parcial queda igual y el siguiente intento reanuda).
      * - El archivo nunca supera [maxBytes]: se aborta con IOException antes de escribir el bloque que lo excedería.
      * - Si la respuesta anuncia su longitud (Content-Length en 200; `end-start+1` del Content-Range en 206)
      *   y llegan menos bytes → IOException "respuesta incompleta" y el parcial se conserva para reanudar.
@@ -145,6 +149,10 @@ class HttpFetcher(
                         }
                         val total = range.total
                         if (total != null && total > maxBytes) throw tooBig(conn.url)
+                        // Un 206 debe llegar hasta el final del archivo; si no, terminaríamos "bien" con un archivo corto.
+                        if (total != null && range.end != total - 1) {
+                            throw IOException("rango que no llega al final desde ${conn.url.host}")
+                        }
                         if (range.end + 1 > maxBytes) throw tooBig(conn.url)
                         val rangeLen = range.end - range.start + 1
                         val len = conn.contentLengthLong

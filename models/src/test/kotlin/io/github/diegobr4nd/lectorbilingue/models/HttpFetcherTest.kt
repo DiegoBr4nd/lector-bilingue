@@ -609,6 +609,25 @@ class HttpFetcherTest {
     }
 
     @Test
+    fun downloadTo_206QueNoLlegaAlFinalDelTotalLanzaSinEscribir() {
+        val body = bytes(1000)
+        val n = 100
+        val target = newTarget().apply { writeBytes(body.copyOfRange(0, n)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes $n-499/1000")
+                .body(buffer(body.copyOfRange(n, 500)))
+                .build(),
+        )
+        val rec = Recorder()
+        assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 10_000, rec.onBytes, rec.onReset) }
+        assertContentEquals(body.copyOfRange(0, n), target.readBytes())
+        assertEquals(0, rec.out.size())
+        assertEquals(0, rec.resets)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun downloadTo_206ConInicioMayorQueElParcialReinicia() {
         val body = bytes(3000)
         val target = newTarget().apply { writeBytes(body.copyOfRange(0, 1000)) }
