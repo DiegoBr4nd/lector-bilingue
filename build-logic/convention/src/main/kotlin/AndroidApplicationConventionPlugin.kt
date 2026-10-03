@@ -9,9 +9,12 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         extensions.configure<ApplicationExtension> {
             compileSdk = ProjectConfig.COMPILE_SDK
+            // El APK quita los símbolos de las .so nativas con la herramienta "strip" de este NDK.
+            ndkVersion = ProjectConfig.NDK_VERSION
             defaultConfig {
                 minSdk = ProjectConfig.MIN_SDK
                 targetSdk = ProjectConfig.TARGET_SDK
+                testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
             }
             compileOptions {
                 sourceCompatibility = ProjectConfig.JAVA_VERSION

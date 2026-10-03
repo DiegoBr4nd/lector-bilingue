@@ -1,0 +1,9 @@
+[submodule "native/third_party/CTranslate2"]
+	path = native/third_party/CTranslate2
+	url = https://github.com/OpenNMT/CTranslate2.git
+[submodule "native/third_party/sentencepiece"]
+	path = native/third_party/sentencepiece
+	url = https://github.com/google/sentencepiece.git
+[submodule "native/third_party/abseil-cpp"]
+	path = native/third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git

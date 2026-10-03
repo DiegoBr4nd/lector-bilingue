@@ -28,7 +28,7 @@ Un **módulo** es un pedazo del proyecto que compila por separado. Separar ayuda
 :core:ui                  → sistema de diseño (tema, tipografía, componentes) ← lo llena DISEÑO
 :core:database            → Room: caché de traducciones, biblioteca, progreso
 :core:prefs               → DataStore: ajustes del usuario
-:core:text                → partir texto en oraciones (ICU BreakIterator), normalizar
+:core:text                → partir texto en oraciones (SentenceSplitter propio), normalizar
 :engine:api               → interfaz TranslationEngine (contrato común de motores)
 :engine:opus              → motor OPUS vía CTranslate2 (JNI) ← la parte nativa la entrega INFRA
 :engine:firefox           → motor Firefox (Bergamot) ← reutilizable de Offline Translator (GPL-3.0)
@@ -72,7 +72,7 @@ data class EngineConfig(
 | Ajustes | DataStore | |
 | EPUB | **Readium Kotlin Toolkit** (BSD-3) | Soporta EPUB 2/3 y PDF; minSdk 24 |
 | PDF texto | PdfBox-Android (Apache-2.0) | Solo extracción de texto (fase 5) |
-| Partir oraciones | `android.icu.text.BreakIterator` | Viene en Android, sin dependencia extra |
+| Partir oraciones | `SentenceSplitter` propio (Kotlin puro, ver spec de la fase 1b) | Reglas explícitas, igual en JVM y Android; sin dependencia extra |
 
 > **Prohibido:** Firebase, Play Services, AdMob, Crashlytics, analítica de cualquier tipo, MuPDF (AGPL) salvo decisión explícita de Juan.
 
@@ -87,7 +87,7 @@ data class EngineConfig(
 ### Unidad de traducción
 - El lector traduce **por párrafo**, pero el motor recibe **oraciones** (los modelos se entrenaron con oraciones).
 - Contexto: no hace falta "ventana deslizante" en la v1; OPUS trabaja oración por oración. Se evaluará después.
-- Partir con `BreakIterator` respetando abreviaturas ("Dr.", "e.g."). Pruebas unitarias con casos difíciles: diálogos con comillas, puntos suspensivos, números decimales.
+- Partir con `SentenceSplitter` (reglas explícitas, igual en JVM y Android) respetando abreviaturas ("Dr.", "e.g."). Pruebas unitarias con casos difíciles: diálogos con comillas, puntos suspensivos, números decimales.
 
 ## 4. Tareas por fase
 
@@ -97,7 +97,7 @@ data class EngineConfig(
 2. Crear los módulos `:app`, `:core:text`, `:engine:api`, `:engine:opus`.
 
 **1b**
-3. `:core:text`: partidor de oraciones con TDD (mínimo 15 casos de prueba, incluidos los 25 textos de la prueba de calidad).
+3. `:core:text`: partidor de oraciones con TDD (mínimo 15 casos de prueba, incluidos los 25 textos sustitutos de `bench/sustitutos.txt`).
 4. `:engine:opus`: puente JNI hacia la librería `libct2bridge.so` que entrega INFRA. Funciones: `nativeLoad(modelDir, threads, beam)`, `nativeTranslate(sentences)`, `nativeUnload()`.
 5. Pantalla temporal: caja de texto + botón "Traducir" + resultado + tiempo en milisegundos.
 6. Importar el modelo manualmente (copiado al teléfono por USB) para no depender todavía del gestor de descargas.

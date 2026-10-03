@@ -1,0 +1,27 @@
+# Regenerar requirements.txt (uv 0.12.22), desde la raíz del repo:
+#   uv pip compile tools/models/pyproject.toml --generate-hashes --python-version 3.12 --python-platform x86_64-manylinux_2_28 -o tools/models/requirements.txt
+# Solo describe las dependencias para regenerar requirements.txt (no es un paquete).
+# El índice de PyTorch (CPU) es "explicit": solo se usa para torch; todo lo demás sale de PyPI.
+[project]
+name = "lector-bilingue-models"
+version = "0.0.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "ctranslate2==4.8.2",
+    "sentencepiece==0.2.2",
+    "huggingface_hub<1",
+    "transformers==4.57.6",
+    "torch==2.14.1",
+    "safetensors",
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
