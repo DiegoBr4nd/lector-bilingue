@@ -16,6 +16,7 @@ import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -35,7 +36,7 @@ class ModelDownloadJobTest {
     private inner class Fakes {
         var currentResults = ArrayDeque<Catalog?>()
         var currentDefault: Catalog? = catalogA
-        var refresh: () -> Catalog = { error("refresh no esperado") }
+        var refresh: () -> Catalog = { catalogA }
         var download: (CatalogModel, (Long, Long) -> Unit) -> File = { m, p ->
             p(0, m.totalSize)
             p(m.totalSize, m.totalSize)
@@ -69,14 +70,12 @@ class ModelDownloadJobTest {
     // ---------------------------------------------------------------- camino feliz y catálogo
 
     @Test
-    fun run_conCatalogoActualDescargaEInstalaSinRefrescar() = runTest {
+    fun run_refrescaPrimeroAunqueElActualTengaElModelo() = runTest {
         val f = Fakes()
-        val outcome = f.run()
-        val ok = assertIs<DownloadOutcome.Success>(outcome)
+        val ok = assertIs<DownloadOutcome.Success>(f.run())
         assertEquals("en-es", ok.installed.pair)
-        assertFalse("refresh" in f.events)
         assertEquals(
-            listOf("current", "beforeWork(locked=true)", "download(locked=true)", "install(locked=true)"),
+            listOf("refresh", "current", "beforeWork(locked=true)", "download(locked=true)", "install(locked=true)"),
             f.events,
         )
         assertFalse(f.lock.isLocked, "el candado se suelta al terminar")
@@ -84,20 +83,38 @@ class ModelDownloadJobTest {
     }
 
     @Test
-    fun run_sinCatalogoActualRefresca() = runTest {
+    fun run_modeloSoloEnElCatalogoRefrescadoSeEncuentra() = runTest {
         val f = Fakes()
-        f.currentDefault = null
-        f.refresh = { catalogA }
+        f.currentDefault = catalogB // el actual no lo tiene...
+        f.refresh = { f.currentDefault = catalogA; catalogA } // ...pero el refresco guarda uno que sí
         assertIs<DownloadOutcome.Success>(f.run())
-        assertTrue("refresh" in f.events)
+        assertEquals(listOf("refresh", "current"), f.events.take(2))
     }
 
     @Test
-    fun run_idQueNoEstaEnElActualRefresca() = runTest {
+    fun run_fallosDelRefrescoUsanElActual() = runTest {
+        val failures = listOf<Exception>(
+            IOException("sin conexión"),
+            SignatureException("firma no válida"),
+            CatalogException("catálogo más antiguo"),
+            NetworkPolicyException("host no permitido"),
+            IllegalStateException("raro"),
+        )
+        for (e in failures) {
+            val f = Fakes() // el actual (catalogA) tiene el modelo
+            f.refresh = { throw e }
+            assertIs<DownloadOutcome.Success>(f.run(), e.javaClass.simpleName)
+            assertEquals(listOf("refresh", "current"), f.events.take(2))
+        }
+    }
+
+    @Test
+    fun run_cancelarDuranteElRefrescoSePropaga() = runTest {
         val f = Fakes()
-        f.currentDefault = catalogB
-        f.refresh = { catalogA }
-        assertIs<DownloadOutcome.Success>(f.run())
+        f.refresh = { throw CancellationException("cancelado") }
+        assertFailsWith<CancellationException> { f.run() }
+        assertFalse(f.events.any { it.startsWith("download") })
+        assertFalse(f.lock.isLocked)
     }
 
     @Test
@@ -110,20 +127,19 @@ class ModelDownloadJobTest {
     }
 
     @Test
-    fun run_catalogoMasAntiguoAlRefrescarUsaElActualSiTieneElModelo() = runTest {
-        val f = Fakes()
-        // El primer current() no lo tiene; mientras, otro refresh guardó uno que sí lo tiene.
-        f.currentResults = ArrayDeque(listOf(null, catalogA))
-        f.refresh = { throw CatalogException("catálogo más antiguo") }
-        assertIs<DownloadOutcome.Success>(f.run())
-    }
-
-    @Test
     fun run_catalogoMasAntiguoSinActualUtilFallaConCatalogo() = runTest {
         val f = Fakes()
         f.currentDefault = catalogB
         f.refresh = { throw CatalogException("catálogo más antiguo") }
         assertEquals("catalogo", failureCode(f.run()))
+    }
+
+    @Test
+    fun run_sinCatalogoActualYRefrescoFallidoClasificaElError() = runTest {
+        val f = Fakes()
+        f.currentDefault = null
+        f.refresh = { throw SignatureException("firma no válida") }
+        assertEquals("firma", failureCode(f.run()))
     }
 
     @Test

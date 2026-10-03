@@ -27,6 +27,20 @@ object ModelActions {
     fun pickModel(catalog: Catalog): CatalogModel? =
         catalog.findByPair("en-es").firstOrNull { it.engine == "opus" }
 
+    /**
+     * Qué hacer al tocar "Descargar" tras intentar refrescar el catálogo de la red y leer el guardado.
+     * Devuelve (catálogo a usar, mensaje de problema); exactamente uno de los dos es null.
+     * - Hay catálogo guardado (incrustado o ya refrescado): se usa; un fallo del refresco es silencioso.
+     * - No hay catálogo y el refresco falló por firma, política de red o catálogo inválido: ese mensaje.
+     * - No hay catálogo y el refresco falló por red/404 (o no falló): [ModelMessage.NO_CATALOG].
+     */
+    fun resolveCatalog(current: Catalog?, refreshError: Throwable?): Pair<Catalog?, ModelMessage?> = when {
+        current != null -> current to null
+        refreshError is SignatureException || refreshError is NetworkPolicyException || refreshError is CatalogException ->
+            null to classify(refreshError)
+        else -> null to ModelMessage.NO_CATALOG
+    }
+
     /** Bytes a megabytes (MiB) redondeando al más cercano. */
     fun megabytes(bytes: Long): Long = (bytes + MIB / 2) / MIB
 

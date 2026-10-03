@@ -40,9 +40,10 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
             false
         }
 
+        val notificationGate = NotificationGate()
         val outcome = Models.downloadJob(applicationContext).run(modelId, runAttemptCount) { pair, downloaded, total ->
             setProgressAsync(workDataOf(DownloadWork.KEY_BYTES to downloaded, DownloadWork.KEY_TOTAL to total))
-            if (inForeground) {
+            if (inForeground && notificationGate.shouldUpdate(downloaded, total)) {
                 setForegroundAsync(notifications.foregroundInfo(notificationId, id, pair, downloaded, total))
             }
         }
@@ -57,6 +58,29 @@ class DownloadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
         val modelId = inputData.getString(DownloadWork.KEY_MODEL_ID)
         return DownloadNotifications(applicationContext)
             .foregroundInfo(DownloadNotifications.notificationId(modelId), id, pair = null, downloaded = 0, total = 0)
+    }
+}
+
+/**
+ * Limita las actualizaciones de la notificación a una por segundo (Android penaliza más de ~5 por segundo).
+ * Deja pasar la primera y la final (bytes == total), que mantiene el 100 %.
+ */
+internal class NotificationGate(
+    private val minIntervalNanos: Long = 1_000_000_000L,
+    private val nanoClock: () -> Long = System::nanoTime,
+) {
+    private var lastAt = 0L
+    private var any = false
+
+    fun shouldUpdate(downloaded: Long, total: Long): Boolean {
+        val now = nanoClock()
+        val final = total > 0 && downloaded >= total
+        if (!any || final || now - lastAt >= minIntervalNanos) {
+            any = true
+            lastAt = now
+            return true
+        }
+        return false
     }
 }
 

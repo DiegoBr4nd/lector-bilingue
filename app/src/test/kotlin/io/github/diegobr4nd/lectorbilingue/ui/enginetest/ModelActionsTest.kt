@@ -51,6 +51,25 @@ class ModelActionsTest {
         assertEquals(3L, ModelActions.megabytes(model("a", "en-es", "opus", 1_048_576, 2_097_152).totalSize))
     }
 
+    @Test fun `con catalogo guardado se usa y el fallo del refresco es silencioso`() {
+        val c = catalog(model("a", "en-es", "opus", 1))
+        for (err in listOf(null, IOException("x"), SignatureException("x"), NetworkPolicyException("x"), CatalogException("x"))) {
+            assertEquals(c to null, ModelActions.resolveCatalog(c, err))
+        }
+    }
+
+    @Test fun `sin catalogo firma politica o catalogo dan su mensaje`() {
+        assertEquals(null to ModelMessage.SIGNATURE, ModelActions.resolveCatalog(null, SignatureException("x")))
+        assertEquals(null to ModelMessage.POLICY, ModelActions.resolveCatalog(null, NetworkPolicyException("x")))
+        assertEquals(null to ModelMessage.CATALOG, ModelActions.resolveCatalog(null, CatalogException("x")))
+    }
+
+    @Test fun `sin catalogo y sin conexion o 404 es NO_CATALOG`() {
+        assertEquals(null to ModelMessage.NO_CATALOG, ModelActions.resolveCatalog(null, IOException("HTTP 404")))
+        assertEquals(null to ModelMessage.NO_CATALOG, ModelActions.resolveCatalog(null, null))
+        assertEquals(null to ModelMessage.NO_CATALOG, ModelActions.resolveCatalog(null, RuntimeException("x")))
+    }
+
     @Test fun `errores a mensajes`() {
         assertEquals(ModelMessage.FILES, ModelActions.classify(ModelFileException("x")))
         assertEquals(ModelMessage.NETWORK, ModelActions.classify(IOException("x")))

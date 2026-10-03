@@ -26,6 +26,23 @@ class ProductionCatalogTest {
     private fun idHex(key: MinisignPublicKey) =
         key.keyId.reversed().joinToString("") { "%02X".format(it) }
 
+    /** El asset real del APK. El directorio de trabajo de las pruebas de Gradle es la carpeta del módulo (:models). */
+    private fun assetFile(name: String): File {
+        val f = File("../app/src/main/assets/catalog/$name").canonicalFile
+        assertTrue(f.isFile, "no se encontró el asset real ${f.path}; las pruebas deben correr con cwd = carpeta del módulo :models")
+        return f
+    }
+
+    @Test
+    fun copiasDePruebaSonIgualesAlAssetRealDelApk() {
+        for (name in listOf("catalog.json", "catalog.json.minisig")) {
+            assertTrue(
+                prod(name).contentEquals(assetFile(name).readBytes()),
+                "catalog-prod/$name difiere de app/src/main/assets/catalog/$name: copia el asset real a models/src/test/resources/catalog-prod/",
+            )
+        }
+    }
+
     @Test
     fun production_tieneExactamenteLasDosLlavesEsperadas() {
         val ids = TrustedKeys.production.map(::idHex)

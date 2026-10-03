@@ -57,9 +57,13 @@ internal object DownloadWork {
 /**
  * El trabajo real de [DownloadWorker], sin Android, para poder probarlo:
  *
- * 1. Busca [modelId] en `currentCatalog()`; si no hay catálogo o no está, llama a `refreshCatalog()`.
- *    Si el refresco dice "catálogo más antiguo" (u otro [CatalogException]) y `currentCatalog()` sí tiene
- *    el modelo, se usa ese.
+ * 1. Intenta SIEMPRE `refreshCatalog()` primero, sin que su fallo detenga nada (el APK trae un catálogo
+ *    firmado incrustado, así que `currentCatalog()` casi nunca es null; sin este refresco no llegarían
+ *    nunca catálogos nuevos ni la rotación de llaves). Después busca [modelId] en `currentCatalog()`
+ *    (tras un refresco válido es el más nuevo; si el refresco falló —sin red, firma mala, "catálogo más
+ *    antiguo"— es el que ya había). Si ahí no está el modelo y el refresco había fallado, se clasifica
+ *    el error del refresco (p. ej. red → reintento); si el refresco funcionó, `Failure("catalogo")`.
+ *    Cancelar durante el refresco corta todo.
  * 2. Con el [lock] tomado (el mismo de [Models.withModelsLock], así nunca coincide con una importación):
  *    `beforeWork()` (recuperación del arranque), descarga e instala.
  * 3. Traduce cada excepción a un [DownloadOutcome] (ver [classify]). Errores de red → [DownloadOutcome.Retry]
@@ -112,14 +116,17 @@ internal class ModelDownloadJob(
     }
 
     private fun findModel(id: String): CatalogModel? {
-        currentCatalog()?.models?.firstOrNull { it.id == id }?.let { return it }
-        val refreshed = try {
+        var refreshError: Exception? = null
+        try {
             refreshCatalog()
-        } catch (e: CatalogException) {
-            // P. ej. "catálogo más antiguo": lo guardado sigue valiendo.
-            return currentCatalog()?.models?.firstOrNull { it.id == id } ?: throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            refreshError = e
         }
-        return refreshed.models.firstOrNull { it.id == id }
+        currentCatalog()?.models?.firstOrNull { it.id == id }?.let { return it }
+        if (refreshError != null) throw refreshError
+        return null
     }
 
     /** Excepción → resultado. Nunca se copia el mensaje: solo un código fijo. */

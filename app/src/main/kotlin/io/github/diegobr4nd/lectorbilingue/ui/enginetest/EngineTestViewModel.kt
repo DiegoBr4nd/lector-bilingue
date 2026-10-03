@@ -108,7 +108,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Descarga el modelo en-es: catálogo guardado o, si no hay, el de la red; luego encola y observa. */
+    /** Descarga el modelo en-es: refresca el catálogo de la red (si puede), usa el más nuevo y luego encola y observa. */
     fun downloadModel() {
         if (!tryStartModelOperation(ModelPhase.LOOKING_UP_CATALOG)) return
         viewModelScope.launch {
@@ -116,16 +116,19 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             val (picked, problem) = try {
                 withContext(Dispatchers.IO) {
                     val repo = Models.catalogRepository(app)
-                    // Sin catálogo guardado y sin red (o sin catálogo publicado aún): un solo mensaje.
-                    val catalog = repo.current() ?: try {
+                    // Primero el refresco (mejor esfuerzo: así llegan catálogos nuevos aunque el APK traiga uno),
+                    // luego el catálogo guardado, que tras un refresco válido ya es el más nuevo.
+                    val refreshError = try {
                         repo.refresh()
+                        null
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        null
+                        e
                     }
+                    val (catalog, catalogProblem) = ModelActions.resolveCatalog(repo.current(), refreshError)
                     if (catalog == null) {
-                        null to ModelMessage.NO_CATALOG
+                        null to catalogProblem
                     } else {
                         val m = ModelActions.pickModel(catalog)
                         m to if (m == null) ModelMessage.NO_MODEL else null
