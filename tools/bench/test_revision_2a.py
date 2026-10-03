@@ -134,9 +134,14 @@ class CliSeguridadTest(unittest.TestCase):
             self.assertIn("--force", err)
             self.assertNotIn("orig", err)
             self.assertEqual(antes, ((d / "e.html").read_bytes(), (d / "k.json").read_bytes()))
+            # La clave es aleatoria y con 3 textos puede repetirse por azar (1 de 8):
+            # se marca el archivo para comprobar que --force lo reescribe, sin depender del azar.
+            (d / "k.json").write_bytes(b"MARCADOR")
             rc, _ = self.correr(["--force", *args])
             self.assertEqual(rc, 0)
-            self.assertNotEqual(antes[1], (d / "k.json").read_bytes())
+            clave = json.loads((d / "k.json").read_text(encoding="utf-8"))
+            self.assertEqual(clave["version"], 1)
+            self.assertEqual(len(clave["key"]), 3)
 
     def test_sin_aviso_dentro_de_private(self):
         with tempfile.TemporaryDirectory() as d:
