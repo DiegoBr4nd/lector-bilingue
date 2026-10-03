@@ -202,6 +202,11 @@ class CatalogParserTest {
         val o = valido(); o.m0().put("id", "a".repeat(64)); parse(o)
     }
     @Test fun `id con barra`() { val o = valido(); o.m0().put("id", "a/b"); rechaza(o) }
+    @Test fun `id punto`() { val o = valido(); o.m0().put("id", "."); rechaza(o) }
+    @Test fun `id dos puntos`() { val o = valido(); o.m0().put("id", ".."); rechaza(o) }
+    @Test fun `id que empieza por guion`() { val o = valido(); o.m0().put("id", "-x"); rechaza(o) }
+    @Test fun `id que empieza por punto`() { val o = valido(); o.m0().put("id", ".x"); rechaza(o) }
+    @Test fun `id con dos puntos en medio`() { val o = valido(); o.m0().put("id", "a..b"); rechaza(o) }
     @Test fun `id repetido`() {
         val o = valido(); o.getJSONArray("models").put(modelo(pair = "en-fr")); rechaza(o)
     }

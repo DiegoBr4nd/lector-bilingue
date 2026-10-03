@@ -24,7 +24,8 @@ object CatalogParser {
     const val MAX_FILES = 32
     const val MAX_FILE_SIZE = 1L shl 31
 
-    private val ID = Regex("^[a-z0-9.-]{1,64}$")
+    /** El id se usa como carpeta (`.tmp/<id>/`): empieza por letra o dígito y no lleva `..`. */
+    private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
     private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
     private val ENGINES = setOf("opus", "firefox")
     private val NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
@@ -66,7 +67,7 @@ object CatalogParser {
 
     private fun parseModel(o: JSONObject, at: String): CatalogModel {
         val id = string(o, "id", "$at.id")
-        if (!ID.matches(id)) fail("$at.id")
+        if (!ID.matches(id) || id.contains("..")) fail("$at.id")
         val pair = string(o, "pair", "$at.pair")
         if (!PAIR.matches(pair)) fail("$at.pair")
         val engine = string(o, "engine", "$at.engine")
