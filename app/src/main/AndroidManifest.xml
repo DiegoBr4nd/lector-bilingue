@@ -9,6 +9,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Notificación de progreso de la descarga (Android 13+ la pide en tiempo de ejecución). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WorkManager pide además WAKE_LOCK y ACCESS_NETWORK_STATE (los necesita: se quedan).
+         Sin arranque automático (decisión de Juan): una descarga cortada por un reinicio sigue al abrir
+         la app. El RescheduleReceiver de WorkManager se deja (no exportado y desactivado por defecto):
+         sin este permiso Android nunca le entrega BOOT_COMPLETED, y quitarlo podría romper WorkManager,
+         que lo activa y desactiva por nombre. -->
+    <uses-permission
+        android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="remove" />
 
     <application
         android:allowBackup="false"

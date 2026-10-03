@@ -105,7 +105,8 @@ Reglas de validación (`CatalogParser`), cualquier violación rechaza el catálo
 - Cualquier fallo: se borra la carpeta temporal; mensaje claro sin rutas internas.
 
 ## 6. Permisos, manifest y red
-- Nuevos: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`. El paso del CI pasa de "sin permisos salvo el interno de AndroidX" a **lista permitida exacta** (esos 4 + el interno).
+- Nuevos: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, más `WAKE_LOCK` y `ACCESS_NETWORK_STATE` que trae WorkManager. El paso del CI pasa de "sin permisos salvo el interno de AndroidX" a **lista permitida exacta**: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE` y `<paquete>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
+- Por qué: WorkManager necesita `WAKE_LOCK` (wake lock al pasar a primer plano) y `ACCESS_NETWORK_STATE` (restricción de red en Android 14+); `RECEIVE_BOOT_COMPLETED` se quita con `tools:node="remove"` por decisión de Juan (la descarga sigue al abrir la app).
 - El servicio de primer plano de WorkManager (`SystemForegroundService`) se declara con `foregroundServiceType="dataSync"` vía `tools:node="merge"`.
 - `network_security_config.xml` sigue con `cleartextTrafficPermitted="false"`; la lista blanca de dominios va en `HttpFetcher` (un solo lugar).
 - `data_extraction_rules.xml` ya excluye todo (modelos y catálogo no se respaldan).
