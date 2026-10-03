@@ -56,7 +56,11 @@ No uses `--recursive` ni `git submodule update --init --recursive`: CTranslate2 
 ### Obtener el modelo
 1. En GitHub: pestaña *Actions* -> *model* -> *Run workflow* (o abre el run del PR).
 2. Descarga el artefacto `modelo-en-es` y descomprime el `.zip`.
-3. Descomprime el modelo: `tar --zstd -xf en-es.tar.zst` (en Windows: `tar -xf` de Git Bash con zstd, o 7-Zip).
+3. Descomprime el modelo con el `tar` que trae Windows (bsdtar 3.8.8 con zstd, comprobado con `--version`; Git Bash no trae `zstd`, por eso no se usa su `tar`):
+   - PowerShell: `tar.exe -xf en-es.tar.zst`
+   - Git Bash: `"/c/Windows/System32/tar.exe" -xf en-es.tar.zst`
+
+   Resultado esperado: una carpeta `en-es/` con `model.bin`, `source.spm`, `target.spm`, `config.json`, `LICENSE`, `ATTRIBUTION.txt`, `SHA256SUMS`, etc.
 4. Dentro de `en-es/`, verifica: `sha256sum -c SHA256SUMS`.
 
 ### Textos privados
@@ -66,8 +70,12 @@ python tools/bench/html_to_txt.py textos_para_firefox.html private/textos.txt
 ```
 
 ### Copiar al teléfono
-Pixel por USB con depuración activada y la app *debug* instalada (`./gradlew installFdroidDebug`):
+Pixel por USB con depuración activada y la app *debug* instalada (`./gradlew installFdroidDebug`).
+
+Git Bash:
 ```bash
+# Git Bash convierte rutas que empiezan con / en rutas de Windows; esto lo desactiva
+export MSYS_NO_PATHCONV=1
 adb push en-es /data/local/tmp/en-es
 adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/models
 adb shell run-as io.github.diegobr4nd.lectorbilingue cp -r /data/local/tmp/en-es files/models/
@@ -76,6 +84,17 @@ adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/bench
 adb shell run-as io.github.diegobr4nd.lectorbilingue cp /data/local/tmp/textos.txt files/bench/textos.txt
 adb shell rm -r /data/local/tmp/en-es /data/local/tmp/textos.txt
 ```
+PowerShell (no cambia las rutas, no hace falta la variable):
+```powershell
+adb push en-es /data/local/tmp/en-es
+adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/models
+adb shell run-as io.github.diegobr4nd.lectorbilingue cp -r /data/local/tmp/en-es files/models/
+adb push private/textos.txt /data/local/tmp/textos.txt
+adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/bench
+adb shell run-as io.github.diegobr4nd.lectorbilingue cp /data/local/tmp/textos.txt files/bench/textos.txt
+adb shell rm -r /data/local/tmp/en-es /data/local/tmp/textos.txt
+```
+Si la copia queda a medias (carpeta `en-es/` incompleta), la prueba del teléfono falla en vez de saltarse: borra y vuelve a copiar con `adb shell run-as io.github.diegobr4nd.lectorbilingue rm -r files/models/en-es`.
 
 ### Prueba en el teléfono
 ```bash
