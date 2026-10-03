@@ -109,9 +109,35 @@ No uses `connectedAndroidTest`: desinstala la app al terminar y con ella se borr
 
 ### Pruebas de las herramientas Python
 ```bash
-(cd tools/bench && python -m unittest -v test_html_to_txt)
+(cd tools/bench && python -m unittest -v)
 (cd tools/models && python -m unittest -v test_convert_opus)
 ```
+
+## Comparación de calidad beam 1 vs beam 4
+Beam es cuántas "opciones" prueba el motor mientras traduce: con beam 1 toma siempre la más probable (rápido); con beam 4 compara cuatro caminos y elige el mejor (más lento, quizá mejor). Aquí lo medimos a ciegas con tus textos: tú pones notas sin saber cuál es cuál.
+
+Todo queda en `private/` (ignorada por git). Los textos y sus traducciones nunca se suben.
+
+### 1. Generar las traducciones en el teléfono
+Requiere el modelo y los textos ya copiados (ver "Copiar al teléfono") y la app instalada.
+```bash
+export MSYS_NO_PATHCONV=1
+adb shell am force-stop io.github.diegobr4nd.lectorbilingue
+adb shell am instrument -w -e class io.github.diegobr4nd.lectorbilingue.CalidadBeamTest -e calidad 1 io.github.diegobr4nd.lectorbilingue.test/androidx.test.runner.AndroidJUnitRunner
+adb shell run-as io.github.diegobr4nd.lectorbilingue cat files/bench/comparacion.json > private/comparacion.json
+```
+La prueba traduce cada texto con beam 1 y con beam 4 y guarda el resultado y los tiempos en `comparacion.json`.
+
+### 2. Generar la página de evaluación
+```bash
+python tools/bench/make_eval_html.py private/textos.txt private/comparacion.json private/evaluacion.html private/evaluacion-clave.json
+```
+Solo imprime conteos. Crea dos archivos: la página (sin la clave dentro) y la clave aparte.
+
+### 3. Evaluar y revelar
+- Abre `private/evaluacion.html` en el navegador (doble clic).
+- Lee el original y pon nota de 1 a 5 a la traducción A y a la B. Tu avance se guarda solo.
+- Al terminar, pulsa "Revelar" y elige `private/evaluacion-clave.json`. Verás el promedio de cada beam, cuántos textos ganó cada uno y la velocidad (palabras por segundo, mediana y peor caso).
 
 ## Verificación de dependencias
 Cada librería tiene su huella SHA-256 en `gradle/verification-metadata.xml`. Si una cambia, la compilación falla.

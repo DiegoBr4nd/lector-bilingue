@@ -6,6 +6,7 @@ from pathlib import Path
 from convert_opus import (
     add_eos,
     read_bench_paragraphs,
+    read_bench_sentences,
     verify_downloaded,
     write_attribution,
     write_sha256sums,
@@ -21,6 +22,12 @@ class HelpersTest(unittest.TestCase):
             f = Path(d) / "b.txt"
             f.write_text("# comentario\nOne.\nTwo.\n\nThree.\n", encoding="utf-8")
             self.assertEqual(read_bench_paragraphs(f), ["One. Two.", "Three."])
+
+    def test_read_bench_sentences(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "b.txt"
+            f.write_text("# c\nOne.\n  Two.  \n\n\nThree.\n", encoding="utf-8")
+            self.assertEqual(read_bench_sentences(f), [["One.", "Two."], ["Three."]])
 
     def test_sha256sums_ordenado_y_relativo(self):
         with tempfile.TemporaryDirectory() as d:
