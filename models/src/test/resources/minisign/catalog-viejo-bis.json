@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generated": "2026-01-01T00:00:00Z",
+  "models": [
+    {
+      "id": "opus-en-es-3",
+      "pair": "en-es",
+      "engine": "opus",
+      "modelVersion": "1",
+      "license": "CC-BY-4.0",
+      "attribution": "Helsinki-NLP OPUS-MT (prueba)",
+      "files": [
+        {
+          "name": "model.bin",
+          "size": 1024,
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-3/model.bin"
+        }
+      ]
+    }
+  ]
+}

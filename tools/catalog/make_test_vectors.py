@@ -14,6 +14,7 @@ No escribe llaves privadas (se regeneran desde las semillas).
 """
 import base64
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -46,6 +47,41 @@ CATALOG = (
 )
 
 
+PREFIX = "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/"
+
+
+def valid_catalog(generated: str, model_ids: list) -> str:
+    """Catálogo VÁLIDO para CatalogParser (todas las reglas de la spec §3.1), con `generated` dado."""
+    models = [
+        {
+            "id": mid,
+            "pair": "en-es",
+            "engine": "opus",
+            "modelVersion": "1",
+            "license": "CC-BY-4.0",
+            "attribution": "Helsinki-NLP OPUS-MT (prueba)",
+            "files": [
+                {
+                    "name": "model.bin",
+                    "size": 1024,
+                    "sha256": f"{i:x}" * 64,
+                    "url": f"{PREFIX}{mid}/model.bin",
+                }
+            ],
+        }
+        for i, mid in enumerate(model_ids)
+    ]
+    root = {"version": 1, "generated": generated, "models": models}
+    return json.dumps(root, indent=2, ensure_ascii=False) + "\n"
+
+
+# Catálogos válidos para CatalogRepositoryTest (antirretroceso): misma llave 1, `generated` distintos.
+CATALOG_VIEJO = valid_catalog("2026-01-01T00:00:00Z", ["opus-en-es-1"])
+CATALOG_NUEVO = valid_catalog("2026-06-01T00:00:00Z", ["opus-en-es-1", "opus-en-es-2"])
+# Misma fecha que el viejo pero contenido distinto: debe rechazarse si ya se aceptó el viejo.
+CATALOG_VIEJO_BIS = valid_catalog("2026-01-01T00:00:00Z", ["opus-en-es-3"])
+
+
 class TestKey:
     def __init__(self, seed: bytes):
         self.sk = Ed25519PrivateKey.from_private_bytes(seed)
@@ -60,7 +96,7 @@ class TestKey:
         b64 = base64.b64encode(b"Ed" + self.key_id + self.pk).decode()
         return f"untrusted comment: minisign public key {kid_hex}\n{b64}\n"
 
-    def sign(self, message: bytes, alg: bytes = b"ED") -> str:
+    def sign(self, message: bytes, alg: bytes = b"ED", trusted: str = TRUSTED) -> str:
         if alg == b"ED":
             to_sign = hashlib.blake2b(message, digest_size=64).digest()
         elif alg == b"Ed":  # legado: firma el mensaje entero, sin prehash
@@ -68,10 +104,10 @@ class TestKey:
         else:
             raise ValueError(alg)
         sig = self.sk.sign(to_sign)
-        global_sig = self.sk.sign(sig + TRUSTED.encode("utf-8"))
+        global_sig = self.sk.sign(sig + trusted.encode("utf-8"))
         line2 = base64.b64encode(alg + self.key_id + sig).decode()
         line4 = base64.b64encode(global_sig).decode()
-        return f"{UNTRUSTED}\n{line2}\ntrusted comment: {TRUSTED}\n{line4}\n"
+        return f"{UNTRUSTED}\n{line2}\ntrusted comment: {trusted}\n{line4}\n"
 
 
 def write(path: Path, text: str) -> None:
@@ -90,6 +126,14 @@ def main() -> None:
     write(out / "catalog-ok.json.minisig", k1.sign(msg))
     write(out / "catalog-otra-llave.json.minisig", k2.sign(msg))
     write(out / "catalog-legacy-Ed.json.minisig", k1.sign(msg, b"Ed"))
+    for name, text in (
+        ("catalog-viejo.json", CATALOG_VIEJO),
+        ("catalog-nuevo.json", CATALOG_NUEVO),
+        ("catalog-viejo-bis.json", CATALOG_VIEJO_BIS),
+    ):
+        data = text.encode("utf-8")
+        (out / name).write_bytes(data)
+        write(out / f"{name}.minisig", k1.sign(data, trusted=f"timestamp:1759449600\tfile:{name}\thashed"))
     print(f"vectores de prueba escritos en {out}")
 
 

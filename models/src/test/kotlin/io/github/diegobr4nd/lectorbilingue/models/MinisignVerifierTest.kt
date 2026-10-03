@@ -70,6 +70,24 @@ class MinisignVerifierTest {
     /** minisign en Windows escribe la firma con finales de línea CRLF. */
     @Test fun `firma con finales de linea CRLF se acepta`() =
         assertTrue(MinisignVerifier(listOf(pub1)).verify(msg, sig.replace("\n", "\r\n")).isNotEmpty())
+    /** 32 bytes que no son un punto válido de Ed25519 (y = 2^255-1, no canónico): falla al leer la llave. */
+    @Test fun `llave publica que no es un punto valido falla al leerla`() {
+        val raw = byteArrayOf('E'.code.toByte(), 'd'.code.toByte()) + pub1.keyId + ByteArray(32) { 0xFF.toByte() }
+        val text = "untrusted comment: x\n" + Base64.getEncoder().encodeToString(raw) + "\n"
+        assertFailsWith<IllegalArgumentException> { MinisignPublicKey.parse(text) }
+    }
+    @Test fun `texto no confiable tras la cuarta linea se rechaza`() {
+        assertFailsWith<SignatureException> { MinisignVerifier(listOf(pub1)).verify(msg, sig + "linea extra\n") }
+    }
+    @Test fun `lineas en blanco tras la cuarta linea se aceptan`() =
+        assertTrue(MinisignVerifier(listOf(pub1)).verify(msg, sig + "\n\n").isNotEmpty())
+    @Test fun `la llave no se puede alterar desde fuera`() {
+        val pub = MinisignPublicKey.parse(String(res("test.pub")))
+        pub.keyId[0] = (pub.keyId[0] + 1).toByte()
+        pub.key[0] = (pub.key[0] + 1).toByte()
+        assertTrue(MinisignVerifier(listOf(pub)).verify(msg, sig).isNotEmpty())
+        assertEquals(pub1, pub)
+    }
     @Test fun `devuelve exactamente el comentario confiable`() =
         assertEquals("timestamp:1759449600\tfile:catalog-ok.json\thashed", MinisignVerifier(listOf(pub1)).verify(msg, sig))
 }
