@@ -16,7 +16,7 @@ Detalles y evidencia: `docs/contexto-y-decisiones.md`.
 - `docs/agentes/04-diseno.md`: interfaz y accesibilidad
 
 ## Fase actual
-**Fase 2 · Gestor de modelos + motor Firefox** ← Juan actualiza esta línea al pasar cada puerta.
+**Fase 2c · Motor Firefox + EngineSelector** (2a calidad y 2b gestor de modelos: hechas; sigue 2d diseño + Bienvenida/Idiomas) ← Juan actualiza esta línea al pasar cada puerta.
 
 ## Reglas siempre vigentes
 1. Responder a Juan **en español**, en frases cortas y con viñetas. Juan es nuevo en Kotlin/Android: definir cada término nuevo en una línea, con una analogía si ayuda.
