@@ -43,8 +43,8 @@ def add_eos(tokens: list[str]) -> list[str]:
 
 def read_bench_paragraphs(path: Path) -> list[str]:
     paragraphs, current = [], []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("#"):
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if line.strip().startswith("#"):
             continue
         if line.strip():
             current.append(line.strip())
@@ -53,6 +53,22 @@ def read_bench_paragraphs(path: Path) -> list[str]:
             current = []
     if current:
         paragraphs.append(" ".join(current))
+    return paragraphs
+
+
+def read_bench_sentences(path: Path) -> list[list[str]]:
+    """Como read_bench_paragraphs, pero cada párrafo es la lista de sus líneas (una oración por línea)."""
+    paragraphs, current = [], []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if line.strip().startswith("#"):
+            continue
+        if line.strip():
+            current.append(line.strip())
+        elif current:
+            paragraphs.append(current)
+            current = []
+    if current:
+        paragraphs.append(current)
     return paragraphs
 
 
@@ -120,16 +136,19 @@ def convert(src: Path, out_model: Path) -> None:
     )
 
 
-def reference_outputs(model_dir: Path, paragraphs: list[str]) -> list[str]:
+def reference_outputs(model_dir: Path, paragraphs: list[list[str]]) -> list[str]:
+    """Traduce oración por oración (todas en un lote, beam 1) y une cada párrafo con un espacio."""
     import ctranslate2
     import sentencepiece as spm
 
     sp_src = spm.SentencePieceProcessor(model_file=str(model_dir / "source.spm"))
     sp_tgt = spm.SentencePieceProcessor(model_file=str(model_dir / "target.spm"))
     translator = ctranslate2.Translator(str(model_dir), device="cpu", compute_type="int8", intra_threads=4)
-    batch = [add_eos(sp_src.encode(p, out_type=str)) for p in paragraphs]
+    sentences = [s for p in paragraphs for s in p]
+    batch = [add_eos(sp_src.encode(s, out_type=str)) for s in sentences]
     results = translator.translate_batch(batch, beam_size=1, max_decoding_length=512)
-    return [sp_tgt.decode(r.hypotheses[0]) for r in results]
+    decoded = iter(sp_tgt.decode(r.hypotheses[0]) for r in results)
+    return [" ".join(next(decoded) for _ in p) for p in paragraphs]
 
 
 def main(argv: list[str]) -> int:
@@ -149,7 +168,7 @@ def main(argv: list[str]) -> int:
     shutil.copyfile(src / "README.md", model_dir / "MODEL_CARD.md")
 
     if BENCH_FILE.exists():
-        outputs = reference_outputs(model_dir, read_bench_paragraphs(BENCH_FILE))
+        outputs = reference_outputs(model_dir, read_bench_sentences(BENCH_FILE))
         (out / "reference-outputs.txt").write_text("\n\n".join(outputs) + "\n", encoding="utf-8")
     else:
         print(f"Aviso: {BENCH_FILE} no existe; sin salidas de referencia", file=sys.stderr)

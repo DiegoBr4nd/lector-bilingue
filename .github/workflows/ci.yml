@@ -46,7 +46,7 @@ jobs:
 
       - name: Pruebas de las herramientas Python
         run: |
-          (cd tools/bench && python -m unittest -v test_html_to_txt)
+          (cd tools/bench && python -m unittest -v)
           (cd tools/models && python -m unittest -v test_convert_opus)
 
       - name: Lint, pruebas y APKs
