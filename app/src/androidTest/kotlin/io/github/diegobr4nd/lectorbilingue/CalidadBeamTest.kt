@@ -49,8 +49,8 @@ class CalidadBeamTest {
         val results = mutableMapOf<Int, List<Pair<String, Long>>>()
         for (beam in listOf(1, 4)) {
             val engine = OpusEngine(File(context.filesDir, "models"))
-            engine.load(pair, EngineConfig(beamSize = beam, threads = 4))
             try {
+                engine.load(pair, EngineConfig(beamSize = beam, threads = 4))
                 translateParagraph(engine, paragraphs.first()) // calentamiento, no se registra
                 results[beam] = paragraphs.map { p ->
                     val start = System.nanoTime()
@@ -91,7 +91,12 @@ class CalidadBeamTest {
         val dir = File(context.filesDir, "bench").apply { mkdirs() }
         val tmp = File(dir, "comparacion.json.tmp")
         tmp.writeText(root.toString(), Charsets.UTF_8)
-        Files.move(tmp.toPath(), File(dir, "comparacion.json").toPath(), StandardCopyOption.REPLACE_EXISTING)
+        Files.move(
+            tmp.toPath(),
+            File(dir, "comparacion.json").toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE,
+        )
     }
 }
 
