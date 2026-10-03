@@ -24,4 +24,24 @@
     <string name="working_description">Trabajando, espera un momento</string>
     <string name="bench_measuring">Midiendo… puede tardar un minuto</string>
     <string name="error_generic">Error desconocido</string>
+    <string name="download_button">Descargar modelo en-es</string>
+    <string name="download_button_size">Descargar modelo en-es (%1$d MB)</string>
+    <string name="download_wifi_hint">Descarga grande: mejor con Wi-Fi</string>
+    <string name="import_button">Importar modelo (.zip)</string>
+    <string name="download_progress_description">Progreso de la descarga del modelo</string>
+    <string name="download_progress_percent">Descargando… %1$d %%</string>
+    <string name="download_preparing">Preparando la descarga…</string>
+    <string name="msg_no_catalog">No hay catálogo disponible todavía</string>
+    <string name="msg_no_model">El catálogo no trae el modelo en-es</string>
+    <string name="msg_download_busy">Hay una descarga en curso: espera o cancélala</string>
+    <string name="msg_cancelled">Descarga cancelada</string>
+    <string name="msg_network">Error de red. Revisa tu conexión e inténtalo de nuevo</string>
+    <string name="msg_policy">La descarga se bloqueó por seguridad (dirección no permitida)</string>
+    <string name="msg_signature">La firma del catálogo o del modelo no es válida</string>
+    <string name="msg_integrity">El archivo descargado está dañado o no coincide con el catálogo</string>
+    <string name="msg_catalog">El catálogo de modelos no es válido</string>
+    <string name="msg_files">No se pudo guardar el modelo: revisa el espacio libre</string>
+    <string name="msg_invalid_zip">El archivo .zip no es un modelo válido</string>
+    <string name="msg_import_ok">Modelo importado</string>
+    <string name="msg_unknown">Ocurrió un error inesperado</string>
 </resources>
