@@ -1,6 +1,7 @@
 package io.github.diegobr4nd.lectorbilingue.models
 
 import java.io.File
+import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -34,8 +35,13 @@ import java.util.zip.ZipInputStream
  * en `modelsDir/<pair>`. Errores sin rutas ni causa: zip roto/truncado/vacío/cifrado →
  * `IOException("zip inválido")`; archivos → `IOException("error de archivos al importar el modelo")`.
  *
- * El [InputStream] lo cierra quien llama. No es seguro importar a la vez que se descarga o instala
- * el mismo modelo.
+ * En Android 14+ (targetSdk ≥ 34) `ZipPathValidator` rechaza nombres con `..` o `/` inicial dentro de
+ * `getNextEntry()`: en el teléfono esos casos salen como `IOException("zip inválido")` y no como
+ * [IntegrityException]. Quien llame (la interfaz) debe tratar ambos como "zip rechazado".
+ *
+ * El [InputStream] es de quien llama y lo cierra él: aquí se envuelve en un flujo cuyo `close()` no
+ * hace nada, y el [ZipInputStream] se cierra siempre al final (libera su `Inflater` nativo).
+ * No es seguro importar a la vez que se descarga o instala el mismo modelo.
  */
 class ModelImporter internal constructor(
     private val modelsDir: File,
@@ -80,7 +86,12 @@ class ModelImporter internal constructor(
         Files.createDirectory(work.toPath())
         created.add(work.toPath())
 
-        val written = readEntries(ZipInputStream(zip), limits, work)
+        val zis = ZipInputStream(NonClosing(zip))
+        val written = try {
+            readEntries(zis, limits, work)
+        } finally {
+            closeQuietly(zis)
+        }
         if (written.isEmpty()) throw InvalidZip()
 
         val model = identify(catalog, written)
@@ -178,6 +189,21 @@ class ModelImporter internal constructor(
         throw InvalidZip()
     } catch (e: IllegalArgumentException) {
         throw InvalidZip()
+    }
+
+    /** Cerrar el zip no debe cerrar el flujo de quien llama. */
+    private class NonClosing(input: InputStream) : FilterInputStream(input) {
+        override fun close() {
+            // El flujo es de quien llama.
+        }
+    }
+
+    private fun closeQuietly(zis: ZipInputStream) {
+        try {
+            zis.close()
+        } catch (e: IOException) {
+            // Solo libera el Inflater; el flujo de abajo no se cierra.
+        }
     }
 
     private data class Written(val size: Long, val sha256: String)

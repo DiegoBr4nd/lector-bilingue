@@ -29,9 +29,10 @@ import java.nio.file.StandardCopyOption
  */
 class ModelInstaller internal constructor(
     private val modelsDir: File,
+    private val deleteOld: (Path) -> Unit = ModelFiles::deleteTree,
     private val move: (from: Path, to: Path) -> Unit,
 ) {
-    constructor(modelsDir: File) : this(modelsDir, ::atomicMove)
+    constructor(modelsDir: File) : this(modelsDir, move = ::atomicMove)
 
     /** Re-verifica tamaños y SHA-256 en [staging], escribe .installed.json y lo instala en modelsDir/<pair>/ de forma atómica. */
     fun install(model: CatalogModel, staging: File): InstalledModel {
@@ -93,9 +94,11 @@ class ModelInstaller internal constructor(
         }
         if (old != null) {
             try {
-                ModelFiles.deleteTree(old)
+                deleteOld(old)
             } catch (e: IOException) {
-                // El nuevo ya está instalado; la carpeta vieja se puede limpiar más tarde.
+                // El nuevo ya está instalado; la carpeta vieja (.old-*) la limpia el arranque.
+            } catch (e: DirectoryIteratorException) {
+                // Igual: el fallo al borrar la vieja nunca hace fallar una instalación ya hecha.
             }
         }
         // La carpeta .tmp se borra solo si quedó vacía (puede haber otras descargas en curso).

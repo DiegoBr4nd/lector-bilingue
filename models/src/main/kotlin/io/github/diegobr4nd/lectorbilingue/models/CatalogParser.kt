@@ -29,10 +29,10 @@ object CatalogParser {
     const val MAX_FILES = 32
     const val MAX_FILE_SIZE = 1L shl 31
 
-    /** El id se usa como carpeta (`.tmp/<id>/`): empieza por letra o dígito y no lleva `..`. */
     /** Fecha máxima de `generated`: un valor muy lejano bloquearía el antirretroceso para siempre. */
     private val MAX_GENERATED: Instant = Instant.parse("2101-01-01T00:00:00Z")
 
+    /** El id se usa como carpeta (`.tmp/<id>/`): empieza por letra o dígito y no lleva `..`. */
     private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
     private val PAIR = Regex("^[a-z]{2,3}-[a-z]{2,3}$")
     private val ENGINES = setOf("opus", "firefox")

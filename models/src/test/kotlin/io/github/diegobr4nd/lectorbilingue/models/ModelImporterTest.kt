@@ -237,6 +237,33 @@ class ModelImporterTest {
         assertRejectedInvalidEntry(bytes)
     }
 
+    @Test
+    fun import_entradaConByteNulSeRechaza() {
+        val bytes = patch(zip("model.biX" to bodyA, "vocab.spm" to bodyB), "model.biX", "model.bi ")
+        assertRejectedInvalidEntry(bytes)
+    }
+
+    @Test
+    fun import_entradaConLetraDeUnidadSeRechaza() {
+        assertRejectedInvalidEntry(zip("C:model.bin" to bodyA, "vocab.spm" to bodyB))
+    }
+
+    @Test
+    fun import_entradaConLetraCirilicaParecidaSeRechaza() {
+        // "о" cirílica (U+043E) en lugar de la "o" latina.
+        assertRejectedInvalidEntry(zip("mоdel.bin" to bodyA, "vocab.spm" to bodyB))
+    }
+
+    @Test
+    fun import_entradaConMayusculasDistintasSeRechaza() {
+        // "Model.bin" cumple la regla de nombres pero no es "model.bin": no está en el catálogo.
+        val e = assertFailsWith<CatalogException> { import(zip("Model.bin" to bodyA, "vocab.spm" to bodyB)) }
+        assertEquals("el zip no corresponde a ningún modelo del catálogo", e.message)
+        assertNoPath(e)
+        assertCleanAfterReject()
+        assertFalse(File(modelsDir, "en-es").exists())
+    }
+
     // ---------------------------------------------------------------- entradas sobrantes o faltantes
 
     @Test
@@ -398,6 +425,30 @@ class ModelImporterTest {
     @Test
     fun import_bytesQueNoSonZipSeRechazan() {
         assertInvalidZip("esto no es un zip".toByteArray())
+    }
+
+    /** Flujo que recuerda si alguien lo cerró. */
+    private class TrackingInput(bytes: ByteArray) : java.io.FilterInputStream(ByteArrayInputStream(bytes)) {
+        var closed = false
+
+        override fun close() {
+            closed = true
+            super.close()
+        }
+    }
+
+    @Test
+    fun import_noCierraElFlujoDeQuienLlamaAlTerminarBien() {
+        val input = TrackingInput(validZip())
+        importer().import(input, defaultCatalog())
+        assertFalse(input.closed, "el flujo es de quien llama")
+    }
+
+    @Test
+    fun import_noCierraElFlujoDeQuienLlamaAlFallar() {
+        val input = TrackingInput(zip("../x" to bodyA))
+        assertFailsWith<IntegrityException> { importer().import(input, defaultCatalog()) }
+        assertFalse(input.closed, "el flujo es de quien llama")
     }
 
     // ---------------------------------------------------------------- errores al instalar

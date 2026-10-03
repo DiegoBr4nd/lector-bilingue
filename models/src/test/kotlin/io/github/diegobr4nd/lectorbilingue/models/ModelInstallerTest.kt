@@ -172,6 +172,25 @@ class ModelInstallerTest {
         assertFalse(modelsDir.list()!!.any { it.startsWith(".old-") })
     }
 
+    private fun assertInstallSurvivesOldDeleteFailure(failure: Throwable) {
+        previous()
+        val installer = ModelInstaller(modelsDir, deleteOld = { throw failure }) { from, to -> atomicMove(from, to) }
+        val result = installer.install(model(), staging())
+        assertEquals("opus-en-es-2", result.id)
+        assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
+        assertTrue(modelsDir.list()!!.any { it.startsWith(".old-en-es-") }, "la vieja queda para la limpieza al arrancar")
+    }
+
+    @Test
+    fun install_siNoSePuedeBorrarElViejoPorIOExceptionLaInstalacionNoFalla() {
+        assertInstallSurvivesOldDeleteFailure(IOException("fallo simulado"))
+    }
+
+    @Test
+    fun install_siNoSePuedeBorrarElViejoPorDirectoryIteratorExceptionLaInstalacionNoFalla() {
+        assertInstallSurvivesOldDeleteFailure(java.nio.file.DirectoryIteratorException(IOException("fallo simulado")))
+    }
+
     @Test
     fun install_reintentoTrasFalloFuncionaConElMismoStaging() {
         previous()
