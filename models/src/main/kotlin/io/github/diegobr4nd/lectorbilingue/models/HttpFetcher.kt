@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.io.InputStream
 import java.net.CookieHandler
 import java.net.HttpURLConnection
@@ -48,11 +49,17 @@ object GitHubHostPolicy : HostPolicy {
  * Si hay un [CookieHandler] global instalado se niega a trabajar (no se puede desactivar por conexión).
  * Los mensajes de error contienen como mucho el código HTTP y el host, nunca la URL completa ni el cuerpo.
  */
-class HttpFetcher(
-    private val policy: HostPolicy = GitHubHostPolicy,
-    private val connectTimeoutMs: Int = 15_000,
-    private val readTimeoutMs: Int = 30_000,
+class HttpFetcher internal constructor(
+    private val policy: HostPolicy,
+    private val connectTimeoutMs: Int,
+    private val readTimeoutMs: Int,
+    private val openOutput: (file: File, append: Boolean) -> OutputStream,
 ) {
+    constructor(
+        policy: HostPolicy = GitHubHostPolicy,
+        connectTimeoutMs: Int = 15_000,
+        readTimeoutMs: Int = 30_000,
+    ) : this(policy, connectTimeoutMs, readTimeoutMs, ::FileOutputStream)
 
     /**
      * Descarga completa a memoria con tope (catálogo y firma). Solo acepta 200.
@@ -102,6 +109,8 @@ class HttpFetcher(
      *   Si llegan más de los anunciados → IOException sin escribir el exceso.
      * - 416 u otro código distinto de 200/206 → IOException y el archivo queda como estaba.
      * - Redirección hacia un host no permitido → [NetworkPolicyException], sin conectar.
+     * - Error al abrir, escribir o truncar [target] (disco lleno, carpeta que no existe…) →
+     *   [ModelFileException] con mensaje fijo y sin causa (los de java.io llevan rutas internas).
      */
     fun downloadTo(
         url: String,
@@ -167,10 +176,17 @@ class HttpFetcher(
                     if (expected != null) IOException("respuesta más larga de lo anunciado desde ${conn.url.host}") else tooBig(conn.url)
                 }
                 val written = conn.inputStream.use { input ->
-                    FileOutputStream(target, start > 0).use { out ->
+                    val out = fileOp { openOutput(target, start > 0) }
+                    try {
                         copyCapped(input, limit, overflow) { buf, n ->
-                            out.write(buf, 0, n)
+                            fileOp { out.write(buf, 0, n) }
                             onBytes(buf, n)
+                        }
+                    } finally {
+                        // Cerrar un FileOutputStream no escribe nada pendiente; el SHA-256 detecta lo demás.
+                        try {
+                            out.close()
+                        } catch (e: IOException) {
                         }
                     }
                 }
@@ -272,7 +288,14 @@ class HttpFetcher(
     }
 
     private fun truncate(target: File) {
-        FileOutputStream(target, false).use { }
+        fileOp { openOutput(target, false).close() }
+    }
+
+    /** Errores de disco → [ModelFileException] sin ruta ni causa (los de red no pasan por aquí). */
+    private inline fun <T> fileOp(block: () -> T): T = try {
+        block()
+    } catch (e: IOException) {
+        throw ModelFileException("error de archivos al guardar la descarga")
     }
 
     private fun httpError(code: Int, url: URL) = IOException("HTTP $code desde ${url.host}")

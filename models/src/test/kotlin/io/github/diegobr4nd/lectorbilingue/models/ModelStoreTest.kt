@@ -6,7 +6,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -292,6 +294,50 @@ class ModelStoreTest {
         store.recover(catalogIds = setOf())
         assertFalse(Files.exists(File(modelsDir, ".tmp").toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
         assertTrue(File(outside, "import-1").isDirectory)
+    }
+
+    @Test
+    fun recover_siFallaRestaurarConservaLaUnicaCopiaYReintentaDespues() {
+        var fails = 1
+        val flaky = ModelStore(modelsDir) { from, to ->
+            if (fails-- > 0) throw IOException("fallo simulado")
+            Files.move(from, to, StandardCopyOption.ATOMIC_MOVE)
+        }
+        install(".old-en-es-1", installedModel("en-es", version = "1.0"))
+        install(".old-en-es-2", installedModel("en-es", version = "2.0"))
+        flaky.recover(catalogIds = null)
+        assertEquals(listOf(".old-en-es-1", ".old-en-es-2"), modelsDir.list()!!.sorted(), "no se borra ninguna copia")
+        flaky.recover(catalogIds = null)
+        assertEquals(listOf("en-es"), modelsDir.list()!!.sorted())
+        assertEquals("2.0", store.installed().single().modelVersion)
+    }
+
+    @Test
+    fun delete_borraTambienLasViejasDelParYNoResucita() {
+        install("en-es")
+        install(".old-en-es-5", installedModel("en-es"))
+        install(".old-es-en-3", installedModel("es-en"))
+        store.delete("en-es")
+        assertEquals(listOf(".old-es-en-3"), modelsDir.list()!!.sorted())
+        store.recover(catalogIds = null)
+        assertFalse(store.isInstalled("en-es"))
+        assertTrue(store.isInstalled("es-en"))
+    }
+
+    @Test
+    fun delete_aMediasNoDejaNadaQueParezcaInstalado() {
+        install("en-es")
+        install(".old-en-es-5", installedModel("en-es"))
+        var calls = 0
+        val roto = ModelStore(modelsDir, deleteTree = { p ->
+            if (calls++ == 0) throw IOException("fallo simulado")
+            ModelFiles.deleteTree(p)
+        }) { from, to -> Files.move(from, to, StandardCopyOption.ATOMIC_MOVE) }
+        assertFailsWith<ModelFileException> { roto.delete("en-es") }
+        assertTrue(modelsDir.list()!!.isNotEmpty(), "el borrado quedó a medias")
+        store.recover(catalogIds = null)
+        assertFalse(store.isInstalled("en-es"), "ni <pair>/ ni una .old- a medias cuentan como instalado")
+        assertEquals(emptyList(), store.installed())
     }
 
     @Test

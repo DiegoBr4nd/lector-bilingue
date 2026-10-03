@@ -306,6 +306,27 @@ class HttpFetcherTest {
     private fun newTarget(): File = File(tmp.root, "modelo.bin")
 
     @Test
+    fun downloadTo_errorAlEscribirEsErrorDeArchivosSinRuta() {
+        server.enqueue(ok(bytes(200_000)))
+        val full = object : java.io.OutputStream() {
+            override fun write(b: Int) = throw IOException("No space left on device /data/user/0/secreto")
+            override fun write(b: ByteArray, off: Int, len: Int) = throw IOException("No space left on device /data/user/0/secreto")
+        }
+        val disco = HttpFetcher(localPolicy(), 5_000, 5_000) { _, _ -> full }
+        val e = assertFailsWith<ModelFileException> { disco.downloadTo(url("/m.bin"), newTarget(), 1_000_000, { _, _ -> }) }
+        assertFalse(e.message.orEmpty().contains('/'))
+        assertNull(e.cause)
+    }
+
+    @Test
+    fun downloadTo_noSePuedeAbrirElDestinoEsErrorDeArchivos() {
+        server.enqueue(ok(bytes(100)))
+        val target = File(tmp.root, "no-existe/modelo.bin")
+        val e = assertFailsWith<ModelFileException> { fetcher.downloadTo(url("/m.bin"), target, 1_000, { _, _ -> }) }
+        assertFalse(e.message.orEmpty().contains(tmp.root.name))
+    }
+
+    @Test
     fun downloadTo_descargaCompleta() {
         val body = bytes(200_000)
         server.enqueue(ok(body))

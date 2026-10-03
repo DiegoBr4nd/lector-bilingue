@@ -70,7 +70,7 @@ class CatalogRepository(
      *
      * Orden: topes de tamaño → firma sobre los bytes exactos → validación → antirretroceso → guardado.
      * Ante cualquier fallo no toca lo guardado y relanza ([IOException], [NetworkPolicyException],
-     * [SignatureException] o [CatalogException]).
+     * [SignatureException] o [CatalogException]). Los errores de disco salen como [ModelFileException], sin rutas.
      */
     fun refresh(): Catalog {
         // Fuera del candado: red, firma y validación solo usan valores locales.
@@ -141,7 +141,7 @@ class CatalogRepository(
     }
 
     private fun persist(bytes: ByteArray, signature: ByteArray) {
-        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("no se pudo crear la carpeta del catálogo")
+        if (!dir.isDirectory && !dir.mkdirs()) throw fileError()
         val catalogTmp = File(dir, CATALOG_FILE + TMP_SUFFIX)
         val signatureTmp = File(dir, SIGNATURE_FILE + TMP_SUFFIX)
         var signatureRenamed = false
@@ -159,18 +159,27 @@ class CatalogRepository(
         }
     }
 
-    private fun writeSynced(file: File, data: ByteArray) {
+    private fun writeSynced(file: File, data: ByteArray) = fileOp {
         FileOutputStream(file, false).use { out ->
             out.write(data)
             out.fd.sync()
         }
     }
 
-    private fun move(from: File, to: File) {
+    private fun move(from: File, to: File) = fileOp {
         try {
             Files.move(from.toPath(), to.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (e: AtomicMoveNotSupportedException) {
             Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
+
+    /** Errores de disco → [ModelFileException] sin ruta ni causa (los de java.io/nio llevan rutas internas). */
+    private inline fun fileOp(block: () -> Unit) = try {
+        block()
+    } catch (e: IOException) {
+        throw fileError()
+    }
+
+    private fun fileError() = ModelFileException("error de archivos al guardar el catálogo")
 }

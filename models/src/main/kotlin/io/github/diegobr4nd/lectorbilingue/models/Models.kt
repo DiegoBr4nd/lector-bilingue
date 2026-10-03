@@ -6,22 +6,16 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.time.Duration
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** Se pidió importar un modelo mientras hay una descarga de modelo en cola o en curso: hay que esperar o cancelarla. */
 class DownloadInProgressException : Exception("hay una descarga de modelo en curso")
@@ -43,7 +37,8 @@ class DownloadInProgressException : Exception("hay una descarga de modelo en cur
  * El candado NO es reentrante: no llamar a [withModelsLock] desde dentro de otro [withModelsLock].
  *
  * **Recuperación.** [ModelStore.recover] corre una vez por proceso, con el candado, antes del primer uso
- * (lo hacen el worker y [importModel]); la interfaz puede llamar antes a [recover].
+ * (lo hacen el worker y [importModel]); la interfaz puede llamar antes a [recover]. Las reglas viven en
+ * [ModelsCoordinator] (probadas sin Android).
  */
 object Models {
     private const val CATALOG_DIR = "catalog"
@@ -52,14 +47,13 @@ object Models {
     private const val ASSET_SIGNATURE = "catalog/catalog.json.minisig"
     private val BACKOFF: Duration = Duration.ofSeconds(30)
 
-    private val lock = Mutex()
-    private val recovered = AtomicBoolean(false)
+    private val coordinator = ModelsCoordinator()
 
     @Volatile
     private var repository: CatalogRepository? = null
 
     /** Ejecuta [block] con el candado de modelos (ver la nota de serialización). No reentrante. */
-    suspend fun <T> withModelsLock(block: suspend () -> T): T = lock.withLock { block() }
+    suspend fun <T> withModelsLock(block: suspend () -> T): T = coordinator.withLock(block)
 
     /** Único por proceso: su candado interno protege el catálogo guardado. */
     fun catalogRepository(context: Context): CatalogRepository {
@@ -108,15 +102,12 @@ object Models {
         WorkManager.getInstance(context).cancelUniqueWork(DownloadWork.uniqueName(modelId))
     }
 
-    /**
-     * Estado de la descarga de [modelId] (null si nunca se pidió). Progreso en `progress`:
-     * `bytes`/`total`; error en `outputData["error"]` (uno de [DownloadOutcome.CODES]).
-     */
-    fun downloadInfo(context: Context, modelId: String): Flow<WorkInfo?> {
+    /** Estado de la descarga de [modelId] (null si nunca se pidió). Ver [DownloadState]. */
+    fun downloadInfo(context: Context, modelId: String): Flow<DownloadState?> {
         require(DownloadWork.isValidModelId(modelId)) { "id de modelo no válido" }
         return WorkManager.getInstance(context)
             .getWorkInfosForUniqueWorkFlow(DownloadWork.uniqueName(modelId))
-            .map { it.lastOrNull() }
+            .map { infos -> infos.lastOrNull()?.let(DownloadState::from) }
     }
 
     /** ¿Hay una descarga de [modelId] en cola o en curso? */
@@ -143,27 +134,23 @@ object Models {
      */
     suspend fun importModel(context: Context, zip: InputStream): InstalledModel {
         val app = context.applicationContext
-        if (isAnyDownloadActive(app)) throw DownloadInProgressException()
-        return withModelsLock {
-            withContext(Dispatchers.IO) {
-                recoverOnceLocked(app)
-                val catalog = catalogRepository(app).current() ?: throw CatalogException("no hay catálogo de modelos")
-                val dir = modelsDir(app)
-                ModelImporter(dir, ModelInstaller(dir)).import(zip, catalog)
-            }
+        return coordinator.import(anyDownloadActive = { isAnyDownloadActive(app) }, recover = { recoverStore(app) }) {
+            val catalog = catalogRepository(app).current() ?: throw CatalogException("no hay catálogo de modelos")
+            val dir = modelsDir(app)
+            ModelImporter(dir, ModelInstaller(dir)).import(zip, catalog)
         }
     }
 
     /** Borra el modelo instalado de [pair] con el candado tomado (nunca a mitad de una instalación). */
     suspend fun deleteModel(context: Context, pair: String) {
         val app = context.applicationContext
-        withModelsLock { withContext(Dispatchers.IO) { store(app).delete(pair) } }
+        coordinator.delete { store(app).delete(pair) }
     }
 
     /** Recuperación del arranque (una vez por proceso). Ver [ModelStore.recover]. */
     suspend fun recover(context: Context) {
         val app = context.applicationContext
-        withModelsLock { withContext(Dispatchers.IO) { recoverOnceLocked(app) } }
+        coordinator.recover { recoverStore(app) }
     }
 
     /** El trabajo del worker con las piezas reales. */
@@ -173,19 +160,17 @@ object Models {
         val dir = modelsDir(app)
         val downloader = ModelDownloader(dir, HttpFetcher())
         val installer = ModelInstaller(dir)
-        return ModelDownloadJob(
+        return coordinator.downloadJob(
             currentCatalog = repo::current,
             refreshCatalog = repo::refresh,
             download = downloader::download,
             install = installer::install,
-            lock = lock,
-            beforeWork = { recoverOnceLocked(app) },
+            recover = { recoverStore(app) },
         )
     }
 
-    /** Solo con el candado tomado. */
-    private fun recoverOnceLocked(app: Context) {
-        if (!recovered.compareAndSet(false, true)) return
+    /** Solo con el candado tomado (lo garantiza [coordinator]). */
+    private fun recoverStore(app: Context) {
         val ids = catalogRepository(app).current()?.models?.map { it.id }?.toSet()
         store(app).recover(ids)
     }

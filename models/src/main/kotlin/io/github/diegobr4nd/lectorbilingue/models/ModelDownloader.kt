@@ -31,7 +31,7 @@ import kotlin.math.max
  *
  * Errores: los de red ([IOException] de [HttpFetcher], [NetworkPolicyException]) se propagan tal
  * cual y dejan el `.part` para reanudar en el siguiente intento. Los de archivos (que en java.io/nio
- * llevan rutas) salen como `IOException("error de archivos al descargar el modelo")` sin causa. No es seguro llamar dos veces a la vez con el mismo modelo.
+ * llevan rutas) salen como [ModelFileException] con mensaje fijo y sin causa. No es seguro llamar dos veces a la vez con el mismo modelo.
  */
 class ModelDownloader(private val modelsDir: File, private val fetcher: HttpFetcher) {
 

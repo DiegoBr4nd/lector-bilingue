@@ -104,6 +104,26 @@ class CatalogRepositoryTest {
         repo.refresh()
     }
 
+    // ---------------------------------------------------------------- errores de disco
+
+    @Test
+    fun refresh_errorAlGuardarEsErrorDeArchivosSinRuta() {
+        servir(viejo, viejoSig)
+        dir.mkdirs()
+        File(dir, "catalog.json.minisig.tmp").mkdirs() // no se puede abrir para escribir
+        val e = assertFailsWith<ModelFileException> { repo.refresh() }
+        assertFalse(e.message.orEmpty().contains('/') || e.message.orEmpty().contains('\\'))
+        assertNull(e.cause)
+        assertFalse(guardadoCatalogo().exists())
+    }
+
+    @Test
+    fun refresh_carpetaDelCatalogoQueEsArchivoEsErrorDeArchivos() {
+        servir(viejo, viejoSig)
+        dir.writeText("no soy carpeta")
+        assertFailsWith<ModelFileException> { repo.refresh() }
+    }
+
     // ---------------------------------------------------------------- aceptar y guardar
 
     @Test
