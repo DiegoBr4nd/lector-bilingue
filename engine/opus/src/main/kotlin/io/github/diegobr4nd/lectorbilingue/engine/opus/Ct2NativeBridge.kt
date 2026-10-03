@@ -20,8 +20,15 @@ object Ct2NativeBridge : NativeBridge {
      */
     fun utf8RoundTrip(text: String): String = nativeUtf8RoundTrip(text)
 
+    /** Solo para pruebas: decodifica bytes UTF-8 crudos con el decodificador estricto del nativo. */
+    fun utf8BytesToString(bytes: ByteArray): String {
+        require(bytes.size <= 4096) { "demasiados bytes (máx. 4096)" }
+        return nativeUtf8BytesToString(bytes)
+    }
+
     @JvmStatic private external fun nativeLoad(modelDir: String, threads: Int, beamSize: Int): Long
     @JvmStatic private external fun nativeTranslate(handle: Long, sentences: Array<String>): Array<String>
     @JvmStatic private external fun nativeUnload(handle: Long)
     @JvmStatic private external fun nativeUtf8RoundTrip(text: String): String
+    @JvmStatic private external fun nativeUtf8BytesToString(bytes: ByteArray): String
 }

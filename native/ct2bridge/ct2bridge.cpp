@@ -2,6 +2,7 @@
 // Reglas: validar toda entrada, no dejar escapar excepciones C++, no registrar texto.
 #include <jni.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -38,6 +39,9 @@ struct Engine {
 // cuando esa traducción termina (nunca se usa memoria ya liberada).
 std::mutex g_registry_mutex;
 std::unordered_map<jlong, std::shared_ptr<Engine>> g_registry;
+// Contador monótono: un handle nunca se reutiliza (evita confundir un motor nuevo con uno
+// liberado en la misma dirección). 0 queda reservado como inválido.
+std::atomic<jlong> g_next_handle{1};
 
 struct InvalidArgument : std::runtime_error { using std::runtime_error::runtime_error; };
 // Tipo propio: así un std::logic_error interno de CTranslate2 no se confunde con
@@ -102,7 +106,8 @@ jstring toJava(JNIEnv* env, const std::string& s) {
         else if ((b0 & 0xE0) == 0xC0) { cp = b0 & 0x1F; n = 2; }
         else if ((b0 & 0xF0) == 0xE0) { cp = b0 & 0x0F; n = 3; }
         else if ((b0 & 0xF8) == 0xF0) { cp = b0 & 0x07; n = 4; }
-        else { u += u'�'; ++i; continue; }
+        else { u += u'�'; ++i; continue; }  // continuación suelta, C0/C1, F5..FF
+        if (b0 == 0xC0 || b0 == 0xC1 || b0 > 0xF4) { u += u'�'; ++i; continue; }
         if (i + n > s.size()) { u += u'�'; break; }
         bool ok = true;
         for (size_t k = 1; k < n; ++k) {
@@ -110,7 +115,11 @@ jstring toJava(JNIEnv* env, const std::string& s) {
             if ((b & 0xC0) != 0x80) { ok = false; break; }
             cp = (cp << 6) | (b & 0x3F);
         }
-        if (!ok || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) { u += u'�'; ++i; continue; }
+        // Rechaza formas no más cortas (sobrelargas), > U+10FFFF y sustitutos.
+        static constexpr uint32_t kMin[] = {0, 0, 0x80, 0x800, 0x10000};
+        if (!ok || cp < kMin[n] || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            u += u'�'; ++i; continue;
+        }
         if (cp >= 0x10000) {
             cp -= 0x10000;
             u += static_cast<char16_t>(0xD800 + (cp >> 10));
@@ -156,7 +165,7 @@ Java_io_github_diegobr4nd_lectorbilingue_engine_opus_Ct2NativeBridge_nativeLoad(
         engine->translator = std::make_unique<ctranslate2::Translator>(loader, pool);
         engine->beam = static_cast<size_t>(beam);
 
-        const auto handle = reinterpret_cast<jlong>(engine.get());
+        const jlong handle = g_next_handle.fetch_add(1);
         std::lock_guard<std::mutex> lock(g_registry_mutex);
         g_registry.emplace(handle, std::move(engine));
         return handle;
@@ -257,6 +266,30 @@ Java_io_github_diegobr4nd_lectorbilingue_engine_opus_Ct2NativeBridge_nativeUtf8R
     }
     try {
         return toJava(env, toUtf8(env, text));
+    } catch (...) {
+        throwJava(env, "java/lang/IllegalStateException", "error nativo desconocido");
+        return nullptr;
+    }
+}
+
+// Solo para pruebas: decodifica bytes UTF-8 crudos con toJava.
+extern "C" JNIEXPORT jstring JNICALL
+Java_io_github_diegobr4nd_lectorbilingue_engine_opus_Ct2NativeBridge_nativeUtf8BytesToString(
+        JNIEnv* env, jclass, jbyteArray bytes) {
+    if (bytes == nullptr) {
+        throwJava(env, "java/lang/IllegalArgumentException", "bytes nulos");
+        return nullptr;
+    }
+    const jsize len = env->GetArrayLength(bytes);
+    if (len > 4096) {
+        throwJava(env, "java/lang/IllegalArgumentException", "demasiados bytes (máx. 4096)");
+        return nullptr;
+    }
+    try {
+        std::string raw(static_cast<size_t>(len), ' ');
+        if (len > 0) env->GetByteArrayRegion(bytes, 0, len, reinterpret_cast<jbyte*>(raw.data()));
+        if (env->ExceptionCheck()) return nullptr;
+        return toJava(env, raw);
     } catch (...) {
         throwJava(env, "java/lang/IllegalStateException", "error nativo desconocido");
         return nullptr;
