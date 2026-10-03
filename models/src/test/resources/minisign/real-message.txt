@@ -1,0 +1,1 @@
+Mensaje de prueba firmado con minisign 0.12 real (llave desechable, SOLO PRUEBAS).
