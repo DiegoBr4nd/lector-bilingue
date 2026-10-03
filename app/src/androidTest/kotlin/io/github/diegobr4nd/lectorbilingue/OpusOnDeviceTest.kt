@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue
 
+import android.os.Debug
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
@@ -56,6 +57,35 @@ class OpusOnDeviceTest {
         } finally {
             engine.unload()
         }
+    }
+
+    @Test fun utf8EstrictoRechazaSobrelargos() {
+        val replacement = "�"
+        assertEquals(replacement + replacement, Ct2NativeBridge.utf8BytesToString(byteArrayOf(0xC0.toByte(), 0x80.toByte())))
+        val overlong3 = Ct2NativeBridge.utf8BytesToString(byteArrayOf(0xE0.toByte(), 0x80.toByte(), 0x80.toByte()))
+        assertTrue(overlong3.isNotEmpty() && overlong3.all { it == '�' }, "E0 80 80 debe dar solo U+FFFD")
+        assertEquals("😀", Ct2NativeBridge.utf8BytesToString(byteArrayOf(0xF0.toByte(), 0x9F.toByte(), 0x98.toByte(), 0x80.toByte())))
+        assertFailsWith<IllegalArgumentException> { Ct2NativeBridge.utf8BytesToString(ByteArray(4097)) }
+    }
+
+    @Test fun cienCiclosNoPierdenMemoria() = runBlocking<Unit> {
+        val engine = OpusEngine(File(filesDir, "models"))
+        assumeTrue("modelo no copiado", engine.isModelPresent(pair))
+        fun cycle() = runBlocking {
+            engine.load(pair, EngineConfig())
+            try {
+                engine.translate(listOf("Hi."))
+            } finally {
+                engine.unload()
+            }
+        }
+        repeat(5) { cycle() }
+        System.gc()
+        val before = Debug.getNativeHeapAllocatedSize()
+        repeat(95) { cycle() }
+        System.gc()
+        val deltaMb = (Debug.getNativeHeapAllocatedSize() - before) / (1024.0 * 1024.0)
+        assertTrue(deltaMb < 20.0, "Crecimiento de memoria nativa tras 95 ciclos: %.1f MB (límite 20 MB)".format(deltaMb))
     }
 
     @Test fun puenteRechazaHandleInvalidoYLoteGrande() {
