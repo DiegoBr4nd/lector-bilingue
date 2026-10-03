@@ -74,11 +74,18 @@ cd /c/Users/JUAN/trabajo-modelo
 En Git Bash se usa el `tar` de Windows porque el `tar` de Git no trae `zstd`; el de Windows detecta solo el formato.
 Queda la carpeta `en-es/` con el modelo, `LICENSE`, `ATTRIBUTION.txt`, `MODEL_CARD.md` y `SHA256SUMS`.
 
-Comprueba las huellas antes de seguir (Git Bash):
+Comprueba las huellas antes de seguir.
+
+PowerShell (Windows PowerShell 5.1 no trae `sha256sum` ni entiende `&&`):
+```
+cd en-es
+Get-Content SHA256SUMS | Where-Object { $_.Trim() } | ForEach-Object { $h, $n = $_ -split '\s+', 2; $n = $n.TrimStart('*'); if ((Get-FileHash $n -Algorithm SHA256).Hash.ToLower() -eq $h) { "OK     $n" } else { "FALLA  $n" } }
+```
+Git Bash:
 ```
 cd en-es && sha256sum -c SHA256SUMS
 ```
-Todas deben decir `OK`.
+Todas deben decir `OK`. Si alguna dice `FALLA`, no sigas: vuelve a descargar el artefacto.
 
 ## 5. Subir los archivos del modelo a un release
 1. En el repo `lector-bilingue-modelos`: **Releases > Create a new release**.
