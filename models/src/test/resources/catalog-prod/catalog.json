@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "generated": "2026-10-03T23:02:37Z",
+  "models": [
+    {
+      "id": "opus-en-es-tcbig-2026.10",
+      "pair": "en-es",
+      "engine": "opus",
+      "modelVersion": "tc-big-2026.10",
+      "license": "CC-BY-4.0",
+      "attribution": "Helsinki-NLP / OPUS-MT, Tiedemann et al.",
+      "files": [
+        {
+          "name": "ATTRIBUTION.txt",
+          "size": 391,
+          "sha256": "97019d5f2e8cc41e0d713e5e7f54312a8d4f898eb05d93a7252ae43a89346915",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/ATTRIBUTION.txt"
+        },
+        {
+          "name": "LICENSE",
+          "size": 113,
+          "sha256": "d3f951deb57edda449b97db2d7dc4a540dad98f3674515ed28beeb12d6ae8e4b",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/LICENSE"
+        },
+        {
+          "name": "MODEL_CARD.md",
+          "size": 8077,
+          "sha256": "c42997ca3767c6750c346d1da84758a9755422c7f5c5294f12a8f4d92f8a94bc",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/MODEL_CARD.md"
+        },
+        {
+          "name": "config.json",
+          "size": 223,
+          "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/config.json"
+        },
+        {
+          "name": "model.bin",
+          "size": 235883903,
+          "sha256": "9332e2dd98f10fba1c3cf762d366c76f5f514122e630b074f2e7b9b1cc2072ea",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/model.bin"
+        },
+        {
+          "name": "shared_vocabulary.json",
+          "size": 1003932,
+          "sha256": "4bb5db1d9067fd2d8fe0b1ed843bc338ebcc0d1840ac58acaad25e90495a98c7",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/shared_vocabulary.json"
+        },
+        {
+          "name": "source.spm",
+          "size": 804235,
+          "sha256": "b1763341d3a71262ed5aacc3f8287d3c3c2f2ae82295e11d03aea80879c98009",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/source.spm"
+        },
+        {
+          "name": "target.spm",
+          "size": 824118,
+          "sha256": "c70086dcac73d9c759cca0b5f195a073033906dcd29433d6c5fe74e66b2cc8da",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/target.spm"
+        }
+      ]
+    }
+  ]
+}

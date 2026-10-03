@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "opus-en-es-prueba",
+      "pair": "en-es",
+      "engine": "opus",
+      "files": [
+        {"name": "model.bin", "size": 1024, "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/prueba/model.bin"}
+      ]
+    }
+  ]
+}

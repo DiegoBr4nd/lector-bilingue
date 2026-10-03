@@ -3,3 +3,6 @@
 *.jar binary
 *.png binary
 *.webp binary
+
+app/src/main/assets/catalog/* binary
+models/src/test/resources/catalog-prod/* binary

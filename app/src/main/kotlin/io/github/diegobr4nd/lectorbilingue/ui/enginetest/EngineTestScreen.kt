@@ -1,5 +1,18 @@
 package io.github.diegobr4nd.lectorbilingue.ui.enginetest
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,11 +52,27 @@ fun EngineTestScreen(
     viewModel: EngineTestViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // En Android 13+ se pide el permiso de notificaciones antes de encolar; si se niega, se descarga igual.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        viewModel.downloadModel()
+    }
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importModel(uri)
+    }
     EngineTestContent(
         state = state,
         onInputChange = viewModel::onInputChange,
         onTranslate = viewModel::translate,
         onBenchmark = viewModel::runBenchmark,
+        onDownload = {
+            val needsAsk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.downloadModel()
+        },
+        onCancelDownload = viewModel::cancelDownload,
+        onImport = { importPicker.launch(arrayOf("application/zip")) },
         modifier = modifier,
     )
 }
@@ -54,6 +83,9 @@ fun EngineTestContent(
     onInputChange: (String) -> Unit,
     onTranslate: () -> Unit,
     onBenchmark: () -> Unit,
+    onDownload: () -> Unit = {},
+    onImport: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val ready = state.modelStatus == ModelStatus.READY
@@ -69,6 +101,7 @@ fun EngineTestContent(
         ) {
             Text(stringResource(R.string.engine_test_title), style = MaterialTheme.typography.titleLarge)
             ModelStatusCard(state)
+            ModelManagerCard(state, onDownload, onImport, onCancelDownload)
             OutlinedTextField(
                 value = state.input,
                 onValueChange = onInputChange,
@@ -108,6 +141,8 @@ fun EngineTestContent(
 private fun ModelStatusCard(state: EngineTestUiState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Región "viva": TalkBack anuncia el cambio de estado del modelo sin que el usuario lo busque.
+            val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             when (state.modelStatus) {
                 ModelStatus.LOADING -> Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -115,20 +150,130 @@ private fun ModelStatusCard(state: EngineTestUiState) {
                 ) {
                     val working = stringResource(R.string.working_description)
                     CircularProgressIndicator(Modifier.semantics { contentDescription = working })
-                    Text(stringResource(R.string.model_loading))
+                    Text(stringResource(R.string.model_loading), modifier = live)
                 }
-                ModelStatus.READY -> Text(stringResource(R.string.model_ready))
-                ModelStatus.MISSING -> {
-                    Text(stringResource(R.string.model_missing, state.modelPath))
+                ModelStatus.READY -> Text(stringResource(R.string.model_ready), modifier = live)
+                ModelStatus.MISSING -> Column(modifier = live) {
+                    Text(stringResource(R.string.model_missing))
                     Text(stringResource(R.string.model_missing_hint))
                 }
                 ModelStatus.ERROR -> Text(
-                    stringResource(R.string.model_error, state.errorMessage ?: stringResource(R.string.error_generic)),
+                    stringResource(R.string.model_error),
                     color = MaterialTheme.colorScheme.error,
+                    modifier = live,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun ModelManagerCard(
+    state: EngineTestUiState,
+    onDownload: () -> Unit,
+    onImport: () -> Unit,
+    onCancelDownload: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onDownload,
+                enabled = !state.modelBusy,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(
+                    if (state.modelStatus == ModelStatus.READY) {
+                        stringResource(R.string.download_again_button)
+                    } else {
+                        state.modelSizeMb?.let { stringResource(R.string.download_button_size, it) }
+                            ?: stringResource(R.string.download_button)
+                    },
+                )
+            }
+            Text(
+                stringResource(R.string.download_wifi_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (state.downloading) {
+                val description = stringResource(R.string.download_progress_description)
+                val fraction = state.downloadFraction
+                if (fraction != null) {
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = description },
+                    )
+                    Text(stringResource(R.string.download_progress_percent, (fraction * 100).toInt()))
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = description },
+                    )
+                    Text(
+                        stringResource(
+                            if (state.downloadQueued) R.string.download_queued else R.string.download_preparing,
+                        ),
+                    )
+                }
+            } else if (state.modelBusy && state.phase != ModelPhase.NONE) {
+                val busyDescription = stringResource(R.string.model_busy_description)
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = busyDescription },
+                )
+                Text(
+                    stringResource(
+                        if (state.phase == ModelPhase.IMPORTING) R.string.phase_importing else R.string.phase_catalog,
+                    ),
+                )
+            }
+            if (state.downloading) {
+                OutlinedButton(
+                    onClick = onCancelDownload,
+                    enabled = !state.cancelling,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(if (state.cancelling) R.string.cancelling else R.string.cancel_download_button))
+                }
+            }
+            OutlinedButton(
+                onClick = onImport,
+                enabled = !state.modelBusy,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.import_button)) }
+            state.modelMessage?.let {
+                Text(
+                    stringResource(it.textRes()),
+                    color = if (it.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+        }
+    }
+}
+
+@StringRes
+private fun ModelMessage.textRes(): Int = when (this) {
+    ModelMessage.NO_CATALOG -> R.string.msg_no_catalog
+    ModelMessage.NO_CATALOG_IMPORT -> R.string.msg_no_catalog_import
+    ModelMessage.NO_MODEL -> R.string.msg_no_model
+    ModelMessage.DOWNLOAD_BUSY -> R.string.msg_download_busy
+    ModelMessage.CANCELLED -> R.string.msg_cancelled
+    ModelMessage.NETWORK -> R.string.msg_network
+    ModelMessage.POLICY -> R.string.msg_policy
+    ModelMessage.SIGNATURE -> R.string.msg_signature
+    ModelMessage.INTEGRITY -> R.string.msg_integrity
+    ModelMessage.CATALOG -> R.string.msg_catalog
+    ModelMessage.FILES -> R.string.msg_files
+    ModelMessage.INVALID_ZIP -> R.string.msg_invalid_zip
+    ModelMessage.IMPORT_NO_MATCH -> R.string.msg_import_no_match
+    ModelMessage.IMPORT_OK -> R.string.msg_import_ok
+    ModelMessage.DOWNLOAD_OK -> R.string.msg_download_ok
+    ModelMessage.UNKNOWN -> R.string.msg_unknown
 }
 
 @Composable

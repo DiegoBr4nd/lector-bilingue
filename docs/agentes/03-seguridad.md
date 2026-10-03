@@ -46,7 +46,7 @@ Analogía: pensar como un ladrón antes de cerrar la casa. ¿Por dónde podría 
 ## 4. Reglas obligatorias (checklist permanente)
 
 ### Permisos (AndroidManifest)
-- [ ] Solo `INTERNET` (para modelos) y `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` + `POST_NOTIFICATIONS` (para traducir libros completos).
+- [ ] Solo estos permisos: `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `ACCESS_NETWORK_STATE` y `<paquete>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (este último lo añade AndroidX para receptores internos no exportados). `RECEIVE_BOOT_COMPLETED` está quitado con `tools:node="remove"`: WorkManager reprograma los trabajos pendientes cuando la app se abre.
 - [ ] **Nunca** `READ_EXTERNAL_STORAGE`, `MANAGE_EXTERNAL_STORAGE` ni similares: los archivos se abren con el selector del sistema (*Storage Access Framework*), que solo da acceso al archivo elegido.
 - [ ] Sin ubicación, contactos, cámara, micrófono ni cuentas.
 - [ ] `android:allowBackup` controlado: respaldar ajustes y biblioteca; **no** la caché ni los modelos (`dataExtractionRules`).

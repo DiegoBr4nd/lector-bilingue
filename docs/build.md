@@ -141,6 +141,10 @@ Si los archivos ya existen, el script se niega a reemplazarlos; hay que añadir 
 - Lee el original y pon nota de 1 a 5 a la traducción A y a la B. Tu avance se guarda solo.
 - Al terminar, pulsa "Revelar" y elige `private/evaluacion-clave.json`. Verás el promedio de cada beam, cuántos textos ganó cada uno y la velocidad (palabras por segundo, mediana y peor caso).
 
+## Catálogo firmado de modelos
+
+Cómo publicar un modelo, armar `catalog.json` (`tools/catalog/build_catalog.py`) y firmarlo con minisign: ver [catalogo.md](catalogo.md).
+
 ## Verificación de dependencias
 Cada librería tiene su huella SHA-256 en `gradle/verification-metadata.xml`. Si una cambia, la compilación falla.
 

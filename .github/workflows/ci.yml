@@ -48,19 +48,30 @@ jobs:
         run: |
           (cd tools/bench && python -m unittest -v)
           (cd tools/models && python -m unittest -v test_convert_opus)
+          (cd tools/catalog && python -m unittest -v)
 
       - name: Lint, pruebas y APKs
         run: ./gradlew --no-daemon lint test assembleFdroidRelease assemblePlayRelease
 
-      # AndroidX inyecta este permiso interno (firma, sin capacidades); quitarlo rompe registerReceiver en API < 33.
-      - name: El manifest fusionado no pide permisos (salvo el interno de AndroidX)
+      # Lista exacta: cualquier permiso nuevo en el manifest fusionado de release rompe el CI.
+      # DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION es interno de AndroidX (firma, sin capacidades).
+      - name: El manifest fusionado solo pide los permisos permitidos
         run: |
           files=$(find app/build/intermediates -path '*Release*' -name AndroidManifest.xml)
           test -n "$files"
-          permitido="io.github.diegobr4nd.lectorbilingue.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-          sobrantes=$(grep -H "uses-permission" $files | grep -v -F "$permitido" || true)
+          permitidos="android.permission.INTERNET
+          android.permission.FOREGROUND_SERVICE
+          android.permission.FOREGROUND_SERVICE_DATA_SYNC
+          android.permission.POST_NOTIFICATIONS
+          android.permission.WAKE_LOCK
+          android.permission.ACCESS_NETWORK_STATE
+          io.github.diegobr4nd.lectorbilingue.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          encontrados=$(for f in $files; do tr -d '\n' < "$f" | grep -oE '<uses-permission[^>]*>' | grep -oE 'android:name="[^"]*"' | sed -e 's/^android:name="//' -e 's/"$//'; done | sort -u)
+          echo "Permisos encontrados:"
+          echo "$encontrados"
+          sobrantes=$(echo "$encontrados" | grep -v -x -F "$(echo "$permitidos" | sed 's/^ *//')" | grep -v '^$' || true)
           if [ -n "$sobrantes" ]; then
-            echo "::error::Apareció un permiso en el manifest fusionado"
+            echo "::error::Permisos fuera de la lista permitida en el manifest fusionado"
             echo "$sobrantes"
             exit 1
           fi
