@@ -26,7 +26,12 @@ class OpusEngine(
     private val lock = Any()
     private var handle = 0L
 
-    fun modelDir(pair: LanguagePair) = File(modelsRoot, "${pair.source}-${pair.target}")
+    fun modelDir(pair: LanguagePair): File {
+        val dir = File(modelsRoot, "${pair.source}-${pair.target}")
+        // Defensa extra: la carpeta debe colgar directamente de la raíz de modelos.
+        require(dir.canonicalFile.parentFile == modelsRoot.canonicalFile) { "Carpeta de modelo fuera de la raíz" }
+        return dir
+    }
 
     fun isModelPresent(pair: LanguagePair) = modelDir(pair).isDirectory
 
