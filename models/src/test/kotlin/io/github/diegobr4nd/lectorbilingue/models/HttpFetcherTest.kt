@@ -3,6 +3,7 @@ package io.github.diegobr4nd.lectorbilingue.models
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import mockwebserver3.SocketEffect
 import okio.Buffer
 import org.junit.After
 import org.junit.Before
@@ -491,5 +492,171 @@ class HttpFetcherTest {
         assertFailsWith<NetworkPolicyException> { fetcher.downloadTo(url("/m.bin"), target, 1000, { _, _ -> }) }
         assertEquals(1, server.requestCount)
         assertFalse(target.exists() && target.length() > 0)
+    }
+
+    // ---------------------------------------------------------------- correcciones tras revisión
+
+    @Test
+    fun fetchBytes_redireccionProtocoloRelativoLanzaPolicySinConectar() {
+        server.enqueue(redirect(302, "//evil.example/x"))
+        assertFailsWith<NetworkPolicyException> { fetcher.fetchBytes(url("/a"), 100) }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun fetchBytes_redireccionConBarraInvertidaLanzaPolicySinConectar() {
+        server.enqueue(redirect(302, "/\\evil.example/x"))
+        assertFailsWith<NetworkPolicyException> { fetcher.fetchBytes(url("/a"), 100) }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun downloadTo_reinicioPor200TruncaAntesDeAvisar() {
+        val body = bytes(5000)
+        val target = newTarget().apply { writeBytes(bytes(1234, seed = 99)) }
+        server.enqueue(ok(body))
+        val largosAlAvisar = mutableListOf<Long>()
+        fetcher.downloadTo(url("/m.bin"), target, 10_000, { _, _ -> }, { largosAlAvisar += target.length() })
+        assertEquals(listOf(0L), largosAlAvisar)
+        assertContentEquals(body, target.readBytes())
+    }
+
+    @Test
+    fun downloadTo_reinicioPor200YCorteDejaArchivoYHashCoherentes() {
+        val body = bytes(200_000)
+        val target = newTarget().apply { writeBytes(bytes(1234, seed = 99)) }
+        server.enqueue(ok(body).newBuilder().onResponseBody(SocketEffect.CloseSocket()).build())
+        val rec = Recorder()
+        assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 1_000_000, rec.onBytes, rec.onReset) }
+        assertEquals(1, rec.resets)
+        assertContentEquals(target.readBytes(), rec.out.toByteArray())
+    }
+
+    @Test
+    fun downloadTo_200IncompletoLanzaYConservaElParcial() {
+        val body = bytes(200_000)
+        val target = newTarget()
+        server.enqueue(ok(body).newBuilder().onResponseBody(SocketEffect.CloseSocket()).build())
+        val rec = Recorder()
+        val e = assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 1_000_000, rec.onBytes, rec.onReset) }
+        assertFalse(e.message.orEmpty().contains("/m.bin"))
+        assertTrue(target.exists())
+        assertTrue(target.length() < body.size)
+        assertContentEquals(body.copyOfRange(0, target.length().toInt()), target.readBytes())
+        assertContentEquals(target.readBytes(), rec.out.toByteArray())
+    }
+
+    @Test
+    fun downloadTo_206IncompletoLanzaYConservaElParcial() {
+        val body = bytes(200_000)
+        val n = 1000
+        val target = newTarget().apply { writeBytes(body.copyOfRange(0, n)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes $n-${body.size - 1}/${body.size}")
+                .body(buffer(body.copyOfRange(n, body.size)))
+                .onResponseBody(SocketEffect.CloseSocket())
+                .build(),
+        )
+        assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 1_000_000, { _, _ -> }) }
+        assertTrue(target.length() in n.toLong() until body.size.toLong())
+        assertContentEquals(body.copyOfRange(0, target.length().toInt()), target.readBytes())
+    }
+
+    @Test
+    fun downloadTo_206ConCuerpoMasCortoQueElRangoLanza() {
+        val n = 100
+        val target = newTarget().apply { writeBytes(bytes(n)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes $n-999/1000")
+                .chunkedBody(buffer(bytes(500)), 128)
+                .build(),
+        )
+        val e = assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 10_000, { _, _ -> }) }
+        assertTrue(e.message.orEmpty().contains("incompleta"), e.message)
+        assertEquals(600L, target.length())
+    }
+
+    @Test
+    fun downloadTo_206ConContentLengthQueContradiceElRangoLanzaSinEscribir() {
+        val n = 100
+        val target = newTarget().apply { writeBytes(bytes(n)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes $n-999/1000")
+                .body(buffer(bytes(500)))
+                .build(),
+        )
+        assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 10_000, { _, _ -> }) }
+        assertEquals(100L, target.length())
+    }
+
+    @Test
+    fun downloadTo_206ConTotalDesconocidoYCuerpoEnormeRespetaElTope() {
+        val n = 100
+        val target = newTarget().apply { writeBytes(bytes(n)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes $n-199/*")
+                .chunkedBody(buffer(bytes(50_000)), 256)
+                .build(),
+        )
+        val rec = Recorder()
+        assertFailsWith<IOException> { fetcher.downloadTo(url("/m.bin"), target, 1000, rec.onBytes, rec.onReset) }
+        assertTrue(target.length() <= 200, "len=${target.length()}")
+        assertEquals(target.length() - n, rec.out.size().toLong())
+    }
+
+    @Test
+    fun downloadTo_206ConInicioMayorQueElParcialReinicia() {
+        val body = bytes(3000)
+        val target = newTarget().apply { writeBytes(body.copyOfRange(0, 1000)) }
+        server.enqueue(
+            MockResponse.Builder().code(206)
+                .addHeader("Content-Range", "bytes 2000-2999/3000")
+                .body(buffer(body.copyOfRange(2000, 3000)))
+                .build(),
+        )
+        server.enqueue(ok(body))
+        val rec = Recorder()
+        fetcher.downloadTo(url("/m.bin"), target, 10_000, rec.onBytes, rec.onReset)
+        assertEquals("bytes=1000-", take().headers["Range"])
+        assertNull(take().headers["Range"])
+        assertContentEquals(body, target.readBytes())
+        assertEquals(1, rec.resets)
+    }
+
+    @Test
+    fun downloadTo_parcialIgualAlTopeReiniciaSinRange() {
+        val body = bytes(1000)
+        val target = newTarget().apply { writeBytes(bytes(1000, seed = 3)) }
+        server.enqueue(ok(body))
+        val largosAlAvisar = mutableListOf<Long>()
+        fetcher.downloadTo(url("/m.bin"), target, 1000, { _, _ -> }, { largosAlAvisar += target.length() })
+        assertNull(take().headers["Range"])
+        assertEquals(listOf(0L), largosAlAvisar)
+        assertContentEquals(body, target.readBytes())
+    }
+
+    @Test
+    fun parseContentRange_valido() {
+        assertEquals(HttpFetcher.ContentRange(0, 9, 10), HttpFetcher.parseContentRange("bytes 0-9/10"))
+        assertEquals(HttpFetcher.ContentRange(5, 9, null), HttpFetcher.parseContentRange("bytes 5-9/*"))
+        assertEquals(HttpFetcher.ContentRange(5, 9, 10), HttpFetcher.parseContentRange("  bytes 5-9/10 "))
+    }
+
+    @Test
+    fun parseContentRange_invalido() {
+        assertNull(HttpFetcher.parseContentRange(null))
+        assertNull(HttpFetcher.parseContentRange(""))
+        assertNull(HttpFetcher.parseContentRange("bytes 9-5/10"))
+        assertNull(HttpFetcher.parseContentRange("bytes 0-10/10"))
+        assertNull(HttpFetcher.parseContentRange("bytes  0-9/10"))
+        assertNull(HttpFetcher.parseContentRange("bytes 0 - 9/10"))
+        assertNull(HttpFetcher.parseContentRange("bytes 1234567890123456789-1234567890123456790/*"))
+        assertNull(HttpFetcher.parseContentRange("bytes */10"))
+        assertNull(HttpFetcher.parseContentRange("items 0-9/10"))
+        assertNull(HttpFetcher.parseContentRange("bytes -1-9/10"))
     }
 }
