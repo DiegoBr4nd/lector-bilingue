@@ -35,6 +35,7 @@ PAIR_RE = re.compile(r"[a-z]{2,3}-[a-z]{2,3}")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,128}")
 ENGINES = ("opus", "firefox")
+GENERATED_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
 DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
@@ -56,7 +57,7 @@ def _text(value, at):
 
 
 def _parse_generated(value, at):
-    if not isinstance(value, str):
+    if not isinstance(value, str) or not GENERATED_RE.fullmatch(value):
         _fail(at)
     try:
         moment = datetime.strptime(value, DATE_FORMAT)
@@ -86,7 +87,8 @@ def validate_catalog(data):
     """Mismas reglas que CatalogParser.kt. Lanza CatalogError si algo falla."""
     if not isinstance(data, dict):
         _fail("raíz")
-    if data.get("version") != 1 or isinstance(data.get("version"), bool):
+    version = data.get("version")
+    if type(version) is not int or version != 1:
         _fail("version")
     _parse_generated(data.get("generated"), "generated")
     models = data.get("models")
@@ -125,7 +127,7 @@ def validate_catalog(data):
                 _fail(f"{fat}.name")
             names.add(name)
             size = f.get("size")
-            if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= MAX_FILE_SIZE:
+            if type(size) is not int or not 1 <= size <= MAX_FILE_SIZE:
                 _fail(f"{fat}.size")
             sha = f.get("sha256")
             if not isinstance(sha, str) or not SHA256_RE.fullmatch(sha):

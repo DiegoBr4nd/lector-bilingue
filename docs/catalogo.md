@@ -69,8 +69,9 @@ tar --zstd -xf en-es.tar.zst
 Git Bash:
 ```
 cd /c/Users/JUAN/trabajo-modelo
-tar --zstd -xf en-es.tar.zst
+/c/Windows/System32/tar.exe -xf en-es.tar.zst
 ```
+En Git Bash se usa el `tar` de Windows porque el `tar` de Git no trae `zstd`; el de Windows detecta solo el formato.
 Queda la carpeta `en-es/` con el modelo, `LICENSE`, `ATTRIBUTION.txt`, `MODEL_CARD.md` y `SHA256SUMS`.
 
 Comprueba las huellas antes de seguir (Git Bash):

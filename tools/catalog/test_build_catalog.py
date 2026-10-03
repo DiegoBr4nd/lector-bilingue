@@ -153,6 +153,10 @@ class BuildCatalogTest(unittest.TestCase):
         mut(lambda d: d.update(generated="2101-01-01T00:00:00Z"))
         mut(lambda d: d.update(generated="2026-10-03T12:00:00+00:00"))
         mut(lambda d: d.update(version=2))
+        mut(lambda d: d.update(version=1.0))
+        mut(lambda d: d.update(version=True))
+        mut(lambda d: d.update(generated="2026-1-3T1:2:3Z"))
+        mut(lambda d: d["models"][0]["files"][0].update(size=True))
         mut(lambda d: d["models"][0].update(files=[]))
         mut(lambda d: d["models"][0].update(files=[
             {"name": f"f{i}", "size": 1, "sha256": "0" * 64, "url": PREFIX + f"t/f{i}"} for i in range(33)]))
