@@ -6,7 +6,8 @@ se cerraba en bucle). Con este parche:
   cabeceras, nombres, formas, relleno de alineación, datos) se compara con lo que queda, con
   control de desbordamiento en las multiplicaciones y sumas. Cada tensor debe caber en su
   data_length según su forma y tipo; las matrices int8 deben ser 2-D (+ 4 bytes del
-  multiplicador); los datos empiezan en el límite de 256 bytes del formato. Los mensajes de
+  multiplicador); los datos empiezan en el límite de 256 bytes del formato y los tensores
+  float32 (que se usan en su lugar, sin copiar) quedan alineados a 4 bytes. Los mensajes de
   error son fijos (sin ruta del archivo).
 - Transformer.cc: si el archivo no trae un parámetro que el modelo espera (por ejemplo, más
   capas en slimt.json que en el modelo), lanza excepción en vez de dejar un tensor vacío que
@@ -17,15 +18,15 @@ se cerraba en bucle). Con este parche:
 - Vocabulary.cc: si SentencePiece no puede leer el vocabulario, lanza excepción (antes se
   ignoraba el error y el procesador vacío se caía al usarse).
 Todo lanza std::runtime_error; el puente JNI lo convierte en IllegalStateException con mensaje
-fijo ("no se pudo cargar el modelo"). Comprobado contra el modelo oficial en-es de Mozilla
-(base-memory v3.0): cumple todas las reglas nuevas.
+fijo ("no se pudo cargar el modelo"). Comprobado contra los modelos oficiales en-es y es-en de
+Mozilla (base-memory v3.0): cumplen todas las reglas nuevas.
 Origen: escrito para lector-bilingue (fase 2c, tarea 9, revisión de seguridad).
 Licencia: GPL-2.0-or-later (obra derivada de slimt; ver native/third_party/slimt/COPYRIGHT).
 Se aplica al compilar (native/slimtbridge/CMakeLists.txt) sobre una copia; el submódulo no se toca.
 Depende de 0003 (se aplica después).
 
 diff --git a/slimt/Io.cc b/slimt/Io.cc
-index f1a905f..6384074 100644
+index f1a905f..156a1b1 100644
 --- a/slimt/Io.cc
 +++ b/slimt/Io.cc
 @@ -8,6 +8,7 @@
@@ -196,20 +197,22 @@ index f1a905f..6384074 100644
  
    // Keep an extra item for embedding processed.
    Item embedding_processed;
-@@ -153,7 +245,11 @@ std::vector<io::Item> load_items(void* current) {
+@@ -153,7 +245,13 @@ std::vector<io::Item> load_items(void* current) {
    for (uint64_t i = 0; i < num_headers; ++i) {
      Item& item = items[i];
      uint64_t size = headers[i].data_length;
 -    char* ptr = emit<char>(current, size);
++    // f32 tensors are used in place (a view into the mapping): they must be
++    // 4-byte aligned. ig8 and i8 are copied or read byte by byte.
 +    if (required[i] > size ||
-+        (item.type != Type::ig8 && reader.position() % sizeof(float) != 0)) {
++        (item.type == Type::f32 && reader.position() % sizeof(float) != 0)) {
 +      corrupt();
 +    }
 +    char* ptr = reader.emit<char>(size);
      // We're about to read-data.
      // We can either make it point to mmap, which is aligned,
      // or we can create a new aligned.
-@@ -287,20 +383,20 @@ std::ostream& operator<<(std::ostream& out, const Item& item) {
+@@ -287,20 +385,20 @@ std::ostream& operator<<(std::ostream& out, const Item& item) {
  MmapFile::MmapFile(const std::string& filepath) {
    fd_ = open(filepath.c_str(), O_RDONLY);
    if (fd_ == -1) {
@@ -249,13 +252,14 @@ index 4dc6a9c..48a917e 100644
  
  void unquantize_embedding_weights(const int8_t* quantized_weights,
 diff --git a/slimt/Shortlist.cc b/slimt/Shortlist.cc
-index a7a3cc2..eb96129 100644
+index a7a3cc2..476a77b 100644
 --- a/slimt/Shortlist.cc
 +++ b/slimt/Shortlist.cc
-@@ -46,23 +46,33 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
+@@ -45,24 +45,33 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
+    * word_to_offset array
     * short_lists array
     */
-   (void)blob_size;
+-  (void)blob_size;
 -  SLIMT_ABORT_IF(blob_size < sizeof(Header),
 -                 "Shortlist length too short to have a header: " +
 -                     std::to_string(blob_size));
@@ -295,7 +299,7 @@ index a7a3cc2..eb96129 100644
  
    if (check) {
      size_t length = (       //
-@@ -91,6 +101,19 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
+@@ -91,6 +100,19 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
  
    shortlist_ = reinterpret_cast<const Word*>(ptr);
  
@@ -315,7 +319,7 @@ index a7a3cc2..eb96129 100644
    // Verify offsets and vocab ids are within bounds if requested by user.
    if (check) {
      content_check();
-@@ -129,6 +152,12 @@ Shortlist ShortlistGenerator::generate(const Words& words) const {
+@@ -129,6 +151,12 @@ Shortlist ShortlistGenerator::generate(const Words& words) const {
    // Collect unique words from source.
    // Add aligned target words: mark target_table[word] to 1
    for (auto word : words) {

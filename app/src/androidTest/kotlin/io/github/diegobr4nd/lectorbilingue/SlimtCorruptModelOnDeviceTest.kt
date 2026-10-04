@@ -44,15 +44,33 @@ class SlimtCorruptModelOnDeviceTest {
     private val goodJson =
         """{"model": "m.bin", "vocabulary": "v.spm", "shortlist": "s.bin", "encoder_layers": 6, "decoder_layers": 4, "heads": 8}"""
 
-    /** Carpeta con slimt.json válido, vocabulario mínimo válido y lista corta de relleno. */
-    private fun modelDir(name: String, model: ByteArray, vocab: ByteArray = TINY_SPM): File {
+    /** slimt.json de la línea base: 1 capa de codificador, 1 de decodificador, 1 cabeza. */
+    private fun baseJson(encoder: Int = 1) =
+        """{"model": "m.bin", "vocabulary": "v.spm", "shortlist": "s.bin", "encoder_layers": $encoder, "decoder_layers": 1, "heads": 1}"""
+
+    /** Carpeta con slimt.json válido, vocabulario mínimo válido y lista corta (de relleno por defecto). */
+    private fun modelDir(
+        name: String,
+        model: ByteArray,
+        vocab: ByteArray = TINY_SPM,
+        json: String = goodJson,
+        shortlist: ByteArray = byteArrayOf(1, 2, 3, 4),
+    ): File {
         val dir = File(root, name).also { it.mkdirs() }
-        File(dir, "slimt.json").writeText(goodJson)
+        File(dir, "slimt.json").writeText(json)
         File(dir, "m.bin").writeBytes(model)
         File(dir, "v.spm").writeBytes(vocab)
-        File(dir, "s.bin").writeBytes(byteArrayOf(1, 2, 3, 4))
+        File(dir, "s.bin").writeBytes(shortlist)
         return dir
     }
+
+    /** Carpeta con la línea base: modelo, vocabulario y lista corta pequeños y válidos. */
+    private fun baseDir(
+        name: String,
+        model: ByteArray = buildModel(baseItems()),
+        shortlist: ByteArray = BASE_LEX,
+        json: String = baseJson(),
+    ) = modelDir(name, model, json = json, shortlist = shortlist)
 
     private fun assertRejected(dir: File, case: String) {
         val handle = try {
@@ -74,6 +92,75 @@ class SlimtCorruptModelOnDeviceTest {
         assertFalse(msg.contains('/') || msg.contains('\\'), "el mensaje filtra una ruta: $case")
         for (leak in listOf("m.bin", "v.spm", "s.bin", "Wemb", "truncated", "corrupt")) {
             assertFalse(msg.contains(leak), "el mensaje filtra contenido o el texto de slimt: $case")
+        }
+    }
+
+    // ----- Línea base: modelo pequeño y válido construido aquí -----
+    // Prueba de control: si carga, el vocabulario mínimo (TINY_SPM) funciona en el fork de
+    // SentencePiece, y los casos dañados de abajo fallan en el lector del modelo o de la lista
+    // corta, no en el vocabulario (que se carga antes y daría el mismo mensaje fijo).
+
+    @Test fun lineaBaseCarga() {
+        val handle = SlimtNativeBridge.load(baseDir("base").path, 1)
+        assertTrue(handle != 0L, "la línea base debía cargar")
+        SlimtNativeBridge.release(handle)
+    }
+
+    @Test fun lineaBaseSinCadaParametro() {
+        val items = baseItems()
+        for (i in items.indices) {
+            val missing = items.filterIndexed { j, _ -> j != i }
+            assertRejected(baseDir("sin$i", buildModel(missing)), "falta ${items[i].name}")
+        }
+    }
+
+    @Test fun lineaBaseConMasCapasQueElModelo() =
+        assertRejected(baseDir("capas", json = baseJson(encoder = 2)), "2 capas en slimt.json, 1 en el modelo")
+
+    @Test fun lineaBaseCortada() {
+        val full = buildModel(baseItems())
+        val dir = baseDir("cortada")
+        val model = File(dir, "m.bin")
+        val lengths = (0 until full.size step 61) + listOf(full.size - 1)
+        for (len in lengths) {
+            model.writeBytes(full.copyOf(len))
+            assertRejected(dir, "línea base cortada a $len de ${full.size} bytes")
+        }
+    }
+
+    @Test fun lineaBaseConUnTensorDanado() {
+        fun mutated(case: String, change: (T) -> T) =
+            assertRejected(baseDir(case, buildModel(baseItems().map(change))), case)
+        // Un sesgo float32 [1, 8] necesita 32 bytes y su bloque solo trae 16.
+        mutated("datoscortos") { if (it.name == "decoder_ff_logit_out_b") it.copy(dataLength = 16) else it }
+        // Matriz int8 de una dimensión.
+        mutated("ig8unadim") { if (it.name == "encoder_l1_self_Wq") it.copy(dims = intArrayOf(64)) else it }
+        // Embedding que no es múltiplo de 8.
+        mutated("wemb9") { if (it.name == "Wemb") it.copy(dims = intArrayOf(3, 3)) else it }
+        // Dimensión negativa.
+        mutated("negativa") { if (it.name == "encoder_l1_self_bq") it.copy(dims = intArrayOf(1, -8)) else it }
+        // Forma enorme ((2^31-1) x (2^31-1) int8) con un bloque de 256 bytes.
+        mutated("enorme") {
+            if (it.name == "decoder_l1_rnn_W") it.copy(dims = intArrayOf(Int.MAX_VALUE, Int.MAX_VALUE)) else it
+        }
+    }
+
+    @Test fun lineaBaseConListaCortaDanada() {
+        val cases = listOf(
+            "0 bytes" to ByteArray(0),
+            "10 bytes" to ByteArray(10),
+            "magia incorrecta" to ByteArray(48),
+            // 2^61 * 8 = 2^64 desborda a 0: sin control, 48 + 0 + 0 == 48 pasaba.
+            "tabla que desborda" to lex(1L shl 61, 0),
+            "tabla vacía" to lex(0, 0),
+            "desplazamiento fuera" to lex(6, 1, longArrayOf(0, 1, 1, 1, 1, 5), intArrayOf(3)),
+            "palabra fuera del vocabulario" to lex(6, 1, longArrayOf(0, 1, 1, 1, 1, 1), intArrayOf(5)),
+            "cortada" to BASE_LEX.copyOf(BASE_LEX.size - 1),
+        )
+        val dir = baseDir("listabase")
+        for ((case, bytes) in cases) {
+            File(dir, "s.bin").writeBytes(bytes)
+            assertRejected(dir, "lista corta: $case")
         }
     }
 
@@ -175,14 +262,6 @@ class SlimtCorruptModelOnDeviceTest {
         cfg.put("model", "m.bin").put("vocabulary", "v.spm").put("shortlist", "s.bin")
         File(dir, "slimt.json").writeText(cfg.toString())
         val shortlist = File(dir, "s.bin")
-        val magic = -0x0EE5B72AFECBE80BL // 0xF11A48D5013417F5
-        fun lex(w2o: Long, size: Long, offsets: LongArray = LongArray(0), words: IntArray = IntArray(0)): ByteArray {
-            val buf = ByteBuffer.allocate(48 + offsets.size * 8 + words.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-            buf.putLong(magic).putLong(0).putLong(50).putLong(50).putLong(w2o).putLong(size)
-            offsets.forEach { buf.putLong(it) }
-            words.forEach { buf.putInt(it) }
-            return buf.array()
-        }
         val cases = listOf(
             "10 bytes" to ByteArray(10),
             "magia incorrecta" to ByteArray(48),
@@ -230,6 +309,96 @@ class SlimtCorruptModelOnDeviceTest {
         }
 
         const val FLOAT32 = 0x0404L
+        const val INTGEMM8 = 0x4101L
+
+        /** Lista corta binaria de Marian: cabecera de 6 enteros, desplazamientos y palabras. */
+        fun lex(w2o: Long, size: Long, offsets: LongArray = LongArray(0), words: IntArray = IntArray(0)): ByteArray {
+            val magic = -0x0EE5B72AFECBE80BL // 0xF11A48D5013417F5
+            val buf = ByteBuffer.allocate(48 + offsets.size * 8 + words.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putLong(magic).putLong(0).putLong(50).putLong(50).putLong(w2o).putLong(size)
+            offsets.forEach { buf.putLong(it) }
+            words.forEach { buf.putInt(it) }
+            return buf.array()
+        }
+
+        /** Lista corta válida para TINY_SPM (5 piezas): tabla de 6 entradas, una palabra. */
+        val BASE_LEX: ByteArray = lex(6, 1, longArrayOf(0, 1, 1, 1, 1, 1), intArrayOf(3))
+
+        /** Un tensor del modelo: nombre, tipo, forma y tamaño de su bloque de datos. */
+        class T(val name: String, val type: Long, val dims: IntArray, val dataLength: Long = 256) {
+            fun copy(dims: IntArray = this.dims, dataLength: Long = this.dataLength) = T(name, type, dims, dataLength)
+        }
+
+        /**
+         * Todos los parámetros que slimt espera con 1 capa de codificador, 1 de decodificador
+         * y FFN de profundidad 2 (mismos nombres que el modelo de Mozilla), en tamaño 8.
+         */
+        fun baseItems(): List<T> {
+            val items = mutableListOf<T>()
+            fun matrix(name: String) {
+                items += T(name, INTGEMM8, intArrayOf(8, 8))
+                items += T(name + "_QuantMultA", FLOAT32, intArrayOf(1, 1))
+            }
+            fun vector(name: String) {
+                items += T(name, FLOAT32, intArrayOf(1, 8))
+            }
+            fun attention(prefix: String) {
+                for (s in listOf("q", "k", "v", "o")) {
+                    matrix("${prefix}W$s")
+                    vector("${prefix}b$s")
+                }
+                vector("${prefix}Wo_ln_bias")
+                vector("${prefix}Wo_ln_scale")
+            }
+            fun ffn(prefix: String) {
+                for (i in 1..2) {
+                    matrix("${prefix}_ffn_W$i")
+                    vector("${prefix}_ffn_b$i")
+                }
+                vector("${prefix}_ffn_ffn_ln_bias")
+                vector("${prefix}_ffn_ffn_ln_scale")
+            }
+            items += T("Wemb", INTGEMM8, intArrayOf(8, 8))
+            items += T("none_QuantMultA", FLOAT32, intArrayOf(1, 1))
+            vector("decoder_ff_logit_out_b")
+            attention("encoder_l1_self_")
+            ffn("encoder_l1")
+            attention("decoder_l1_context_")
+            ffn("decoder_l1")
+            matrix("decoder_l1_rnn_W")
+            matrix("decoder_l1_rnn_Wf")
+            vector("decoder_l1_rnn_bf")
+            vector("decoder_l1_rnn_ffn_ln_bias")
+            vector("decoder_l1_rnn_ffn_ln_scale")
+            return items
+        }
+
+        /**
+         * Arma un modelo en el formato binario de Marian: versión, número de cabeceras,
+         * cabeceras, nombres, formas, relleno hasta 256 bytes y bloques de datos.
+         * Las matrices int8 llevan el multiplicador 1.0 justo después de la matriz.
+         */
+        fun buildModel(items: List<T>): ByteArray {
+            val out = java.io.ByteArrayOutputStream()
+            out.write(le(1L, items.size.toLong()))
+            for (t in items) {
+                out.write(le(t.name.toByteArray().size + 1L, t.type, t.dims.size.toLong(), t.dataLength))
+            }
+            for (t in items) out.write(t.name.toByteArray() + 0.toByte())
+            for (t in items) out.write(ints(*t.dims))
+            val pad = (256 - (out.size() + 8) % 256) % 256
+            out.write(le(pad.toLong()))
+            out.write(ByteArray(pad))
+            for (t in items) {
+                val block = ByteArray(t.dataLength.toInt())
+                val elements = t.dims.fold(1L) { acc, d -> acc * d }
+                if (t.type == INTGEMM8 && elements >= 0 && elements + 4 <= t.dataLength) {
+                    ByteBuffer.wrap(block, elements.toInt(), 4).order(ByteOrder.LITTLE_ENDIAN).putFloat(1.0f)
+                }
+                out.write(block)
+            }
+            return out.toByteArray()
+        }
 
         /** Cabecera de un tensor: name_length, type, shape_length, data_length. */
         fun header(nameLength: Long = 2, type: Long = FLOAT32, shapeLength: Long = 2, dataLength: Long = 256) =
