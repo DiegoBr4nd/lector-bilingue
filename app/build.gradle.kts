@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":core:text"))
     implementation(project(":engine:api"))
     implementation(project(":engine:opus"))
+    implementation(project(":engine:firefox"))
     implementation(project(":models"))
 
     implementation(libs.androidx.core.ktx)

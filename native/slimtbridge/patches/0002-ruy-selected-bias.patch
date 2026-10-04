@@ -1,0 +1,22 @@
+Parche 0002 para slimt (https://github.com/jerinphilip/slimt, commit 9f0b1a20d14871cc94dbe65b7a3df128e5e81f55).
+Qué hace: corrige un error de slimt en ARM. affine_with_select (proyección de salida con lista corta)
+calcula selected_bias pero sumaba prepared_bias (el sesgo del vocabulario completo). Con lista corta
+las traducciones salían rotas.
+Origen: escrito para lector-bilingue (prueba rápida de la fase 2c). El fork
+https://github.com/DavidVentura/slimt lo corrige igual en el commit ea2034a ("use selected_bias on ruy").
+Licencia: GPL-2.0-or-later (obra derivada de slimt; ver native/third_party/slimt/COPYRIGHT).
+Se aplica al compilar (native/slimtbridge/CMakeLists.txt) sobre una copia; el submódulo no se toca.
+
+diff --git a/slimt/qmm/Ruy.inl.cc b/slimt/qmm/Ruy.inl.cc
+index c3a5916..4a5eb63 100644
+--- a/slimt/qmm/Ruy.inl.cc
++++ b/slimt/qmm/Ruy.inl.cc
+@@ -194,7 +194,7 @@ Tensor affine_with_select<Provider::Ruy>(const Tensor& x, const Tensor& W,
+   // Unquantizes, then adds bias in a single statement on the output.
+   Tensor y(Type::f32, out_shape, name + "_out");  // NOLINT
+   float unquant_multiplier = 1.0F / (a_quant * b_quant);
+-  detail::unquantizeAddBias(AB.data<int32_t>(), prepared_bias.data<float>(),
++  detail::unquantizeAddBias(AB.data<int32_t>(), selected_bias.data<float>(),
+                             unquant_multiplier, A_rows, selected_B_cols,
+                             y.data<float>());
+   return y;

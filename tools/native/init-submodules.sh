@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Inicia solo los submódulos que necesita el motor (evita CUDA/cutlass/thrust, varios GB).
+# Inicia solo los submódulos que necesitan los motores (evita CUDA/cutlass/thrust, varios GB).
 # No usar `git submodule update --init --recursive`: bajaría todo eso.
 # cpu_features no se baja: CTranslate2 solo lo usa en x86_64 y compilamos solo arm64-v8a.
 # abseil-cpp va como submódulo propio: SentencePiece v0.2.2 lo bajaría de internet al compilar.
+# slimt (motor Firefox): solo sentencepiece (fork browsermt) y ruy (+ cpuinfo). No se bajan
+# intgemm ni gemmology (solo x86 / necesitan xsimd) ni el googletest de ruy.
+# Los parches de slimt se aplican al compilar sobre una copia (native/slimtbridge/patches).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 git submodule update --init native/third_party/CTranslate2 native/third_party/sentencepiece \
-  native/third_party/abseil-cpp
+  native/third_party/abseil-cpp native/third_party/slimt
 git -C native/third_party/CTranslate2 submodule update --init \
   third_party/ruy third_party/spdlog
 git -C native/third_party/CTranslate2/third_party/ruy submodule update --init third_party/cpuinfo
+git -C native/third_party/slimt submodule update --init \
+  3rd-party/sentencepiece 3rd-party/ruy
+git -C native/third_party/slimt/3rd-party/ruy submodule update --init third_party/cpuinfo

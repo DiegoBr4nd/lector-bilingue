@@ -76,8 +76,11 @@ jobs:
             exit 1
           fi
 
-      - name: El APK release trae el motor arm64
-        run: unzip -l app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk | grep -q "lib/arm64-v8a/libct2bridge.so"
+      - name: El APK release trae los motores arm64
+        run: |
+          apk=app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/libct2bridge.so"
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/libslimtbridge.so"
 
       - name: Reporte de verificación de dependencias (si falló)
         if: failure()
