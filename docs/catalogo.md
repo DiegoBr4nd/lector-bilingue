@@ -175,7 +175,16 @@ Hay tres modelos más por publicar. Cada uno sigue los pasos 4 a 8, con estas di
 - **Qué hace `firefox-model`:** baja de Mozilla los archivos oficiales del par, comprueba **dos** huellas SHA-256 por archivo (la del `.zst` comprimido y la del archivo descomprimido, ambas publicadas por Mozilla) y los deja **sin modificar**. Agrega `slimt.json` (nuestro: dice cuántas capas tiene el modelo; slimt no lo lee del modelo), `LICENSE` (MPL-2.0), `ATTRIBUTION.txt` y `MODEL_CARD.md`. Todo queda en `SHA256SUMS`, así el catálogo firmado también protege `slimt.json`.
 - **zstd:** Mozilla comprime sus archivos con zstd. El flujo instala el programa `zstd` en el servidor de GitHub; tú no necesitas instalarlo.
 
-### 10.1 Correr el flujo (desde la web, para cada par)
+### 10.0 De dónde salen los archivos: antes y después de unir el PR
+GitHub solo muestra el botón **Run workflow** de los flujos que ya están en `main`. Mientras el PR no esté unido (merged), los archivos salen de la ejecución automática del PR, que ya corre los **tres** modelos (`firefox` en-es, `firefox` es-en y `opus` es-en):
+1. Abre el PR en github.com y entra a la pestaña **Checks**.
+2. A la izquierda, elige el flujo: **firefox-model** (da `firefox-en-es` y `firefox-es-en`) o **model** (da `modelo-es-en`, y también `modelo-en-es`).
+3. Haz clic en la ejecución (run) y baja hasta **Artifacts**. Descarga cada `.zip`.
+4. Si no ves **Checks**, ve a **Actions**, elige el flujo y abre la ejecución más reciente de la rama del PR.
+
+Después de unir el PR, usa **Run workflow** como en 10.1.
+
+### 10.1 Correr el flujo (desde la web, después de unir el PR)
 1. En github.com, repo `lector-bilingue`, pestaña **Actions**.
 2. A la izquierda, elige **firefox-model**.
 3. Botón **Run workflow** (a la derecha). En **Par de idiomas** elige `en-es`. Botón verde **Run workflow**.

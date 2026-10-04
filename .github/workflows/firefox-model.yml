@@ -2,7 +2,16 @@ name: firefox-model
 
 # Espeja los modelos oficiales de Firefox Translations (Mozilla) para un par.
 # Se corre a mano: Actions > firefox-model > Run workflow > elegir el par.
+# En un pull request que toque estos archivos corre solo, con los dos pares
+# (GitHub solo muestra "Run workflow" para flujos que ya están en main).
 on:
+  pull_request:
+    paths:
+      - "tools/models/fetch_firefox.py"
+      - "tools/models/firefox_sources.json"
+      - "tools/models/test_fetch_firefox.py"
+      - "tools/models/licenses/**"
+      - ".github/workflows/firefox-model.yml"
   workflow_dispatch:
     inputs:
       pair:
@@ -17,9 +26,36 @@ permissions:
   contents: read
 
 jobs:
+  pares:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      lista: ${{ steps.lista.outputs.lista }}
+    steps:
+      - name: Calcular la lista de pares
+        id: lista
+        env:
+          EVENTO: ${{ github.event_name }}
+          PAIR_INPUT: ${{ inputs.pair }}
+        run: |
+          if [[ "$EVENTO" == "workflow_dispatch" ]]; then
+            if [[ ! "$PAIR_INPUT" =~ ^(en-es|es-en)$ ]]; then
+              echo "Par no permitido" >&2
+              exit 1
+            fi
+            echo "lista=[\"$PAIR_INPUT\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo 'lista=["en-es","es-en"]' >> "$GITHUB_OUTPUT"
+          fi
+
   mirror:
+    needs: pares
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        pair: ${{ fromJSON(needs.pares.outputs.lista) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,7 +64,7 @@ jobs:
       - name: Validar el par
         id: par
         env:
-          PAIR_INPUT: ${{ inputs.pair }}
+          PAIR_INPUT: ${{ matrix.pair }}
         run: |
           if [[ ! "$PAIR_INPUT" =~ ^(en-es|es-en)$ ]]; then
             echo "Par no permitido" >&2

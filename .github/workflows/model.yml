@@ -21,9 +21,36 @@ permissions:
   contents: read
 
 jobs:
+  pares:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      lista: ${{ steps.lista.outputs.lista }}
+    steps:
+      - name: Calcular la lista de pares
+        id: lista
+        env:
+          EVENTO: ${{ github.event_name }}
+          PAIR_INPUT: ${{ inputs.pair }}
+        run: |
+          if [[ "$EVENTO" == "workflow_dispatch" ]]; then
+            if [[ ! "$PAIR_INPUT" =~ ^(en-es|es-en)$ ]]; then
+              echo "Par no permitido" >&2
+              exit 1
+            fi
+            echo "lista=[\"$PAIR_INPUT\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo 'lista=["en-es","es-en"]' >> "$GITHUB_OUTPUT"
+          fi
+
   convert:
+    needs: pares
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        pair: ${{ fromJSON(needs.pares.outputs.lista) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,7 +59,7 @@ jobs:
       - name: Validar el par
         id: par
         env:
-          PAIR_INPUT: ${{ inputs.pair || 'en-es' }}
+          PAIR_INPUT: ${{ matrix.pair }}
         run: |
           if [[ ! "$PAIR_INPUT" =~ ^(en-es|es-en)$ ]]; then
             echo "Par no permitido" >&2
