@@ -1,7 +1,9 @@
 package io.github.diegobr4nd.lectorbilingue.engine.opus
 
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.engine.api.ModelNotInstalledException
 import io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine
 import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge.Companion.MAX_BATCH
 import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge.Companion.MAX_BEAM
@@ -18,30 +20,22 @@ import kotlinx.coroutines.withContext
  * llamadas nativas en paralelo: todas pasan por el mismo candado.
  */
 class OpusEngine(
-    private val modelsRoot: File,
+    private val modelDir: (LanguagePair) -> File?,
     private val bridge: NativeBridge = Ct2NativeBridge,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : TranslationEngine {
-    override val id = "opus"
+    override val id = EngineId.OPUS.wire
 
     private val lock = Any()
     private var handle = 0L
 
-    fun modelDir(pair: LanguagePair): File {
-        val dir = File(modelsRoot, "${pair.source}-${pair.target}")
-        // Defensa extra: la carpeta debe colgar directamente de la raíz de modelos.
-        require(dir.canonicalFile.parentFile == modelsRoot.canonicalFile) { "Carpeta de modelo fuera de la raíz" }
-        return dir
-    }
-
-    fun isModelPresent(pair: LanguagePair) = modelDir(pair).isDirectory
-
     override suspend fun load(pair: LanguagePair, config: EngineConfig) {
         require(config.threads <= MAX_THREADS) { "threads debe ser <= $MAX_THREADS" }
         require(config.beamSize <= MAX_BEAM) { "beamSize debe ser <= $MAX_BEAM" }
-        val dir = modelDir(pair)
-        check(dir.isDirectory) { "Modelo no encontrado en ${dir.path}" }
+        // El proveedor lee el disco: se llama en el despachador del motor, nunca en el hilo del llamador.
         withContext(dispatcher) {
+            val dir = modelDir(pair) ?: throw ModelNotInstalledException(EngineId.OPUS, pair)
+            check(dir.isDirectory) { "carpeta de modelo no válida" }
             synchronized(lock) {
                 releaseLocked()
                 handle = bridge.load(dir.path, config.threads, config.beamSize)

@@ -1,6 +1,8 @@
 package io.github.diegobr4nd.lectorbilingue.ui.enginetest
 
+import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,7 +12,12 @@ import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkResult
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkRunner
 import io.github.diegobr4nd.lectorbilingue.core.text.SentenceSplitter
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.engine.api.ModelNotInstalledException
+import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
+import io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine
+import io.github.diegobr4nd.lectorbilingue.engine.firefox.FirefoxEngine
 import io.github.diegobr4nd.lectorbilingue.engine.opus.OpusEngine
 import io.github.diegobr4nd.lectorbilingue.models.DownloadState
 import io.github.diegobr4nd.lectorbilingue.models.Models
@@ -24,35 +31,63 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 enum class ModelStatus { LOADING, READY, MISSING, ERROR }
 enum class BenchSource { PRIVATE, SUBSTITUTES }
 
 /** Qué hace la app mientras hay una operación de modelos y aún no hay descarga en marcha. */
-enum class ModelPhase { NONE, LOOKING_UP_CATALOG, IMPORTING }
+enum class ModelPhase { NONE, LOOKING_UP_CATALOG, IMPORTING, DELETING }
+
+/** Una fila de la lista de modelos del catálogo para el par elegido. */
+data class ModelRow(val id: String, val engine: EngineId, val pair: PairChoice, val sizeMb: Long, val installed: Boolean)
+
+/** Carga fallida en Automático: se ofrece, con un botón, probar con el otro motor instalado. */
+data class LoadOffer(val failed: EngineId, val alternative: EngineId)
 
 data class EngineTestUiState(
     val modelStatus: ModelStatus = ModelStatus.LOADING,
-    val modelPath: String = "",
+    val engineSwitch: EngineSwitch = EngineSwitch.AUTO,
+    val pair: PairChoice = PairChoice.EN_ES,
+    /** RAM total ya formateada para mostrar (ver [EnginePicker.ramText]). */
+    val ramText: String = "",
+    /** Motor cargado (o que se está cargando) y por qué se eligió. */
+    val engineInUse: EngineId? = null,
+    val reason: Reason? = null,
+    /** Motor cuyo modelo falta para el par elegido (estado MISSING). */
+    val missingEngine: EngineId? = null,
+    val loadOffer: LoadOffer? = null,
+    val models: List<ModelRow> = emptyList(),
+    /** Id del modelo cuya descarga está en marcha (la fila que muestra el avance). */
+    val activeModelId: String? = null,
     val input: String = "",
     val output: String = "",
     val lastMillis: Long? = null,
     val busy: Boolean = false,
     val benchmark: BenchmarkResult? = null,
     val benchSource: BenchSource? = null,
+    /** Motor y par con los que se tomó la medición mostrada. */
+    val benchEngine: EngineId? = null,
+    val benchPair: PairChoice? = null,
+    /** Con [busy]: la operación es una medición de velocidad (y no una traducción). */
+    val measuring: Boolean = false,
+    /** El par elegido no tiene textos de prueba (es → en sin textos-es.txt). */
+    val benchNoTexts: Boolean = false,
+    /** Existe `files/bench/textos-es.txt`: entonces la medición también se ofrece en es → en. */
+    val spanishBenchTexts: Boolean = false,
     val errorMessage: String? = null,
-    /** Tamaño del modelo en-es en MB, si el catálogo ya se conoce. */
-    val modelSizeMb: Long? = null,
-    /** Hay una operación de modelos en marcha (preparando, descargando o importando). */
+    /** Hay una operación de modelos en marcha (preparando, descargando, importando o borrando). */
     val modelBusy: Boolean = false,
     /** Avance de la descarga 0..1; null mientras no se conoce. Solo tiene sentido con [downloading]. */
     val downloadFraction: Float? = null,
     val downloading: Boolean = false,
-    /** Fase previa a la descarga (buscar catálogo) o importación; solo se muestra con [modelBusy] y sin [downloading]. */
+    /** Fase previa a la descarga (buscar catálogo), importación o borrado; solo con [modelBusy] y sin [downloading]. */
     val phase: ModelPhase = ModelPhase.NONE,
     /** La descarga está encolada, esperando conexión (aún no corre). */
     val downloadQueued: Boolean = false,
@@ -61,55 +96,200 @@ data class EngineTestUiState(
     val modelMessage: ModelMessage? = null,
 )
 
+/** RAM total del teléfono en bytes (`ActivityManager.MemoryInfo.totalMem`). */
+private fun totalRam(context: Context): Long {
+    val info = ActivityManager.MemoryInfo()
+    context.getSystemService(ActivityManager::class.java).getMemoryInfo(info)
+    return info.totalMem
+}
+
 /** Temporal (fase 1b): prueba el motor y mide el benchmark. Nunca registra el texto. */
 class EngineTestViewModel(application: Application) : AndroidViewModel(application) {
-    private val pair = LanguagePair("en", "es")
-    private val engine = OpusEngine(File(application.filesDir, "models"))
-    private val _state = MutableStateFlow(EngineTestUiState(modelPath = engine.modelDir(pair).path))
+    // Fase 2c: los motores solo cargan lo que el gestor de modelos instaló (lee el disco en su propio hilo).
+    private fun dirOf(engine: EngineId): (LanguagePair) -> File? =
+        { p -> Models.installedDir(app(), engine.wire, "${p.source}-${p.target}") }
+
+    private val opus = OpusEngine(dirOf(EngineId.OPUS))
+    private val firefox = FirefoxEngine(dirOf(EngineId.FIREFOX))
+
+    /** Solo un motor cargado a la vez; el candado serializa cargar y descargar. */
+    private val engineLock = Mutex()
+    @Volatile private var loaded: TranslationEngine? = null
+
+    private val totalRamBytes = totalRam(application)
+    private val _state = MutableStateFlow(EngineTestUiState(ramText = EnginePicker.ramText(totalRamBytes)))
     val state: StateFlow<EngineTestUiState> = _state.asStateFlow()
 
     private fun app(): Application = getApplication()
 
     private var downloadJob: Job? = null
-    private var activeModelId: String? = null
 
     init {
         viewModelScope.launch {
             // Recuperación del arranque (barata tras la primera vez): limpia restos de instalaciones cortadas.
             runCatching { Models.recover(getApplication()) }
-            loadEngine()
+            checkSpanishBenchTexts()
+            refreshModels()
+            reloadEngine()
         }
-        viewModelScope.launch { loadModelSize() }
     }
 
-    /** Carga (o recarga) el motor con el modelo instalado. */
-    private suspend fun loadEngine() {
-        if (!engine.isModelPresent(pair)) {
-            _state.update { it.copy(modelStatus = ModelStatus.MISSING) }
-            return
+    private fun engineOf(id: EngineId): TranslationEngine = if (id == EngineId.OPUS) opus else firefox
+
+    // Firefox: 1 hilo (con 4 apenas mejora); OPUS conserva su configuración.
+    private fun configOf(id: EngineId) = if (id == EngineId.FIREFOX) EngineConfig(threads = 1) else EngineConfig()
+
+    private fun installedEngines(pair: PairChoice): Set<EngineId> =
+        EngineId.entries.filterTo(mutableSetOf()) {
+            runCatching { Models.installedDir(app(), it.wire, pair.wire) != null }.getOrDefault(false)
         }
-        _state.update { it.copy(modelStatus = ModelStatus.LOADING) }
-        runCatching { engine.load(pair, EngineConfig()) }
-            .onSuccess { _state.update { it.copy(modelStatus = ModelStatus.READY) } }
-            .onFailure { e -> _state.update { it.copy(modelStatus = ModelStatus.ERROR, errorMessage = app().getString(R.string.model_error)) } }
+
+    private suspend fun unloadLocked() {
+        val e = loaded ?: return
+        loaded = null
+        // Si descargar falla, el motor ya no se usa de todas formas: no se debe quedar la pantalla en LOADING.
+        try {
+            withContext(Dispatchers.Default) { e.unload() }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            // Se ignora a propósito (el mensaje podría llevar rutas); loaded ya es null.
+        }
     }
 
-    /** Tamaño del modelo según el catálogo guardado (sin red). Si hay una descarga en curso, la retoma. */
-    private suspend fun loadModelSize() {
+    /** Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta). */
+    private suspend fun reloadEngine() {
+        // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
+        _state.first { !it.busy }
+        engineLock.withLock {
+            _state.update {
+                it.copy(
+                    modelStatus = ModelStatus.LOADING, engineInUse = null, reason = null, missingEngine = null,
+                    loadOffer = null, errorMessage = null,
+                )
+            }
+            try {
+                unloadLocked()
+                loadChosenEngine()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Pase lo que pase, la pantalla no se queda en LOADING con los controles bloqueados.
+                _state.update { it.copy(modelStatus = ModelStatus.ERROR) }
+            }
+        }
+    }
+
+    /** Elige el motor según el interruptor y lo instalado, y lo carga (o deja el estado MISSING / ERROR). */
+    private suspend fun loadChosenEngine() {
+        val s = _state.value
+        val installed = withContext(Dispatchers.IO) { installedEngines(s.pair) }
+        when (val plan = EnginePicker.plan(s.engineSwitch, installed, totalRamBytes)) {
+            is EnginePlan.Download ->
+                _state.update { it.copy(modelStatus = ModelStatus.MISSING, missingEngine = plan.engine) }
+            is EnginePlan.Load -> {
+                _state.update { it.copy(engineInUse = plan.engine, reason = plan.reason) }
+                val engine = engineOf(plan.engine)
+                runCatching { engine.load(s.pair.pair, configOf(plan.engine)) }
+                    .onSuccess {
+                        loaded = engine
+                        _state.update { it.copy(modelStatus = ModelStatus.READY) }
+                    }
+                    .onFailure { e ->
+                        if (e is CancellationException) throw e
+                        if (e is ModelNotInstalledException) {
+                            _state.update {
+                                it.copy(
+                                    modelStatus = ModelStatus.MISSING, engineInUse = null, reason = null,
+                                    missingEngine = plan.engine,
+                                )
+                            }
+                        } else {
+                            val alt = EnginePicker.fallbackOffer(s.engineSwitch, plan.engine, installed)
+                            _state.update {
+                                it.copy(
+                                    modelStatus = ModelStatus.ERROR,
+                                    loadOffer = alt?.let { a -> LoadOffer(plan.engine, a) },
+                                )
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    /** Mientras algo trabaja o carga, no se cambia motor ni par (así las recargas no se apilan). */
+    private fun controlsLocked(s: EngineTestUiState) = ScreenRules.lockReason(s) != null
+
+    fun selectEngine(choice: EngineSwitch) {
+        val s = _state.value
+        if (controlsLocked(s) || s.engineSwitch == choice) return
+        // Como al cambiar de par: lo medido o traducido con el otro motor ya no corresponde.
+        _state.update {
+            it.copy(
+                engineSwitch = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false,
+                modelMessage = null,
+            )
+        }
+        viewModelScope.launch { reloadEngine() }
+    }
+
+    fun selectPair(choice: PairChoice) {
+        val s = _state.value
+        if (controlsLocked(s) || s.pair == choice) return
+        _state.update {
+            it.copy(pair = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false, modelMessage = null)
+        }
+        viewModelScope.launch {
+            checkSpanishBenchTexts()
+            refreshModels()
+            reloadEngine()
+        }
+    }
+
+    /** ¿Hay textos de prueba en español? (lee el disco fuera del hilo principal). */
+    private suspend fun checkSpanishBenchTexts() {
+        val present = withContext(Dispatchers.IO) {
+            runCatching { File(app().filesDir, "bench/textos-es.txt").isFile }.getOrDefault(false)
+        }
+        _state.update { it.copy(spanishBenchTexts = present) }
+    }
+
+    /** Lista de modelos del catálogo guardado (sin red) para el par elegido; retoma una descarga en curso. */
+    private suspend fun refreshModels() {
         val app = getApplication<Application>()
-        val model = withContext(Dispatchers.IO) {
-            runCatching { Models.catalogRepository(app).current()?.let(ModelActions::pickModel) }.getOrNull()
-        } ?: return
-        _state.update { it.copy(modelSizeMb = ModelActions.megabytes(model.totalSize)) }
-        if (runCatching { Models.isDownloading(app, model.id) }.getOrDefault(false)) {
-            activeModelId = model.id
-            _state.update { if (it.modelBusy) it else it.copy(modelBusy = true, downloading = true) }
-            observeDownload(model.id, null)
+        val pairChoice = _state.value.pair
+        val pairWire = pairChoice.wire
+        val (rows, resumeId) = withContext(Dispatchers.IO) {
+            val catalog = runCatching { Models.catalogRepository(app).current() }.getOrNull()
+            val installed = runCatching { Models.store(app).installed() }.getOrDefault(emptyList())
+            val models = catalog?.let { ModelActions.pickModels(it, pairWire) }.orEmpty()
+            val rows = models.mapNotNull { m ->
+                EngineId.fromWire(m.engine)?.let { e ->
+                    ModelRow(
+                        m.id, e, pairChoice, ModelActions.megabytes(m.totalSize),
+                        installed.any { it.engine == m.engine && it.pair == pairWire },
+                    )
+                }
+            }
+            val active = models.firstOrNull { runCatching { Models.isDownloading(app, it.id) }.getOrDefault(false) }
+            rows to active?.id
+        }
+        // Si mientras tanto cambió el par, esta lista ya no vale: la del par nuevo la calcula su propio refresco.
+        var stale = false
+        _state.update {
+            stale = it.pair != pairChoice
+            if (stale) it else it.copy(models = rows)
+        }
+        if (stale) return
+        if (resumeId != null && !_state.value.modelBusy) {
+            _state.update { it.copy(activeModelId = resumeId, modelBusy = true, downloading = true) }
+            observeDownload(resumeId, null)
         }
     }
 
-    /** Descarga el modelo en-es: refresca el catálogo de la red (si puede), usa el más nuevo y luego encola y observa. */
-    fun downloadModel() {
+    /** Descarga el modelo [modelId]: refresca el catálogo de la red (si puede), usa el más nuevo y luego encola y observa. */
+    fun downloadModel(modelId: String) {
         if (!tryStartModelOperation(ModelPhase.LOOKING_UP_CATALOG)) return
         viewModelScope.launch {
             val app = getApplication<Application>()
@@ -130,7 +310,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     if (catalog == null) {
                         null to catalogProblem
                     } else {
-                        val m = ModelActions.pickModel(catalog)
+                        val m = catalog.models.firstOrNull { it.id == modelId }
                         m to if (m == null) ModelMessage.NO_MODEL else null
                     }
                 }
@@ -144,17 +324,17 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 return@launch
             }
             // El id activo va ANTES de mostrar el botón Cancelar: así un toque siempre encuentra a qué cancelar.
-            activeModelId = picked.id
-            _state.update {
-                it.copy(modelSizeMb = ModelActions.megabytes(picked.totalSize), downloading = true, phase = ModelPhase.NONE)
-            }
+            _state.update { it.copy(activeModelId = picked.id, downloading = true, phase = ModelPhase.NONE) }
             val requestId = try {
                 Models.enqueueDownload(app, picked.id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(modelBusy = false, downloading = false, cancelling = false, modelMessage = ModelMessage.UNKNOWN)
+                    it.copy(
+                        modelBusy = false, downloading = false, cancelling = false, activeModelId = null,
+                        modelMessage = ModelMessage.UNKNOWN,
+                    )
                 }
                 return@launch
             }
@@ -183,9 +363,13 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                         }
                     DownloadState.Status.SUCCEEDED -> {
                         _state.update {
-                            it.copy(downloading = false, downloadFraction = null, downloadQueued = false, cancelling = false)
+                            it.copy(
+                                downloading = false, downloadFraction = null, downloadQueued = false, cancelling = false,
+                                activeModelId = null,
+                            )
                         }
-                        loadEngine()
+                        refreshModels()
+                        reloadEngine()
                         _state.update {
                             it.copy(
                                 modelBusy = false,
@@ -209,7 +393,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Cancela la descarga en curso; el estado CANCELLED llega por el observador. */
     fun cancelDownload() {
-        val id = activeModelId ?: return
+        val id = _state.value.activeModelId ?: return
         if (_state.value.cancelling) return
         _state.update { it.copy(cancelling = true) }
         if (runCatching { Models.cancelDownload(app(), id) }.isFailure) {
@@ -234,12 +418,13 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     private fun endDownload(message: ModelMessage) = _state.update {
         it.copy(
             modelBusy = false, downloading = false, downloadFraction = null, downloadQueued = false,
-            cancelling = false, phase = ModelPhase.NONE, modelMessage = message,
+            cancelling = false, phase = ModelPhase.NONE, modelMessage = message, activeModelId = null,
         )
     }
 
     /** Importa un modelo desde un .zip que eligió el usuario y recarga el motor. */
     fun importModel(uri: Uri) {
+        if (_state.value.busy) return
         if (!tryStartModelOperation(ModelPhase.IMPORTING)) return
         viewModelScope.launch {
             val app = getApplication<Application>()
@@ -261,7 +446,8 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 ModelActions.classifyImport(e)
             }
             if (problem == null) {
-                loadEngine()
+                refreshModels()
+                reloadEngine()
                 _state.update { it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = ModelMessage.IMPORT_OK) }
             } else {
                 _state.update { it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = problem) }
@@ -269,12 +455,47 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Borra el modelo de la fila tocada: se captura su motor y su par ANTES de lanzar nada, y el descargar
+     * el motor y el borrado van bajo el mismo candado, para que ninguna recarga cargue el modelo entre medias.
+     */
+    fun deleteModel(modelId: String) {
+        val row = _state.value.models.firstOrNull { it.id == modelId } ?: return
+        if (_state.value.busy) return
+        if (!tryStartModelOperation(ModelPhase.DELETING)) return
+        val engine = row.engine.wire
+        val pair = row.pair.wire
+        viewModelScope.launch {
+            val problem: ModelMessage? = try {
+                engineLock.withLock {
+                    unloadLocked()
+                    Models.deleteModel(getApplication(), engine, pair)
+                }
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ModelActions.classify(e)
+            }
+            refreshModels()
+            reloadEngine()
+            _state.update {
+                it.copy(modelBusy = false, phase = ModelPhase.NONE, modelMessage = problem ?: ModelMessage.DELETE_OK)
+            }
+        }
+    }
+
     fun onInputChange(text: String) = _state.update { it.copy(input = text) }
 
     fun translate() {
-        val text = _state.value.input
-        if (text.isBlank() || _state.value.busy) return
-        _state.update { it.copy(busy = true, errorMessage = null) }
+        val s = _state.value
+        val text = s.input
+        if (text.isBlank() || s.busy) return
+        if (ScreenRules.modelBlocksWork(s)) {
+            _state.update { it.copy(errorMessage = app().getString(R.string.error_wait_model)) }
+            return
+        }
+        _state.update { it.copy(busy = true, measuring = false, errorMessage = null) }
         viewModelScope.launch {
             val start = System.nanoTime()
             runCatching { translateParagraph(text) }
@@ -282,41 +503,89 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     val ms = (System.nanoTime() - start) / 1_000_000
                     _state.update { it.copy(output = out, lastMillis = ms, busy = false) }
                 }
-                .onFailure { e -> _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    _state.update { s2 -> s2.copy(errorMessage = app().getString(R.string.error_translate), busy = false) }
+                }
         }
     }
 
     fun runBenchmark() {
-        if (_state.value.busy) return
-        _state.update { it.copy(busy = true, errorMessage = null, benchmark = null) }
+        val s = _state.value
+        if (s.busy) return
+        if (ScreenRules.modelBlocksWork(s)) {
+            _state.update { it.copy(errorMessage = app().getString(R.string.error_wait_model)) }
+            return
+        }
+        // Con qué motor y par se mide: se fija al empezar (los controles están bloqueados durante la medición).
+        val engine = s.engineInUse
+        val pair = s.pair
+        _state.update {
+            it.copy(busy = true, measuring = true, errorMessage = null, benchmark = null, benchNoTexts = false)
+        }
         viewModelScope.launch {
             runCatching {
-                val (source, paragraphs) = loadBenchParagraphs()
-                source to BenchmarkRunner().run(paragraphs, ::translateParagraph)
-            }.onSuccess { (source, result) ->
-                _state.update { it.copy(benchmark = result, benchSource = source, busy = false) }
-            }.onFailure { e -> _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
+                val loadedTexts = loadBenchParagraphs(pair)
+                if (loadedTexts == null) {
+                    null
+                } else {
+                    val (source, paragraphs) = loadedTexts
+                    source to BenchmarkRunner().run(paragraphs, ::translateParagraph)
+                }
+            }.onSuccess { done ->
+                _state.update {
+                    if (done == null) {
+                        it.copy(benchNoTexts = true, busy = false, measuring = false)
+                    } else {
+                        it.copy(
+                            benchmark = done.second, benchSource = done.first, benchEngine = engine, benchPair = pair,
+                            busy = false, measuring = false,
+                        )
+                    }
+                }
+            }.onFailure {
+                if (it is CancellationException) throw it
+                _state.update { s2 ->
+                    s2.copy(errorMessage = app().getString(R.string.error_bench), busy = false, measuring = false)
+                }
+            }
         }
     }
 
-    private suspend fun translateParagraph(paragraph: String): String =
-        engine.translate(SentenceSplitter.split(paragraph)).joinToString(" ")
-
-    private suspend fun loadBenchParagraphs(): Pair<BenchSource, List<String>> = withContext(Dispatchers.IO) {
-        val app = getApplication<Application>()
-        val private = File(app.filesDir, "bench/textos.txt")
-        if (private.isFile) {
-            BenchSource.PRIVATE to BenchText.parse(private.readText(Charsets.UTF_8))
-        } else {
-            BenchSource.SUBSTITUTES to BenchText.parse(
-                app.assets.open("sustitutos.txt").bufferedReader(Charsets.UTF_8).use { it.readText() },
-            )
-        }
+    /** Una sola llamada al motor por párrafo (con sus frases): Firefox arma su lista corta en cada llamada. */
+    private suspend fun translateParagraph(paragraph: String): String {
+        val engine = loaded ?: error("no hay motor cargado")
+        return engine.translate(SentenceSplitter.split(paragraph)).joinToString(" ")
     }
+
+    /** Textos del benchmark del par, o null si no hay (es → en sin `bench/textos-es.txt`). */
+    private suspend fun loadBenchParagraphs(pair: PairChoice): Pair<BenchSource, List<String>>? =
+        withContext(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            if (pair == PairChoice.ES_EN) {
+                val spanish = File(app.filesDir, "bench/textos-es.txt")
+                return@withContext if (spanish.isFile) {
+                    BenchSource.PRIVATE to BenchText.parse(spanish.readText(Charsets.UTF_8))
+                } else {
+                    null
+                }
+            }
+            val private = File(app.filesDir, "bench/textos.txt")
+            if (private.isFile) {
+                BenchSource.PRIVATE to BenchText.parse(private.readText(Charsets.UTF_8))
+            } else {
+                BenchSource.SUBSTITUTES to BenchText.parse(
+                    app.assets.open("sustitutos.txt").bufferedReader(Charsets.UTF_8).use { it.readText() },
+                )
+            }
+        }
 
     override fun onCleared() {
         // unload() espera el candado nativo y podría bloquear el hilo principal; se hace
         // fuera de él, en un scope que sobrevive al ViewModel (que ya se está destruyendo).
-        CoroutineScope(Dispatchers.Default + NonCancellable).launch { engine.unload() }
+        CoroutineScope(Dispatchers.Default + NonCancellable).launch {
+            opus.unload()
+            firefox.unload()
+        }
     }
 }

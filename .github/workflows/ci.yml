@@ -47,7 +47,7 @@ jobs:
       - name: Pruebas de las herramientas Python
         run: |
           (cd tools/bench && python -m unittest -v)
-          (cd tools/models && python -m unittest -v test_convert_opus)
+          (cd tools/models && python -m unittest -v test_convert_opus test_fetch_firefox)
           (cd tools/catalog && python -m unittest -v)
 
       - name: Lint, pruebas y APKs
@@ -76,8 +76,11 @@ jobs:
             exit 1
           fi
 
-      - name: El APK release trae el motor arm64
-        run: unzip -l app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk | grep -q "lib/arm64-v8a/libct2bridge.so"
+      - name: El APK release trae los motores arm64
+        run: |
+          apk=app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/libct2bridge.so"
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/libslimtbridge.so"
 
       - name: Reporte de verificación de dependencias (si falló)
         if: failure()

@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue.ui.enginetest
 
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.models.Catalog
 import io.github.diegobr4nd.lectorbilingue.models.CatalogException
 import io.github.diegobr4nd.lectorbilingue.models.CatalogModel
@@ -16,16 +17,19 @@ import java.util.UUID
 enum class ModelMessage(val isError: Boolean = true) {
     NO_CATALOG, NO_CATALOG_IMPORT, NO_MODEL, DOWNLOAD_BUSY, CANCELLED(isError = false), NETWORK, POLICY,
     SIGNATURE, INTEGRITY, CATALOG, FILES, INVALID_ZIP, IMPORT_NO_MATCH, IMPORT_OK(isError = false),
-    DOWNLOAD_OK(isError = false), UNKNOWN,
+    DOWNLOAD_OK(isError = false), DELETE_OK(isError = false), UNKNOWN,
 }
 
 /** Lógica pura (sin Android) de los botones de modelos: se prueba en la JVM. */
 object ModelActions {
     private const val MIB = 1_048_576L
 
-    /** El modelo en-es del motor opus, o null si el catálogo no lo trae. */
-    fun pickModel(catalog: Catalog): CatalogModel? =
-        catalog.findByPair("en-es").firstOrNull { it.engine == "opus" }
+    /** Los modelos del [pair] (p. ej. "en-es") de los motores conocidos, en orden: OPUS y luego Firefox. */
+    fun pickModels(catalog: Catalog, pair: String): List<CatalogModel> =
+        catalog.findByPair(pair)
+            .mapNotNull { m -> EngineId.fromWire(m.engine)?.let { it to m } }
+            .sortedBy { it.first.ordinal }
+            .map { it.second }
 
     /**
      * Qué hacer al tocar "Descargar" tras intentar refrescar el catálogo de la red y leer el guardado.

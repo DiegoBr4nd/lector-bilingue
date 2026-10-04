@@ -1,7 +1,9 @@
 package io.github.diegobr4nd.lectorbilingue.engine.opus
 
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.engine.api.ModelNotInstalledException
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -26,22 +28,42 @@ class OpusEngineTest {
     @After fun descargarTodo() = created.forEach { it.unload() }
 
     private fun engineWithModel(bridge: FakeNativeBridge = FakeNativeBridge()): Pair<OpusEngine, FakeNativeBridge> {
-        File(tmp.root, "en-es").mkdirs()
-        return OpusEngine(tmp.root, bridge, Dispatchers.Default).also { created += it } to bridge
+        val dir = File(tmp.root, "en-es").also { it.mkdirs() }
+        return OpusEngine({ dir }, bridge, Dispatchers.Default).also { created += it } to bridge
     }
 
-    @Test fun `id es opus`() = assertEquals("opus", OpusEngine(tmp.root, FakeNativeBridge()).id)
+    @Test fun `id es opus`() = assertEquals("opus", OpusEngine({ null }, FakeNativeBridge()).id)
 
-    @Test fun `detecta si el modelo esta presente`() {
-        val engine = OpusEngine(tmp.root, FakeNativeBridge())
-        assertFalse(engine.isModelPresent(enEs))
-        File(tmp.root, "en-es").mkdirs()
-        assertTrue(engine.isModelPresent(enEs))
+    @Test fun `load sin modelo instalado lanza ModelNotInstalledException sin tocar el puente`() = runTest {
+        val bridge = FakeNativeBridge()
+        val e = assertFailsWith<ModelNotInstalledException> { OpusEngine({ null }, bridge).load(enEs, EngineConfig()) }
+        assertEquals(EngineId.OPUS, e.engine)
+        assertEquals(enEs, e.pair)
+        assertTrue(bridge.loads.isEmpty())
+        val msg = e.message.orEmpty()
+        assertFalse(msg.contains("/") || msg.contains("\\"), "el mensaje no debe filtrar rutas")
     }
 
-    @Test fun `load sin modelo falla con mensaje claro`() = runTest {
-        val e = assertFailsWith<IllegalStateException> { OpusEngine(tmp.root, FakeNativeBridge()).load(enEs, EngineConfig()) }
-        assertTrue(e.message!!.contains("en-es"))
+    @Test fun `carpeta que no es directorio falla sin tocar el puente`() = runTest {
+        val bridge = FakeNativeBridge()
+        val file = tmp.newFile("no-es-carpeta")
+        val e = assertFailsWith<IllegalStateException> { OpusEngine({ file }, bridge).load(enEs, EngineConfig()) }
+        assertEquals("carpeta de modelo no válida", e.message)
+        assertTrue(bridge.loads.isEmpty())
+    }
+
+    @Test fun `el proveedor se invoca dentro de load y en el despachador del motor`() = runBlocking<Unit> {
+        val threads = mutableListOf<String>()
+        val dir = tmp.newFolder("m")
+        val engine = OpusEngine(
+            { threads += Thread.currentThread().name; dir },
+            FakeNativeBridge(),
+            Dispatchers.Default,
+        ).also { created += it }
+        assertTrue(threads.isEmpty(), "no se invoca al construir")
+        engine.load(enEs, EngineConfig())
+        assertEquals(1, threads.size)
+        assertTrue(threads.single().startsWith("DefaultDispatcher"), "hilo: ${threads.single()}")
     }
 
     @Test fun `load pasa carpeta hilos y beam al puente`() = runTest {

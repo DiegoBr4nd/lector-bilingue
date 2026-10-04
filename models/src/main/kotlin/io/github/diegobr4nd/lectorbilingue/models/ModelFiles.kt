@@ -4,9 +4,13 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 
 /** Un archivo descargado o instalado no coincide con el catálogo. El mensaje nombra el archivo, nunca hashes ni rutas. */
@@ -21,7 +25,7 @@ class ModelFileException(message: String) : IOException(message)
 
 /** Utilidades compartidas por [ModelDownloader] y [ModelInstaller] (rutas seguras, SHA-256, borrado). */
 internal object ModelFiles {
-    /** Carpeta de descargas en curso dentro de `modelsDir`. */
+    /** Carpeta de descargas en curso dentro de `modelsDir` (una sola para todos los motores). */
     const val TMP_DIR = ".tmp"
     const val PART_SUFFIX = ".part"
     const val INSTALLED_JSON = ".installed.json"
@@ -39,6 +43,16 @@ internal object ModelFiles {
     }
 
     private val FILE_NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
+
+    private val ENGINE = Regex("^(opus|firefox)$")
+
+    /** Motores con carpeta propia en `modelsDir/<engine>/`, en orden alfabético. */
+    val ENGINES = listOf("firefox", "opus")
+
+    /** `engine` ∈ {opus, firefox}; si no → [IllegalArgumentException] (sin el valor en el mensaje). */
+    fun requireEngine(engine: String) {
+        require(ENGINE.matches(engine)) { "motor no válido" }
+    }
 
     /**
      * Regla única para nombres de archivo de modelo (catálogo, `.installed.json`, entradas de zip):
@@ -113,6 +127,44 @@ internal object ModelFiles {
         val d = newDigest()
         hashInto(file, d)
         return hex(d.digest()) == expected.sha256
+    }
+
+    /**
+     * fsync de un archivo normal: obliga al sistema a escribir su contenido al disco. Sin esto, un corte
+     * de luz justo después de instalar puede dejar un `.installed.json` válido junto a un `.bin` truncado.
+     */
+    fun fsyncFile(p: Path) {
+        FileChannel.open(p, StandardOpenOption.WRITE).use { it.force(true) }
+    }
+
+    /**
+     * fsync de una carpeta (para que los renombrados queden en disco). Es "lo mejor posible": en Linux y
+     * Android funciona abriendo la carpeta en solo lectura, pero otros sistemas (Windows, en las pruebas)
+     * no lo permiten; en ese caso se ignora, porque los archivos ya están sincronizados.
+     */
+    fun fsyncDir(p: Path) {
+        try {
+            FileChannel.open(p, StandardOpenOption.READ).use { it.force(true) }
+        } catch (e: IOException) {
+            // No soportado: se sigue.
+        } catch (e: UnsupportedOperationException) {
+            // Igual.
+        }
+    }
+
+    /**
+     * Escribe [bytes] en [target] de forma que nunca quede a medias: archivo temporal al lado, fsync y
+     * renombrado atómico encima del destino.
+     */
+    fun writeAtomic(target: Path, bytes: ByteArray) {
+        val tmp = target.resolveSibling(target.fileName.toString() + ".tmp")
+        deleteTree(tmp)
+        FileChannel.open(tmp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use { ch ->
+            val buf = ByteBuffer.wrap(bytes)
+            while (buf.hasRemaining()) ch.write(buf)
+            ch.force(true)
+        }
+        Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     }
 
     fun isRegularFileNoFollow(p: Path) = Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)

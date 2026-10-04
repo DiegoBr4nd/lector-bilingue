@@ -7,7 +7,7 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.engine.opus.Ct2NativeBridge
 import io.github.diegobr4nd.lectorbilingue.engine.opus.OpusEngine
-import java.io.File
+import io.github.diegobr4nd.lectorbilingue.models.Models
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -19,8 +19,16 @@ import kotlin.test.assertTrue
 /** Corre en el Pixel con el modelo copiado (docs/build.md). Sin modelo, se salta. */
 @RunWith(AndroidJUnit4::class)
 class OpusOnDeviceTest {
-    private val filesDir = InstrumentationRegistry.getInstrumentation().targetContext.filesDir
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val pair = LanguagePair("en", "es")
+
+    /** Motor sobre la carpeta instalada por el gestor; salta la prueba si no hay modelo. */
+    private fun installedEngine(): OpusEngine {
+        runBlocking { Models.recover(context) }
+        val dir = Models.installedDir(context, "opus", "en-es")
+        assumeTrue("modelo no instalado", dir != null)
+        return OpusEngine({ dir })
+    }
 
     @Test fun utf8IdaYVuelta() {
         val text = "Mañana 😀 café — “quote” 𝄞 ñ"
@@ -32,8 +40,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun traduceHolaMundo() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
-        assumeTrue("modelo no copiado", engine.isModelPresent(pair))
+        val engine = installedEngine()
         engine.load(pair, EngineConfig())
         try {
             val out = engine.translate(listOf("Hello, world.", "The cat is on the table."))
@@ -46,8 +53,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun entradasRarasNoRompen() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
-        assumeTrue("modelo no copiado", engine.isModelPresent(pair))
+        val engine = installedEngine()
         engine.load(pair, EngineConfig())
         try {
             assertEquals(1, engine.translate(listOf("")).size)
@@ -69,8 +75,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun cienCiclosNoPierdenMemoria() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
-        assumeTrue("modelo no copiado", engine.isModelPresent(pair))
+        val engine = installedEngine()
         assumeTrue(
             "otro motor ya cargado en el proceso (cierra la app: adb shell am force-stop io.github.diegobr4nd.lectorbilingue)",
             OpusEngine.loadedEngineCount() == 0,

@@ -6,7 +6,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 
 /**
- * Un modelo instalado en `modelsDir/<pair>/`, tal como lo describe su `.installed.json`.
+ * Un modelo instalado en `modelsDir/<engine>/<pair>/`, tal como lo describe su `.installed.json`.
  * [files] son solo los nombres de archivo (sin rutas).
  *
  * [toJson] y [fromJson] son el único sitio que conoce el formato de `.installed.json`.
@@ -17,14 +17,23 @@ data class InstalledModel(
     val engine: String,
     val modelVersion: String,
     val files: List<String>,
+    /** Tamaño en bytes de cada archivo; vacío en los `.installed.json` de la 2b (entonces no se comprueba). */
+    val sizes: Map<String, Long> = emptyMap(),
 ) {
-    fun toJson(): String = JSONObject()
-        .put("id", id)
-        .put("pair", pair)
-        .put("engine", engine)
-        .put("modelVersion", modelVersion)
-        .put("files", JSONArray(files))
-        .toString()
+    fun toJson(): String {
+        val o = JSONObject()
+            .put("id", id)
+            .put("pair", pair)
+            .put("engine", engine)
+            .put("modelVersion", modelVersion)
+            .put("files", JSONArray(files))
+        if (sizes.isNotEmpty()) {
+            val so = JSONObject()
+            for (name in files) sizes[name]?.let { so.put(name, it) }
+            o.put("sizes", so)
+        }
+        return o.toString()
+    }
 
     companion object {
         private val ID = Regex("^[a-z0-9][a-z0-9.-]{0,63}$")
@@ -65,7 +74,19 @@ data class InstalledModel(
                 name
             }
             require(files.toSet().size == files.size) { ".installed.json: files" }
-            return InstalledModel(id, pair, engine, modelVersion, files)
+            val sizes = HashMap<String, Long>()
+            if (o.has("sizes")) {
+                val so = o.opt("sizes") as? JSONObject ?: throw IllegalArgumentException(".installed.json: sizes")
+                require(so.length() == files.size) { ".installed.json: sizes" }
+                for (name in files) {
+                    val v = so.opt(name)
+                    require(v is Int || v is Long) { ".installed.json: sizes" }
+                    val n = (v as Number).toLong()
+                    require(n >= 0) { ".installed.json: sizes" }
+                    sizes[name] = n
+                }
+            }
+            return InstalledModel(id, pair, engine, modelVersion, files, sizes)
         }
 
         private fun string(o: JSONObject, key: String): String =

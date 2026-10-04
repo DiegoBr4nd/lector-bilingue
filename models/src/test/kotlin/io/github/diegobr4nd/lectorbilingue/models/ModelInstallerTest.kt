@@ -43,8 +43,8 @@ class ModelInstallerTest {
     private fun file(name: String, body: ByteArray, size: Long = body.size.toLong()) =
         ModelFile(name, size, sha(body), "https://example.invalid/$name")
 
-    private fun model(id: String = "opus-en-es-2", version: String = "2.0") = CatalogModel(
-        id, "en-es", "opus", version, "CC-BY-4.0", "Helsinki-NLP",
+    private fun model(id: String = "opus-en-es-2", version: String = "2.0", engine: String = "opus") = CatalogModel(
+        id, "en-es", engine, version, "CC-BY-4.0", "Helsinki-NLP",
         listOf(file("model.bin", bodyA), file("vocab.spm", bodyB)),
     )
 
@@ -59,7 +59,7 @@ class ModelInstallerTest {
 
     /** Un modelo anterior ya instalado en `en-es/`. */
     private fun previous(): File {
-        val dir = File(modelsDir, "en-es")
+        val dir = File(modelsDir, "opus/en-es")
         dir.mkdirs()
         File(dir, "model.bin").writeText("viejo")
         File(dir, ".installed.json").writeText(
@@ -87,8 +87,8 @@ class ModelInstallerTest {
     fun install_instalaEnLaCarpetaDelParYDevuelveElModelo() {
         val st = staging()
         val result = ModelInstaller(modelsDir).install(model(), st)
-        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")), result)
-        val dir = File(modelsDir, "en-es")
+        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm"), mapOf("model.bin" to 5000L, "vocab.spm" to 3000L)), result)
+        val dir = File(modelsDir, "opus/en-es")
         assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), dir.list()!!.sorted())
         assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
         assertContentEquals(bodyB, File(dir, "vocab.spm").readBytes())
@@ -106,7 +106,7 @@ class ModelInstallerTest {
     @Test
     fun install_escribeUnInstalledJsonCorrecto() {
         ModelInstaller(modelsDir).install(model(), staging())
-        val text = File(modelsDir, "en-es/.installed.json").readText()
+        val text = File(modelsDir, "opus/en-es/.installed.json").readText()
         val o = JSONObject(text)
         assertEquals("opus-en-es-2", o.getString("id"))
         assertEquals("en-es", o.getString("pair"))
@@ -115,9 +115,26 @@ class ModelInstallerTest {
         val files = o.getJSONArray("files")
         assertEquals(listOf("model.bin", "vocab.spm"), (0 until files.length()).map { files.getString(it) })
         assertEquals(
-            InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")),
+            InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm"), mapOf("model.bin" to 5000L, "vocab.spm" to 3000L)),
             InstalledModel.fromJson(text),
         )
+    }
+
+    @Test
+    fun install_escribeLosTamanosEnInstalledJson() {
+        ModelInstaller(modelsDir).install(model(), staging())
+        val sizes = JSONObject(File(modelsDir, "opus/en-es/.installed.json").readText()).getJSONObject("sizes")
+        assertEquals(5000L, sizes.getLong("model.bin"))
+        assertEquals(3000L, sizes.getLong("vocab.spm"))
+        assertFalse(File(modelsDir, "opus/en-es/.installed.json.tmp").exists(), "no queda el temporal")
+    }
+
+    @Test
+    fun install_ignoraUnTemporalDeInstalledJsonDeUnIntentoAnterior() {
+        val st = staging()
+        File(st, ".installed.json.tmp").writeText("resto")
+        ModelInstaller(modelsDir).install(model(), st)
+        assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), File(modelsDir, "opus/en-es").list()!!.sorted())
     }
 
     // ---------------------------------------------------------------- reemplazo
@@ -126,10 +143,11 @@ class ModelInstallerTest {
     fun install_reemplazaElModeloAnteriorYNoDejaRestos() {
         previous()
         ModelInstaller(modelsDir).install(model(), staging())
-        val dir = File(modelsDir, "en-es")
+        val dir = File(modelsDir, "opus/en-es")
         assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
         assertEquals("opus-en-es-2", InstalledModel.fromJson(File(dir, ".installed.json").readText()).id)
-        assertEquals(listOf("en-es"), modelsDir.list()!!.sorted(), "ni .old-* ni .tmp")
+        assertEquals(listOf("opus"), modelsDir.list()!!.sorted(), "ni .tmp")
+        assertEquals(listOf("en-es"), File(modelsDir, "opus").list()!!.sorted(), "ni .old-*")
     }
 
     @Test
@@ -143,11 +161,11 @@ class ModelInstallerTest {
         }
         installer.install(model(), st)
         assertEquals(2, moves.size)
-        val pairDir = File(modelsDir, "en-es").toPath()
+        val pairDir = File(modelsDir, "opus/en-es").toPath()
         val (from1, to1) = moves[0]
         assertEquals(pairDir.toFile().canonicalFile, from1.toFile().canonicalFile)
         assertTrue(to1.fileName.toString().startsWith(".old-en-es-"))
-        assertEquals(modelsDir.canonicalFile, to1.toFile().canonicalFile.parentFile)
+        assertEquals(File(modelsDir, "opus").canonicalFile, to1.toFile().canonicalFile.parentFile)
         val (from2, to2) = moves[1]
         assertEquals(st.canonicalFile, from2.toFile().canonicalFile)
         assertEquals(pairDir.toFile().canonicalFile, to2.toFile().canonicalFile)
@@ -167,10 +185,11 @@ class ModelInstallerTest {
         val e = assertFailsWith<IOException> { installer.install(model(), st) }
         assertIs<ModelFileException>(e)
         assertNoPath(e)
-        val dir = File(modelsDir, "en-es")
+        val dir = File(modelsDir, "opus/en-es")
         assertEquals("viejo", File(dir, "model.bin").readText())
         assertEquals("opus-en-es-1", InstalledModel.fromJson(File(dir, ".installed.json").readText()).id)
         assertTrue(st.isDirectory, "la descarga verificada se conserva para reintentar")
+        assertFalse(File(modelsDir, "opus").list()!!.any { it.startsWith(".old-") })
         assertFalse(modelsDir.list()!!.any { it.startsWith(".old-") })
     }
 
@@ -179,8 +198,8 @@ class ModelInstallerTest {
         val installer = ModelInstaller(modelsDir, deleteOld = { throw failure }) { from, to -> atomicMove(from, to) }
         val result = installer.install(model(), staging())
         assertEquals("opus-en-es-2", result.id)
-        assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
-        assertTrue(modelsDir.list()!!.any { it.startsWith(".old-en-es-") }, "la vieja queda para la limpieza al arrancar")
+        assertContentEquals(bodyA, File(modelsDir, "opus/en-es/model.bin").readBytes())
+        assertTrue(File(modelsDir, "opus").list()!!.any { it.startsWith(".old-en-es-") }, "la vieja queda para la limpieza al arrancar")
     }
 
     @Test
@@ -206,7 +225,7 @@ class ModelInstallerTest {
         assertFailsWith<IOException> { flaky.install(model(), st) }
         // El .installed.json que quedó en staging no impide reintentar.
         ModelInstaller(modelsDir).install(model(), st)
-        assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
+        assertContentEquals(bodyA, File(modelsDir, "opus/en-es/model.bin").readBytes())
     }
 
     @Test
@@ -218,7 +237,7 @@ class ModelInstallerTest {
         }
         val e = assertFailsWith<IOException> { installer.install(model(), st) }
         assertNoPath(e)
-        assertEquals("viejo", File(modelsDir, "en-es/model.bin").readText())
+        assertEquals("viejo", File(modelsDir, "opus/en-es/model.bin").readText())
     }
 
     @Test
@@ -238,8 +257,68 @@ class ModelInstallerTest {
         assertFailsWith<IntegrityException> {
             ModelInstaller(modelsDir).install(model(), File(modelsDir, ".tmp/opus-en-es-2"))
         }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
         assertTrue(File(realStaging, "model.bin").isFile, "no se mueve nada desde fuera de modelsDir")
+    }
+
+    // ---------------------------------------------------------------- una carpeta por motor
+
+    @Test
+    fun install_firefoxVaASuCarpetaSinTocarOpus() {
+        previous()
+        val result = ModelInstaller(modelsDir).install(model(id = "firefox-en-es-1", engine = "firefox"), staging(id = "firefox-en-es-1"))
+        assertEquals("firefox", result.engine)
+        val ff = File(modelsDir, "firefox/en-es")
+        assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), ff.list()!!.sorted())
+        assertContentEquals(bodyA, File(ff, "model.bin").readBytes())
+        assertEquals("viejo", File(modelsDir, "opus/en-es/model.bin").readText(), "opus/en-es no se toca")
+        assertEquals("opus-en-es-1", InstalledModel.fromJson(File(modelsDir, "opus/en-es/.installed.json").readText()).id)
+        assertEquals(listOf("firefox", "opus"), modelsDir.list()!!.sorted())
+    }
+
+    @Test
+    fun install_reemplazoDeFirefoxDejaSuViejaEnFirefoxYLaLimpia() {
+        previous()
+        val m1 = model(id = "firefox-en-es-1", engine = "firefox", version = "1.0")
+        ModelInstaller(modelsDir).install(m1, staging(id = "firefox-en-es-1"))
+        val moves = mutableListOf<Pair<Path, Path>>()
+        val installer = ModelInstaller(modelsDir) { from, to ->
+            moves += from to to
+            atomicMove(from, to)
+        }
+        val m2 = model(id = "firefox-en-es-2", engine = "firefox", version = "2.0")
+        installer.install(m2, staging(id = "firefox-en-es-2"))
+        val old = moves[0].second
+        assertTrue(old.fileName.toString().startsWith(".old-en-es-"))
+        assertEquals(File(modelsDir, "firefox").canonicalFile, old.toFile().canonicalFile.parentFile)
+        assertFalse(Files.exists(old), "la vieja se borra al final")
+        assertEquals(listOf("en-es"), File(modelsDir, "firefox").list()!!.sorted())
+        assertEquals(listOf("en-es"), File(modelsDir, "opus").list()!!.sorted(), "opus no se toca")
+        assertEquals("firefox-en-es-2", InstalledModel.fromJson(File(modelsDir, "firefox/en-es/.installed.json").readText()).id)
+    }
+
+    @Test
+    fun install_motorInvalidoLanzaIAE() {
+        for (bad in listOf("..", ".tmp", "otro", "Opus")) {
+            assertFailsWith<IllegalArgumentException>(bad) { ModelInstaller(modelsDir).install(model(engine = bad), staging()) }
+        }
+        assertEquals(listOf(".tmp"), modelsDir.list()!!.sorted())
+    }
+
+    @Test
+    fun install_carpetaDeMotorQueEsEnlaceNoInstalaFuera() {
+        val outside = tmp.newFolder("fuera")
+        val created = try {
+            Files.createSymbolicLink(File(modelsDir, "opus").toPath(), outside.toPath())
+            true
+        } catch (e: Exception) {
+            false // Windows sin privilegios: no se pueden crear enlaces.
+        }
+        Assume.assumeTrue(created)
+        ModelInstaller(modelsDir).install(model(), staging())
+        assertFalse(File(outside, "en-es").exists(), "nada se instala a través de un enlace")
+        assertTrue(Files.isDirectory(File(modelsDir, "opus").toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertContentEquals(bodyA, File(modelsDir, "opus/en-es/model.bin").readBytes())
     }
 
     // ---------------------------------------------------------------- re-verificación
@@ -251,14 +330,14 @@ class ModelInstallerTest {
         val e = assertFailsWith<IntegrityException> { ModelInstaller(modelsDir).install(model(), st) }
         assertTrue(e.message.orEmpty().contains("model.bin"))
         assertFalse(e.message.orEmpty().contains(sha(bodyA)))
-        assertEquals("viejo", File(modelsDir, "en-es/model.bin").readText())
+        assertEquals("viejo", File(modelsDir, "opus/en-es/model.bin").readText())
     }
 
     @Test
     fun install_tamanoDistintoLanzaIntegrity() {
         val st = staging(b = bodyB.copyOfRange(0, 100))
         assertFailsWith<IntegrityException> { ModelInstaller(modelsDir).install(model(), st) }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     @Test
@@ -266,7 +345,7 @@ class ModelInstallerTest {
         val st = staging()
         File(st, "vocab.spm").delete()
         assertFailsWith<IntegrityException> { ModelInstaller(modelsDir).install(model(), st) }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     @Test
@@ -274,7 +353,7 @@ class ModelInstallerTest {
         val st = staging()
         File(st, "extra.so").writeText("x")
         assertFailsWith<IntegrityException> { ModelInstaller(modelsDir).install(model(), st) }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     @Test
@@ -282,7 +361,7 @@ class ModelInstallerTest {
         val st = staging()
         File(st, "sub").mkdirs()
         assertFailsWith<IntegrityException> { ModelInstaller(modelsDir).install(model(), st) }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     @Test
@@ -301,7 +380,7 @@ class ModelInstallerTest {
         assertFailsWith<IllegalArgumentException> { ModelInstaller(modelsDir).install(model(), elsewhere) }
         val otherId = staging(id = "otro-id")
         assertFailsWith<IllegalArgumentException> { ModelInstaller(modelsDir).install(model(), otherId) }
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     // ---------------------------------------------------------------- InstalledModel

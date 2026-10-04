@@ -7,6 +7,7 @@ import io.github.diegobr4nd.lectorbilingue.core.text.SentenceSplitter
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.engine.opus.OpusEngine
+import io.github.diegobr4nd.lectorbilingue.models.Models
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -32,8 +33,9 @@ class CalidadBeamTest {
 
     @Test fun generaComparacionBeam1YBeam4() = runBlocking<Unit> {
         assumeTrue("pasa -e calidad 1 para correrlo", InstrumentationRegistry.getArguments().getString("calidad") == "1")
-        val probe = OpusEngine(File(context.filesDir, "models"))
-        assumeTrue("modelo no copiado", probe.isModelPresent(pair))
+        Models.recover(context)
+        val modelDir = Models.installedDir(context, "opus", "en-es")
+        assumeTrue("modelo no instalado", modelDir != null)
         assumeTrue("otro motor ya cargado en el proceso", OpusEngine.loadedEngineCount() == 0)
 
         val privateFile = File(context.filesDir, "bench/textos.txt")
@@ -48,7 +50,7 @@ class CalidadBeamTest {
 
         val results = mutableMapOf<Int, List<Pair<String, Long>>>()
         for (beam in listOf(1, 4)) {
-            val engine = OpusEngine(File(context.filesDir, "models"))
+            val engine = OpusEngine({ modelDir })
             try {
                 engine.load(pair, EngineConfig(beamSize = beam, threads = 4))
                 translateParagraph(engine, paragraphs.first()) // calentamiento, no se registra

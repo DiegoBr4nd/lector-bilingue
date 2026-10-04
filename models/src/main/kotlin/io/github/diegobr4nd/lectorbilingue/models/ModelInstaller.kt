@@ -9,23 +9,28 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 /**
- * Instala un modelo ya descargado (`modelsDir/.tmp/<id>/`) en `modelsDir/<pair>/`.
+ * Instala un modelo ya descargado (`modelsDir/.tmp/<id>/`) en `modelsDir/<engine>/<pair>/`, con el
+ * `engine` y el `pair` del catálogo (`engine` ∈ {opus, firefox}; si no → [IllegalArgumentException]).
  *
  * 1. Re-verifica: la carpeta contiene exactamente los archivos del catálogo (sin extras, sin
  *    subcarpetas, sin enlaces), cada uno con su tamaño y SHA-256. Si no → [IntegrityException].
- * 2. Escribe `.installed.json` dentro de la carpeta temporal.
- * 3. Reemplazo: si ya hay un modelo en `<pair>/`, se renombra a `.old-<pair>-<nanoTime>`; luego la
- *    carpeta temporal se renombra (atómico) a `<pair>/`; al final se borra la vieja. Si el segundo
- *    renombrado falla, la vieja vuelve a `<pair>/` y se lanza el error: el modelo anterior sigue
- *    disponible y la descarga verificada queda en `.tmp/<id>/` para reintentar.
+ * 2. Sincroniza a disco (fsync) cada archivo del modelo y luego escribe `.installed.json` (con los tamaños)
+ *    en la carpeta temporal vía archivo temporal + fsync + renombrado atómico; sincroniza también la
+ *    carpeta (en Android/Linux funciona; si el sistema no lo permite, se ignora).
+ * 3. Reemplazo (todo dentro de `<engine>/`, sin tocar otros motores): si ya hay un modelo en
+ *    `<engine>/<pair>/`, se renombra a `<engine>/.old-<pair>-<nanoTime>`; luego la carpeta temporal se
+ *    renombra (atómico) a `<engine>/<pair>/`; al final se borra la vieja. Si el segundo renombrado
+ *    falla, la vieja vuelve a `<pair>/` y se lanza el error: el modelo anterior sigue disponible y la
+ *    descarga verificada queda en `.tmp/<id>/` para reintentar.
  *
  * Contención: `.tmp` y `.tmp/<id>` deben ser carpetas reales (no enlaces); si no → [IntegrityException].
+ * Si `<engine>` es un archivo o un enlace, se borra (nunca su destino) y se crea la carpeta real.
  * Errores de archivos: como los de java.io/nio llevan rutas internas, salen siempre como
  * `IOException("error de archivos al instalar el modelo")`, sin causa.
  *
  * Ventana conocida: entre los dos renombrados `<pair>/` no existe un instante; quien lea el modelo
- * debe tolerar "no instalado" momentáneamente. Si el proceso muere justo ahí, queda `.old-<pair>-*`
- * (lo puede recuperar o borrar quien gestione los modelos al arrancar).
+ * debe tolerar "no instalado" momentáneamente. Si el proceso muere justo ahí, queda
+ * `<engine>/.old-<pair>-*` (lo recupera o borra [ModelStore.recover] al arrancar).
  */
 class ModelInstaller internal constructor(
     private val modelsDir: File,
@@ -34,8 +39,9 @@ class ModelInstaller internal constructor(
 ) {
     constructor(modelsDir: File) : this(modelsDir, move = ::atomicMove)
 
-    /** Re-verifica tamaños y SHA-256 en [staging], escribe .installed.json y lo instala en modelsDir/<pair>/ de forma atómica. */
+    /** Re-verifica tamaños y SHA-256 en [staging], escribe .installed.json y lo instala en modelsDir/<engine>/<pair>/ de forma atómica. */
     fun install(model: CatalogModel, staging: File): InstalledModel {
+        ModelFiles.requireEngine(model.engine)
         ModelFiles.checkNames(model)
         ModelFiles.requireSimpleName(model.id)
         ModelFiles.requireSimpleName(model.pair)
@@ -63,20 +69,30 @@ class ModelInstaller internal constructor(
         }
         val expectedStaging = ModelFiles.child(tmpRoot, model.id)
         val stagingPath = expectedStaging.toPath()
-        val pairDir = ModelFiles.child(modelsDir, model.pair)
 
         // Un .installed.json en staging solo puede venir de un intento anterior fallido: se reescribe.
         val installedJson = File(expectedStaging, ModelFiles.INSTALLED_JSON).toPath()
         ModelFiles.deleteTree(installedJson)
+        ModelFiles.deleteTree(File(expectedStaging, ModelFiles.INSTALLED_JSON + ".tmp").toPath())
         verify(model, expectedStaging)
 
-        val installed = InstalledModel(model.id, model.pair, model.engine, model.modelVersion, model.files.map { it.name })
-        Files.write(installedJson, installed.toJson().toByteArray(Charsets.UTF_8))
+        // Durabilidad: primero los archivos del modelo a disco (fsync), después `.installed.json` (temporal +
+        // fsync + renombrado atómico) y la carpeta. Así un corte de luz nunca deja un JSON válido con un .bin truncado.
+        for (f in model.files) ModelFiles.fsyncFile(ModelFiles.child(expectedStaging, f.name).toPath())
+        val installed = InstalledModel(
+            model.id, model.pair, model.engine, model.modelVersion,
+            model.files.map { it.name }, model.files.associate { it.name to it.size },
+        )
+        ModelFiles.writeAtomic(installedJson, installed.toJson().toByteArray(Charsets.UTF_8))
+        ModelFiles.fsyncDir(stagingPath)
 
-        val pairPath = pairDir.toPath()
+        // La carpeta del motor debe ser real antes de `child`, que comprueba que nada salga de modelsDir.
+        ModelFiles.ensureRealDir(File(modelsDir, model.engine))
+        val engineDir = ModelFiles.child(modelsDir, model.engine)
+        val pairPath = ModelFiles.child(engineDir, model.pair).toPath()
         var old: Path? = null
         if (ModelFiles.existsNoFollow(pairPath)) {
-            val oldPath = ModelFiles.child(modelsDir, ".old-${model.pair}-${System.nanoTime()}").toPath()
+            val oldPath = ModelFiles.child(engineDir, ".old-${model.pair}-${System.nanoTime()}").toPath()
             move(pairPath, oldPath)
             old = oldPath
         }
@@ -101,6 +117,7 @@ class ModelInstaller internal constructor(
                 // Igual: el fallo al borrar la vieja nunca hace fallar una instalación ya hecha.
             }
         }
+        ModelFiles.fsyncDir(engineDir.toPath())
         // La carpeta .tmp se borra solo si quedó vacía (puede haber otras descargas en curso).
         tmpRoot.delete()
         return installed

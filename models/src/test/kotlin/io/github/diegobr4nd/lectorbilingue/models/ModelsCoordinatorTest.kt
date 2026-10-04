@@ -27,11 +27,17 @@ class ModelsCoordinatorTest {
 
     private fun coordinator() = ModelsCoordinator(io = Dispatchers.Unconfined)
 
-    private fun job(c: ModelsCoordinator, recover: () -> Unit, onDownload: () -> Unit = {}) = c.downloadJob(
+    private fun job(
+        c: ModelsCoordinator,
+        recover: () -> Unit,
+        onDownload: () -> Unit = {},
+        migrate: () -> Unit = {},
+    ) = c.downloadJob(
         currentCatalog = { catalog },
         refreshCatalog = { error("no") },
         download = { _, _ -> onDownload(); File("x") },
         install = { _, _ -> installed },
+        migrate = migrate,
         recover = recover,
     )
 
@@ -47,7 +53,7 @@ class ModelsCoordinatorTest {
         held.await()
 
         val download = async { job(c, recover = {}, onDownload = { events += "download" }).run(model.id, 0) { _, _, _ -> } }
-        val import = async { c.import(anyDownloadActive = { false }, recover = {}) { events += "import"; installed } }
+        val import = async { c.import(anyDownloadActive = { false }, migrate = {}, recover = {}) { events += "import"; installed } }
         val delete = async { c.delete { events += "delete" } }
         testScheduler.advanceUntilIdle()
         assertEquals(emptyList(), events, "nadie entra mientras otro tiene el candado")
@@ -69,8 +75,8 @@ class ModelsCoordinatorTest {
         var runs = 0
         val recover = { runs++; Unit }
         job(c, recover).run(model.id, 0) { _, _, _ -> }
-        c.import(anyDownloadActive = { false }, recover = recover) { installed }
-        c.recover(recover)
+        c.import(anyDownloadActive = { false }, migrate = {}, recover = recover) { installed }
+        c.recover(migrate = {}, recover = recover)
         job(c, recover).run(model.id, 0) { _, _, _ -> }
         assertEquals(1, runs)
     }
@@ -78,14 +84,53 @@ class ModelsCoordinatorTest {
     @Test
     fun recoverYaHechaNoEsperaAlCandado() = runTest {
         val c = coordinator()
-        c.recover {}
+        c.recover(migrate = {}, recover = {})
         val release = CompletableDeferred<Unit>()
         val holder = launch { c.withLock { release.await() } }
         testScheduler.advanceUntilIdle()
         assertTrue(c.lock.isLocked)
-        c.recover { error("no debe correr otra vez") } // vuelve en el acto aunque haya una descarga con el candado
+        c.recover(migrate = { error("no debe migrar otra vez") }, recover = { error("no debe correr otra vez") }) // vuelve en el acto aunque haya una descarga con el candado
         release.complete(Unit)
         holder.join()
+    }
+
+    @Test
+    fun laRecuperacionMigraPrimeroYLuegoRecuperaUnaSolaVezConElCandado() = runTest {
+        val c = coordinator()
+        val events = mutableListOf<String>()
+        val migrate = { events += "migrate(locked=${c.lock.isLocked})"; Unit }
+        val recover = { events += "recover(locked=${c.lock.isLocked})"; Unit }
+        c.recover(migrate = migrate, recover = recover)
+        c.recover(migrate = migrate, recover = recover)
+        c.import(anyDownloadActive = { false }, migrate = migrate, recover = recover) { installed }
+        job(c, recover = recover, migrate = migrate).run(model.id, 0) { _, _, _ -> }
+        assertEquals(listOf("migrate(locked=true)", "recover(locked=true)"), events)
+    }
+
+    @Test
+    fun elWorkerTambienMigraAntesDeRecuperar() = runTest {
+        val c = coordinator()
+        val events = mutableListOf<String>()
+        job(
+            c,
+            recover = { events += "recover(locked=${c.lock.isLocked})" },
+            onDownload = { events += "download" },
+            migrate = { events += "migrate(locked=${c.lock.isLocked})" },
+        ).run(model.id, 0) { _, _, _ -> }
+        assertEquals(listOf("migrate(locked=true)", "recover(locked=true)", "download"), events)
+    }
+
+    @Test
+    fun siLaRecuperacionFallaSeReintentaConMigracionIncluida() = runTest {
+        val c = coordinator()
+        val events = mutableListOf<String>()
+        var fail = true
+        assertFailsWith<IllegalStateException> {
+            c.recover(migrate = { events += "migrate" }, recover = { events += "recover"; if (fail) error("x") })
+        }
+        fail = false
+        c.recover(migrate = { events += "migrate" }, recover = { events += "recover" })
+        assertEquals(listOf("migrate", "recover", "migrate", "recover"), events)
     }
 
     // ---------------------------------------------------------------- importación con descargas activas
@@ -95,7 +140,7 @@ class ModelsCoordinatorTest {
         val c = coordinator()
         var ran = false
         assertFailsWith<DownloadInProgressException> {
-            c.import(anyDownloadActive = { true }, recover = { ran = true }) { ran = true; installed }
+            c.import(anyDownloadActive = { true }, migrate = { ran = true }, recover = { ran = true }) { ran = true; installed }
         }
         assertFalse(ran)
         assertFalse(c.lock.isLocked)
@@ -105,12 +150,16 @@ class ModelsCoordinatorTest {
     fun importarSinDescargasRecuperaYLuegoImporta() = runTest {
         val c = coordinator()
         val events = mutableListOf<String>()
-        val result = c.import(anyDownloadActive = { false }, recover = { events += "recover" }) {
+        val result = c.import(
+            anyDownloadActive = { false },
+            migrate = { events += "migrate" },
+            recover = { events += "recover" },
+        ) {
             events += "import(locked=${c.lock.isLocked})"
             installed
         }
         assertEquals(installed, result)
-        assertEquals(listOf("recover", "import(locked=true)"), events)
+        assertEquals(listOf("migrate", "recover", "import(locked=true)"), events)
     }
 
     // ---------------------------------------------------------------- DownloadState

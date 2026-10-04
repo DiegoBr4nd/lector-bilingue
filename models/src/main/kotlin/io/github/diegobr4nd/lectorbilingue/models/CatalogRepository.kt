@@ -23,9 +23,9 @@ import java.nio.file.StandardCopyOption
  * catálogo viejo (par mezclado, no verifica) y el catálogo nuevo aún en `catalog.json.tmp`. Al leer, si el
  * par principal no verifica se prueba `(catalog.json.tmp, catalog.json.minisig)`, verificado como cualquier
  * otro par: así el piso del antirretroceso no baja, y el siguiente [refresh] repara el par principal.
- * Nunca se acepta un par mezclado. No se hace `fsync` de la carpeta tras los renombres (Java no lo expone de
- * forma portable): en el peor caso, tras un corte de luz, se vuelve a un par anterior, que se re-verifica al
- * leer como siempre.
+ * Nunca se acepta un par mezclado. El catálogo NO usa `ModelFiles.fsyncDir` (que los modelos sí usan, en la
+ * medida en que el sistema de archivos lo permita): tras los renombres no se sincroniza la carpeta, y en el
+ * peor caso, tras un corte de luz, se vuelve a un par anterior, que se re-verifica al leer como siempre.
  *
  * Bloqueo: la descarga, la firma y la validación de [refresh] van FUERA del candado; solo el antirretroceso,
  * el guardado y el cálculo del resultado van dentro. Así [current] (llamado desde la UI) nunca espera a la red.

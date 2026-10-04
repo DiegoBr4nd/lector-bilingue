@@ -7,3 +7,6 @@
 [submodule "native/third_party/abseil-cpp"]
 	path = native/third_party/abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
+[submodule "native/third_party/slimt"]
+	path = native/third_party/slimt
+	url = https://github.com/jerinphilip/slimt.git

@@ -27,17 +27,18 @@ class ModelActionsTest {
 
     private fun catalog(vararg m: CatalogModel) = Catalog(1, Instant.EPOCH, m.toList())
 
-    @Test fun `elige el modelo en-es de opus`() {
+    @Test fun `la seleccion por par devuelve OPUS y Firefox ordenados`() {
         val c = catalog(
             model("firefox-en-es", "en-es", "firefox", 5),
             model("opus-es-en", "es-en", "opus", 5),
             model("opus-en-es", "en-es", "opus", 5),
         )
-        assertEquals("opus-en-es", ModelActions.pickModel(c)?.id)
+        assertEquals(listOf("opus-en-es", "firefox-en-es"), ModelActions.pickModels(c, "en-es").map { it.id })
+        assertEquals(listOf("opus-es-en"), ModelActions.pickModels(c, "es-en").map { it.id })
     }
 
-    @Test fun `sin modelo en-es opus devuelve null`() {
-        assertNull(ModelActions.pickModel(catalog(model("firefox-en-es", "en-es", "firefox", 5))))
+    @Test fun `sin modelos del par devuelve lista vacia`() {
+        assertEquals(emptyList(), ModelActions.pickModels(catalog(model("firefox-en-es", "en-es", "firefox", 5)), "es-en"))
     }
 
     @Test fun `formatea megabytes redondeando al mas cercano`() {
@@ -111,7 +112,7 @@ class ModelActionsTest {
 
     @Test fun `solo cancelar, importar bien y descargar bien no son errores`() {
         val ok = ModelMessage.entries.filter { !it.isError }.toSet()
-        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK, ModelMessage.DOWNLOAD_OK), ok)
+        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK, ModelMessage.DOWNLOAD_OK, ModelMessage.DELETE_OK), ok)
     }
 
     @Test fun `mensaje final de la descarga segun el estado`() {

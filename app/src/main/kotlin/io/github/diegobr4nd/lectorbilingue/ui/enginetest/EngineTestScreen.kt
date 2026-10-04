@@ -9,11 +9,22 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
+import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,8 +65,10 @@ fun EngineTestScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // En Android 13+ se pide el permiso de notificaciones antes de encolar; si se niega, se descarga igual.
+    var pendingModelId by remember { mutableStateOf<String?>(null) }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        viewModel.downloadModel()
+        pendingModelId?.let(viewModel::downloadModel)
+        pendingModelId = null
     }
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importModel(uri)
@@ -65,11 +78,19 @@ fun EngineTestScreen(
         onInputChange = viewModel::onInputChange,
         onTranslate = viewModel::translate,
         onBenchmark = viewModel::runBenchmark,
-        onDownload = {
+        onSelectEngine = viewModel::selectEngine,
+        onSelectPair = viewModel::selectPair,
+        onDeleteModel = viewModel::deleteModel,
+        onDownload = { modelId ->
             val needsAsk = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
-            if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.downloadModel()
+            if (needsAsk) {
+                pendingModelId = modelId
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.downloadModel(modelId)
+            }
         },
         onCancelDownload = viewModel::cancelDownload,
         onImport = { importPicker.launch(arrayOf("application/zip")) },
@@ -83,12 +104,14 @@ fun EngineTestContent(
     onInputChange: (String) -> Unit,
     onTranslate: () -> Unit,
     onBenchmark: () -> Unit,
-    onDownload: () -> Unit = {},
+    onDownload: (String) -> Unit = {},
+    onSelectEngine: (EngineSwitch) -> Unit = {},
+    onSelectPair: (PairChoice) -> Unit = {},
+    onDeleteModel: (String) -> Unit = {},
     onImport: () -> Unit = {},
     onCancelDownload: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val ready = state.modelStatus == ModelStatus.READY
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
@@ -100,45 +123,199 @@ fun EngineTestContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(R.string.engine_test_title), style = MaterialTheme.typography.titleLarge)
-            ModelStatusCard(state)
-            ModelManagerCard(state, onDownload, onImport, onCancelDownload)
+            EngineControlsCard(state, onSelectEngine, onSelectPair)
+            ModelStatusCard(state, onUseOffer = onSelectEngine, onDownload = onDownload, onDeleteModel = onDeleteModel)
+            ModelManagerCard(state, onDownload, onDeleteModel, onImport, onCancelDownload)
             OutlinedTextField(
                 value = state.input,
                 onValueChange = onInputChange,
-                label = { Text(stringResource(R.string.input_label)) },
+                label = {
+                    Text(stringResource(if (state.pair == PairChoice.ES_EN) R.string.input_label_es else R.string.input_label))
+                },
                 minLines = 4,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
-                onClick = onTranslate,
-                enabled = !state.busy && ready && state.input.isNotBlank(),
-            ) { Text(stringResource(R.string.translate_button)) }
+            val translateBlock = ScreenRules.translateBlock(state)
+            Button(onClick = onTranslate, enabled = translateBlock == null) {
+                Text(stringResource(R.string.translate_button))
+            }
+            BlockReason(translateBlock)
+            if (state.busy && !state.measuring) BusyRow(R.string.translating)
             if (state.output.isNotEmpty()) {
                 SelectionContainer {
                     Text(state.output, style = MaterialTheme.typography.bodyLarge)
                 }
                 state.lastMillis?.let { Text(stringResource(R.string.elapsed_ms, it)) }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onBenchmark, enabled = !state.busy && ready) {
-                    Text(stringResource(R.string.benchmark_button))
-                }
-                if (state.busy) {
-                    val working = stringResource(R.string.working_description)
-                    CircularProgressIndicator(Modifier.semantics { contentDescription = working })
-                    Text(stringResource(R.string.bench_measuring), style = MaterialTheme.typography.bodyMedium)
-                }
+            val benchAvailable = ScreenRules.benchAvailable(state)
+            val measureBlock = ScreenRules.measureBlock(state)
+            Button(onClick = onBenchmark, enabled = measureBlock == null && benchAvailable) {
+                Text(stringResource(R.string.benchmark_button))
             }
-            state.benchmark?.let { BenchmarkCard(it, state.benchSource) }
+            BlockReason(measureBlock)
+            if (state.busy && state.measuring) BusyRow(R.string.bench_measuring)
+            if (!benchAvailable || state.benchNoTexts) {
+                Text(
+                    stringResource(R.string.bench_no_texts),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+            state.benchmark?.let { result ->
+                val engine = state.benchEngine
+                val pair = state.benchPair
+                if (engine != null && pair != null) {
+                    Text(
+                        stringResource(R.string.bench_measured_with, engine.label(), pair.label()),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                BenchmarkCard(result, state.benchSource)
+            }
             state.errorMessage?.takeIf { state.modelStatus != ModelStatus.ERROR }?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
         }
     }
 }
 
+/** Rueda de progreso con su texto (traduciendo o midiendo). */
 @Composable
-private fun ModelStatusCard(state: EngineTestUiState) {
+private fun BusyRow(@StringRes text: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val working = stringResource(R.string.working_description)
+        CircularProgressIndicator(Modifier.semantics { contentDescription = working })
+        Text(stringResource(text), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun EngineId.label(): String = stringResource(
+    when (this) {
+        EngineId.OPUS -> R.string.engine_opus
+        EngineId.FIREFOX -> R.string.engine_firefox
+    },
+)
+
+@Composable
+private fun PairChoice.label(): String =
+    stringResource(if (this == PairChoice.EN_ES) R.string.pair_en_es else R.string.pair_es_en)
+
+@Composable
+private fun EngineControlsCard(
+    state: EngineTestUiState,
+    onSelectEngine: (EngineSwitch) -> Unit,
+    onSelectPair: (PairChoice) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val lock = ScreenRules.lockReason(state)
+            val controlsEnabled = lock == null
+            Text(stringResource(R.string.engine_section_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.engine_switch_label), style = MaterialTheme.typography.labelLarge)
+            ChoiceChips(
+                options = EngineSwitch.entries,
+                selected = state.engineSwitch,
+                enabled = controlsEnabled,
+                onSelect = onSelectEngine,
+            ) { option ->
+                stringResource(
+                    when (option) {
+                        EngineSwitch.AUTO -> R.string.engine_auto
+                        EngineSwitch.OPUS -> R.string.engine_opus
+                        EngineSwitch.FIREFOX -> R.string.engine_firefox
+                    },
+                )
+            }
+            Text(stringResource(R.string.pair_label), style = MaterialTheme.typography.labelLarge)
+            ChoiceChips(
+                options = PairChoice.entries,
+                selected = state.pair,
+                enabled = controlsEnabled,
+                onSelect = onSelectPair,
+            ) { option -> option.label() }
+            if (lock != null) {
+                Text(
+                    stringResource(lock.textRes()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+        }
+    }
+}
+
+@StringRes
+private fun LockReason.textRes(): Int = when (this) {
+    LockReason.DOWNLOADING -> R.string.lock_downloading
+    LockReason.MODEL_BUSY -> R.string.lock_model_busy
+    LockReason.LOADING -> R.string.lock_loading
+    LockReason.TRANSLATING -> R.string.lock_translating
+    LockReason.MEASURING -> R.string.lock_measuring
+}
+
+/**
+ * Elección única con chips que saltan de línea (FlowRow). Antes eran botones segmentados, pero con la letra
+ * al 200 % "Automático" no cabía en un tercio del ancho; los chips se acomodan solos.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChoiceChips(
+    options: List<T>,
+    selected: T,
+    enabled: Boolean,
+    onSelect: (T) -> Unit,
+    label: @Composable (T) -> String,
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                enabled = enabled,
+                label = { Text(label(option), maxLines = 1) },
+                // Elección única: se anuncia como botón de radio, no como casilla.
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .semantics { role = Role.RadioButton },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EngineLine(state: EngineTestUiState) {
+    val engine = state.engineInUse
+    val reason = state.reason
+    val text = if (engine == null || reason == null) {
+        stringResource(R.string.engine_line_none)
+    } else {
+        when (reason) {
+            Reason.FORCED -> stringResource(R.string.engine_line_forced, engine.label())
+            Reason.RAM -> stringResource(R.string.engine_line_ram, engine.label(), state.ramText)
+            Reason.ONLY_INSTALLED -> stringResource(R.string.engine_line_only, engine.label())
+        }
+    }
+    Text(text)
+}
+
+@Composable
+private fun ModelStatusCard(
+    state: EngineTestUiState,
+    onUseOffer: (EngineSwitch) -> Unit,
+    onDownload: (String) -> Unit,
+    onDeleteModel: (String) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Región "viva": TalkBack anuncia el cambio de estado del modelo sin que el usuario lo busque.
@@ -152,16 +329,56 @@ private fun ModelStatusCard(state: EngineTestUiState) {
                     CircularProgressIndicator(Modifier.semantics { contentDescription = working })
                     Text(stringResource(R.string.model_loading), modifier = live)
                 }
-                ModelStatus.READY -> Text(stringResource(R.string.model_ready), modifier = live)
-                ModelStatus.MISSING -> Column(modifier = live) {
-                    Text(stringResource(R.string.model_missing))
-                    Text(stringResource(R.string.model_missing_hint))
+                ModelStatus.READY -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.model_ready))
+                    EngineLine(state)
                 }
-                ModelStatus.ERROR -> Text(
-                    stringResource(R.string.model_error),
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = live,
-                )
+                ModelStatus.MISSING -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val missing = state.missingEngine
+                    if (missing != null) {
+                        Text(stringResource(R.string.model_missing_engine, missing.label(), state.pair.label()))
+                        val missingRow = state.models.firstOrNull { it.engine == missing && !it.installed }
+                        if (missingRow != null) {
+                            Button(
+                                onClick = { onDownload(missingRow.id) },
+                                enabled = !state.modelBusy,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) { Text(stringResource(R.string.download_row_button, missingRow.engine.label())) }
+                        } else {
+                            // El catálogo no tiene ese modelo: no hay botón de descarga al que apuntar.
+                            Text(stringResource(R.string.model_missing_no_row, missing.label(), state.pair.label()))
+                        }
+                    }
+                }
+                ModelStatus.ERROR -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val failed = state.engineInUse
+                    Text(
+                        if (failed != null) {
+                            stringResource(R.string.model_error, failed.label(), state.pair.label())
+                        } else {
+                            stringResource(R.string.model_error_generic)
+                        },
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    state.loadOffer?.let { offer ->
+                        Text(stringResource(R.string.load_offer_text, offer.failed.label(), offer.alternative.label()))
+                        OutlinedButton(
+                            onClick = {
+                                onUseOffer(EngineSwitch.of(offer.alternative))
+                            },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text(stringResource(R.string.load_offer_button, offer.alternative.label())) }
+                    }
+                    // Borrar el modelo que falló permite descargarlo de nuevo.
+                    val failedRow = state.models.firstOrNull { it.engine == failed && it.installed }
+                    if (failedRow != null) {
+                        OutlinedButton(
+                            onClick = { onDeleteModel(failedRow.id) },
+                            enabled = !state.modelBusy && !state.busy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text(stringResource(R.string.delete_row_button, failedRow.engine.label())) }
+                    }
+                }
             }
         }
     }
@@ -170,55 +387,26 @@ private fun ModelStatusCard(state: EngineTestUiState) {
 @Composable
 private fun ModelManagerCard(
     state: EngineTestUiState,
-    onDownload: () -> Unit,
+    onDownload: (String) -> Unit,
+    onDeleteModel: (String) -> Unit,
     onImport: () -> Unit,
     onCancelDownload: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onDownload,
-                enabled = !state.modelBusy,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) {
+            Text(stringResource(R.string.models_title, state.pair.label()), style = MaterialTheme.typography.titleMedium)
+            if (state.models.isEmpty()) Text(stringResource(R.string.models_empty))
+            state.models.forEach { row ->
+                ModelRowItem(state, row, onDownload, onDeleteModel, onCancelDownload)
+            }
+            if (ScreenRules.showWifiHint(state)) {
                 Text(
-                    if (state.modelStatus == ModelStatus.READY) {
-                        stringResource(R.string.download_again_button)
-                    } else {
-                        state.modelSizeMb?.let { stringResource(R.string.download_button_size, it) }
-                            ?: stringResource(R.string.download_button)
-                    },
+                    stringResource(R.string.download_wifi_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                stringResource(R.string.download_wifi_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (state.downloading) {
-                val description = stringResource(R.string.download_progress_description)
-                val fraction = state.downloadFraction
-                if (fraction != null) {
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .semantics { contentDescription = description },
-                    )
-                    Text(stringResource(R.string.download_progress_percent, (fraction * 100).toInt()))
-                } else {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .semantics { contentDescription = description },
-                    )
-                    Text(
-                        stringResource(
-                            if (state.downloadQueued) R.string.download_queued else R.string.download_preparing,
-                        ),
-                    )
-                }
-            } else if (state.modelBusy && state.phase != ModelPhase.NONE) {
+            if (state.modelBusy && !state.downloading && state.phase != ModelPhase.NONE) {
                 val busyDescription = stringResource(R.string.model_busy_description)
                 LinearProgressIndicator(
                     modifier = Modifier
@@ -227,22 +415,17 @@ private fun ModelManagerCard(
                 )
                 Text(
                     stringResource(
-                        if (state.phase == ModelPhase.IMPORTING) R.string.phase_importing else R.string.phase_catalog,
+                        when (state.phase) {
+                            ModelPhase.IMPORTING -> R.string.phase_importing
+                            ModelPhase.DELETING -> R.string.phase_deleting
+                            else -> R.string.phase_catalog
+                        },
                     ),
                 )
             }
-            if (state.downloading) {
-                OutlinedButton(
-                    onClick = onCancelDownload,
-                    enabled = !state.cancelling,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(if (state.cancelling) R.string.cancelling else R.string.cancel_download_button))
-                }
-            }
             OutlinedButton(
                 onClick = onImport,
-                enabled = !state.modelBusy,
+                enabled = !state.modelBusy && !state.busy,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.import_button)) }
             state.modelMessage?.let {
@@ -252,6 +435,78 @@ private fun ModelManagerCard(
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
+        }
+    }
+}
+
+/** Una fila: motor, tamaño y estado en texto (no solo color), con su botón Descargar, Cancelar o Borrar. */
+@Composable
+private fun ModelRowItem(
+    state: EngineTestUiState,
+    row: ModelRow,
+    onDownload: (String) -> Unit,
+    onDeleteModel: (String) -> Unit,
+    onCancelDownload: () -> Unit,
+) {
+    val isActive = state.downloading && state.activeModelId == row.id
+    val status = stringResource(
+        when {
+            isActive -> R.string.model_row_downloading
+            row.installed -> R.string.model_row_installed
+            else -> R.string.model_row_not_installed
+        },
+    )
+    val engineName = row.engine.label()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            stringResource(R.string.model_row_info, engineName, row.sizeMb, status),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (isActive) {
+            val description = stringResource(R.string.download_progress_description)
+            val fraction = state.downloadFraction
+            if (fraction != null) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = description },
+                )
+                Text(stringResource(R.string.download_progress_percent, (fraction * 100).toInt()))
+            } else {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = description },
+                )
+                Text(stringResource(if (state.downloadQueued) R.string.download_queued else R.string.download_preparing))
+            }
+            OutlinedButton(
+                onClick = onCancelDownload,
+                enabled = !state.cancelling,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(
+                    if (state.cancelling) {
+                        stringResource(R.string.cancelling)
+                    } else {
+                        stringResource(R.string.cancel_row_button, engineName)
+                    },
+                )
+            }
+        } else if (row.installed) {
+            OutlinedButton(
+                onClick = { onDeleteModel(row.id) },
+                enabled = !state.modelBusy && !state.busy,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.delete_row_button, engineName)) }
+        } else {
+            Button(
+                onClick = { onDownload(row.id) },
+                enabled = !state.modelBusy,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.download_row_button, engineName)) }
         }
     }
 }
@@ -273,6 +528,7 @@ private fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.IMPORT_NO_MATCH -> R.string.msg_import_no_match
     ModelMessage.IMPORT_OK -> R.string.msg_import_ok
     ModelMessage.DOWNLOAD_OK -> R.string.msg_download_ok
+    ModelMessage.DELETE_OK -> R.string.msg_delete_ok
     ModelMessage.UNKNOWN -> R.string.msg_unknown
 }
 
@@ -323,4 +579,62 @@ private fun EngineTestContentPreview() {
             onBenchmark = {},
         )
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EngineTestMissingPreview() {
+    LectorBilingueTheme {
+        EngineTestContent(
+            state = EngineTestUiState(
+                modelStatus = ModelStatus.MISSING,
+                pair = PairChoice.ES_EN,
+                missingEngine = EngineId.FIREFOX,
+                models = listOf(ModelRow("firefox-es-en-1", EngineId.FIREFOX, PairChoice.ES_EN, 40, false)),
+            ),
+            onInputChange = {},
+            onTranslate = {},
+            onBenchmark = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EngineTestErrorPreview() {
+    LectorBilingueTheme {
+        EngineTestContent(
+            state = EngineTestUiState(
+                modelStatus = ModelStatus.ERROR,
+                engineInUse = EngineId.OPUS,
+                reason = Reason.RAM,
+                loadOffer = LoadOffer(EngineId.OPUS, EngineId.FIREFOX),
+                models = listOf(
+                    ModelRow("opus-en-es-1", EngineId.OPUS, PairChoice.EN_ES, 120, true),
+                    ModelRow("firefox-en-es-1", EngineId.FIREFOX, PairChoice.EN_ES, 40, true),
+                ),
+            ),
+            onInputChange = {},
+            onTranslate = {},
+            onBenchmark = {},
+        )
+    }
+}
+
+/** Por qué un botón de acción está desactivado: un texto corto y "vivo" justo debajo del botón. */
+@Composable
+private fun BlockReason(block: ActionBlock?) {
+    if (block == null) return
+    Text(
+        stringResource(
+            when (block) {
+                is ActionBlock.Lock -> block.reason.textRes()
+                ActionBlock.NotReady -> R.string.action_not_ready
+                ActionBlock.EmptyInput -> R.string.action_empty_input
+            },
+        ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }

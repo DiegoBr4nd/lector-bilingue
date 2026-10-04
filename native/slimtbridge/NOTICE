@@ -1,0 +1,60 @@
+libslimtbridge.so (motor Firefox de lector-bilingue)
+====================================================
+
+Esta biblioteca une el puente JNI de lector-bilingue (GPL-3.0, ver LICENSE en la raíz)
+con el siguiente código de terceros, compilado desde submódulos de git con commit fijo.
+Los textos completos de las licencias están en la carpeta de cada submódulo, salvo
+XHScanner (abajo), que solo trae la nota "BSD license" en su encabezado.
+
+slimt
+  https://github.com/jerinphilip/slimt  commit 9f0b1a20d14871cc94dbe65b7a3df128e5e81f55
+  Copyright (C) 2023 slimt Authors (Jerin Philip, George Tom)
+  Licencia: GPL-2.0-or-later (native/third_party/slimt/COPYRIGHT y LICENSE)
+  Partes derivadas de browsermt/bergamot-translator y browsermt/marian-dev:
+    Licencia: MPL-2.0 (https://www.mozilla.org/en-US/MPL/2.0/)
+  slimt/simd/neon.h parece derivado de neon_mathfun de Julien Pommier (licencia zlib).
+  Parches propios (native/slimtbridge/patches/0001..0004): GPL-2.0-or-later.
+
+XHScanner (slimt/XHScanner.cc y .hh, compilado; lo usa el modo HTML de slimt)
+  https://www.codeproject.com/Articles/14076/Fast-and-Compact-HTML-XML-Scanner-Tokenizer
+  (C) Andrew Fedoniouk @ terrainformatica.com
+  Licencia: BSD (el encabezado dice solo "BSD license", sin texto completo ni
+  variante). Se conserva el aviso de copyright tal cual. Términos BSD: se permite
+  usar, modificar y redistribuir en código fuente o binario siempre que se conserve
+  el aviso de copyright y esta nota; se distribuye SIN GARANTÍA.
+
+browsermt/ssplit-cpp (Splitter/Regex de slimt)
+  https://github.com/browsermt/ssplit-cpp
+  Licencia: Apache-2.0
+  Nota: estos archivos están en el submódulo pero NO se compilan; los reemplaza
+  native/slimtbridge/compat/SentenceStreamNoSplit.cc (GPL-2.0-or-later). Por eso
+  tampoco se usa PCRE2.
+
+SentencePiece (fork browsermt, submódulo de slimt)
+  https://github.com/browsermt/sentencepiece  commit 8cbdf13794284c30877936f91c6f31e2c1d5aef7
+  Copyright 2016 Google Inc.
+  Licencia: Apache-2.0
+  Incluye, dentro de third_party/:
+    protobuf-lite  Copyright 2008 Google Inc.            Licencia: BSD-3-Clause
+    darts_clone    Copyright (c) 2008-2011 Susumu Yata   Licencia: BSD-2-Clause
+    absl (copia parcial)  Copyright Google                Licencia: Apache-2.0
+
+ruy (submódulo de slimt)
+  https://github.com/google/ruy  commit c04e5e52ae6b144f74ac032652e3c538bda15c9b
+  Copyright 2019 Google LLC
+  Licencia: Apache-2.0
+
+cpuinfo (submódulo de ruy)
+  https://github.com/pytorch/cpuinfo  commit 082deffc80ce517f81dc2f3aebe6ba671fcd09c9
+  Copyright (c) 2019 Google LLC; (c) 2017-2018 Facebook Inc.;
+  (C) 2012-2017 Georgia Institute of Technology; (C) 2010-2012 Marat Dukhan
+  Licencia: BSD-2-Clause
+
+Licencia del conjunto
+  slimt es GPL-2.0-or-later; lector-bilingue es GPL-3.0. El binario combinado se
+  distribuye bajo GPL-3.0. Las licencias Apache-2.0, MPL-2.0, BSD (incluida la de XHScanner) y zlib de las
+  partes anteriores son compatibles con GPL-3.0.
+
+Modelos
+  Los modelos de traducción de Firefox (Mozilla, MPL-2.0) no van dentro de esta
+  biblioteca: se descargan aparte con su huella SHA-256.
