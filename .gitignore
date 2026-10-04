@@ -19,3 +19,6 @@ __pycache__/
 
 # Claves privadas de minisign; nunca al repo
 *.key
+
+# Bocetos y bitácoras locales de las herramientas de Claude (nunca al repo)
+.superpowers/
