@@ -66,12 +66,25 @@ class ProductionCatalogTest {
     fun verificador_aceptaElCatalogoRealYElParserLoLee() {
         verifier.verify(catalog, signature)
         val parsed = CatalogParser.parse(catalog)
-        assertEquals(1, parsed.models.size)
-        val m = parsed.models.single()
-        assertEquals("opus-en-es-tcbig-2026.10", m.id)
-        assertEquals("en-es", m.pair)
-        assertEquals("opus", m.engine)
-        assertEquals(8, m.files.size)
+        assertEquals(4, parsed.models.size)
+        val byId = parsed.models.associateBy { it.id }
+        assertEquals(
+            setOf("opus-en-es-tcbig-2026.10", "firefox-en-es-3.0", "firefox-es-en-3.0", "opus-es-en-tcbig-2026.10"),
+            byId.keys,
+        )
+        fun esperado(id: String, pair: String, engine: String, files: Int) {
+            val m = byId.getValue(id)
+            assertEquals(pair, m.pair, id)
+            assertEquals(engine, m.engine, id)
+            assertEquals(files, m.files.size, id)
+        }
+        esperado("opus-en-es-tcbig-2026.10", "en-es", "opus", 8)
+        esperado("firefox-en-es-3.0", "en-es", "firefox", 7)
+        esperado("firefox-es-en-3.0", "es-en", "firefox", 7)
+        esperado("opus-es-en-tcbig-2026.10", "es-en", "opus", 8)
+        for (m in parsed.models.filter { it.engine == "firefox" }) {
+            assertTrue(m.files.any { it.name == "slimt.json" }, "${m.id} debe listar slimt.json")
+        }
     }
 
     @Test
@@ -83,7 +96,10 @@ class ProductionCatalogTest {
             bundled = { catalog to signature },
         )
         val current = assertNotNull(repo.current())
-        assertEquals("opus-en-es-tcbig-2026.10", current.models.single().id)
+        assertEquals(
+            setOf("opus-en-es-tcbig-2026.10", "firefox-en-es-3.0", "firefox-es-en-3.0", "opus-es-en-tcbig-2026.10"),
+            current.models.map { it.id }.toSet(),
+        )
     }
 
     @Test
