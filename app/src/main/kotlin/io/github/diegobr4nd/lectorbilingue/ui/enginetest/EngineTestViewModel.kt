@@ -11,6 +11,7 @@ import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkRunner
 import io.github.diegobr4nd.lectorbilingue.core.text.SentenceSplitter
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.engine.api.ModelNotInstalledException
 import io.github.diegobr4nd.lectorbilingue.engine.opus.OpusEngine
 import io.github.diegobr4nd.lectorbilingue.models.DownloadState
 import io.github.diegobr4nd.lectorbilingue.models.Models
@@ -64,9 +65,9 @@ data class EngineTestUiState(
 /** Temporal (fase 1b): prueba el motor y mide el benchmark. Nunca registra el texto. */
 class EngineTestViewModel(application: Application) : AndroidViewModel(application) {
     private val pair = LanguagePair("en", "es")
-    // Fase 2c: los modelos viven en models/<engine>/<pair>/. Provisional hasta la Tarea 4 (que usará Models.installedDir).
-    private val engine = OpusEngine(File(application.filesDir, "models/opus"))
-    private val _state = MutableStateFlow(EngineTestUiState(modelPath = engine.modelDir(pair).path))
+    // Fase 2c: el motor solo carga lo que el gestor de modelos instaló (lee el disco en su propio hilo).
+    private val engine = OpusEngine({ p -> Models.installedDir(application, "opus", "${p.source}-${p.target}") })
+    private val _state = MutableStateFlow(EngineTestUiState())
     val state: StateFlow<EngineTestUiState> = _state.asStateFlow()
 
     private fun app(): Application = getApplication()
@@ -85,14 +86,16 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Carga (o recarga) el motor con el modelo instalado. */
     private suspend fun loadEngine() {
-        if (!engine.isModelPresent(pair)) {
-            _state.update { it.copy(modelStatus = ModelStatus.MISSING) }
-            return
-        }
         _state.update { it.copy(modelStatus = ModelStatus.LOADING) }
         runCatching { engine.load(pair, EngineConfig()) }
             .onSuccess { _state.update { it.copy(modelStatus = ModelStatus.READY) } }
-            .onFailure { e -> _state.update { it.copy(modelStatus = ModelStatus.ERROR, errorMessage = app().getString(R.string.model_error)) } }
+            .onFailure { e ->
+                if (e is CancellationException) throw e
+                if (e is ModelNotInstalledException) {
+                    _state.update { it.copy(modelStatus = ModelStatus.MISSING) }
+                    return
+                }
+                _state.update { it.copy(modelStatus = ModelStatus.ERROR, errorMessage = app().getString(R.string.model_error)) } }
     }
 
     /** Tamaño del modelo según el catálogo guardado (sin red). Si hay una descarga en curso, la retoma. */
