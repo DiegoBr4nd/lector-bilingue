@@ -1,0 +1,395 @@
+Parche 0004 para slimt (https://github.com/jerinphilip/slimt, commit 9f0b1a20d14871cc94dbe65b7a3df128e5e81f55).
+Qué hace: slimt lee el modelo, la lista corta y el vocabulario sin comparar con el tamaño del
+archivo. Un archivo cortado o dañado leía fuera de la memoria mapeada (SIGSEGV/SIGBUS: la app
+se cerraba en bucle). Con este parche:
+- Io.cc: load_items recibe el tamaño del archivo y cada lectura (versión, número de cabeceras,
+  cabeceras, nombres, formas, relleno de alineación, datos) se compara con lo que queda, con
+  control de desbordamiento en las multiplicaciones y sumas. Cada tensor debe caber en su
+  data_length según su forma y tipo; las matrices int8 deben ser 2-D (+ 4 bytes del
+  multiplicador); los datos empiezan en el límite de 256 bytes del formato. Los mensajes de
+  error son fijos (sin ruta del archivo).
+- Transformer.cc: si el archivo no trae un parámetro que el modelo espera (por ejemplo, más
+  capas en slimt.json que en el modelo), lanza excepción en vez de dejar un tensor vacío que
+  se cae al traducir.
+- Shortlist.cc: tamaño esperado con control de desbordamiento; la tabla de desplazamientos y
+  los índices de palabras se verifican siempre (no solo con check); generate() ignora palabras
+  sin entrada en la tabla en vez de leer fuera de ella.
+- Vocabulary.cc: si SentencePiece no puede leer el vocabulario, lanza excepción (antes se
+  ignoraba el error y el procesador vacío se caía al usarse).
+Todo lanza std::runtime_error; el puente JNI lo convierte en IllegalStateException con mensaje
+fijo ("no se pudo cargar el modelo"). Comprobado contra el modelo oficial en-es de Mozilla
+(base-memory v3.0): cumple todas las reglas nuevas.
+Origen: escrito para lector-bilingue (fase 2c, tarea 9, revisión de seguridad).
+Licencia: GPL-2.0-or-later (obra derivada de slimt; ver native/third_party/slimt/COPYRIGHT).
+Se aplica al compilar (native/slimtbridge/CMakeLists.txt) sobre una copia; el submódulo no se toca.
+Depende de 0003 (se aplica después).
+
+diff --git a/slimt/Io.cc b/slimt/Io.cc
+index f1a905f..6384074 100644
+--- a/slimt/Io.cc
++++ b/slimt/Io.cc
+@@ -8,6 +8,7 @@
+ #include <cassert>
+ #include <cstdint>
+ #include <cstdlib>
++#include <cstring>
+ #include <iostream>
+ #include <stdexcept>
+ #include <string>
+@@ -23,12 +24,65 @@ namespace slimt::io {
+ 
+ namespace {
+ 
+-template <typename Element, typename ReadHead = void*>
+-Element* emit(ReadHead& read_head, uint64_t size = 1) {
+-  auto* begin = reinterpret_cast<Element*>(read_head);
+-  Element* end = begin + size;
+-  read_head = reinterpret_cast<void*>(end);
+-  return begin;
++// Fixed message: never includes the path or any file content.
++[[noreturn]] void corrupt() {
++  throw std::runtime_error("Model file is truncated or corrupt");
++}
++
++// Bounded reader over the mapped model file. Invariant: pos_ <= size_.
++// Every read checks that it fits in what is left of the file (with overflow
++// checks on count * sizeof(Element)), so a truncated or corrupt file throws
++// instead of reading past the end of the mapping.
++class Reader {
++ public:
++  Reader(void* data, size_t size)
++      : base_(static_cast<char*>(data)), size_(data == nullptr ? 0 : size) {}
++
++  template <typename Element>
++  Element* emit(uint64_t count = 1) {
++    uint64_t bytes = 0;
++    if (__builtin_mul_overflow(count, sizeof(Element), &bytes) ||
++        bytes > size_ - pos_) {
++      corrupt();
++    }
++    char* begin = base_ + pos_;
++    pos_ += bytes;
++    return reinterpret_cast<Element*>(begin);
++  }
++
++  // Scalars are copied out: their offset in the file may be unaligned.
++  uint64_t read_u64() {
++    uint64_t value = 0;
++    std::memcpy(&value, emit<char>(sizeof(uint64_t)), sizeof(uint64_t));
++    return value;
++  }
++
++  size_t position() const { return pos_; }
++
++ private:
++  char* base_;
++  size_t size_;
++  size_t pos_ = 0;
++};
++
++// shape.elements() * element_size + extra, with overflow checks. Negative
++// dimensions are rejected.
++uint64_t checked_bytes(const std::vector<int>& dims, uint64_t element_size,
++                       uint64_t extra) {
++  uint64_t elements = 1;
++  for (int dim : dims) {
++    if (dim < 0 ||
++        __builtin_mul_overflow(elements, static_cast<uint64_t>(dim),
++                               &elements)) {
++      corrupt();
++    }
++  }
++  uint64_t bytes = 0;
++  if (__builtin_mul_overflow(elements, element_size, &bytes) ||
++      __builtin_add_overflow(bytes, extra, &bytes)) {
++    corrupt();
++  }
++  return bytes;
+ }
+ 
+ // clang-format off
+@@ -110,15 +164,17 @@ void set_item(Item& item, Aligned&& aligned) {
+   };
+ }
+ 
+-std::vector<io::Item> load_items(void* current) {
+-  uint64_t binary_file_version = *emit<uint64_t>(current);
++std::vector<io::Item> load_items(void* current, size_t file_size) {
++  Reader reader(current, file_size);
++  uint64_t binary_file_version = reader.read_u64();
+   if (binary_file_version != kBinaryFileVersion) {
+     throw std::runtime_error("Binary file versions do not match");
+   }
+ 
+   // Read number of headers and based on the information, the headers.
+-  uint64_t num_headers = *emit<uint64_t>(current);
+-  Header* headers = emit<Header>(current, num_headers);  // NOLINT
++  // The reader checks num_headers * sizeof(Header) against the file size.
++  uint64_t num_headers = reader.read_u64();
++  Header* headers = reader.emit<Header>(num_headers);  // NOLINT
+ 
+   // prepopulate items with meta data from headers
+   std::vector<io::Item> items;
+@@ -128,24 +184,60 @@ std::vector<io::Item> load_items(void* current) {
+ 
+     // Can someone explain the -1? Remains a mystery to me.
+     size_t length = headers[i].name_length;
+-    char* name = emit<char>(current, length);
++    if (length == 0) {
++      corrupt();
++    }
++    char* name = reader.emit<char>(length);
+     items[i].name = std::string(name, length - 1);
+   }
+ 
+   // read in actual shape and data
++  // Bytes each item reads from its data block (checked against data_length).
++  std::vector<uint64_t> required(num_headers, 0);
+   for (uint64_t i = 0; i < num_headers; ++i) {
+     Item& item = items[i];
+ 
+     uint64_t size = headers[i].shape_length;
+-    int* shape = emit<int>(current, size);
++    // Copied out with memcpy: the shape may start at an unaligned offset.
++    const int* shape = reader.emit<int>(size);
++    std::vector<int> dims(size);
++    if (size > 0) {
++      std::memcpy(dims.data(), shape, size * sizeof(int));
++    }
++
++    if (item.type == Type::ig8 && item.name != "Wemb_QuantMultA") {
++      // These branches use dim(-2) x dim(-1) and read a float after the
++      // matrix: a 2-D matrix (or leading dims of 1) plus 4 bytes.
++      if (size < 2) {
++        corrupt();
++      }
++      required[i] = checked_bytes(dims, sizeof(int8_t), sizeof(float));
++      uint64_t matrix = 0;
++      if (__builtin_mul_overflow(static_cast<uint64_t>(dims[size - 2]),
++                                 static_cast<uint64_t>(dims[size - 1]),
++                                 &matrix) ||
++          matrix != required[i] - sizeof(float)) {
++        corrupt();
++      }
++      if (item.name == "Wemb" && matrix % 8 != 0) {
++        corrupt();
++      }
++    } else {
++      required[i] = checked_bytes(dims, size_in_bytes(item.type), 0);
++    }
+ 
+     // This copy has to be incurred, because metadata.
+-    item.shape.set(shape, shape + size);
++    item.shape.set(dims.data(), dims.data() + size);
+   }
+ 
+   // move by offset bytes, aligned to 256-bytes boundary
+-  uint64_t offset = *emit<uint64_t>(current);
+-  emit<char>(current, offset);
++  uint64_t offset = reader.read_u64();
++  reader.emit<char>(offset);
++  // The mapping starts page-aligned; the data section must start on the
++  // 256-byte boundary the format promises.
++  if (reader.position() % 256 != 0) {
++    corrupt();
++  }
+ 
+   // Keep an extra item for embedding processed.
+   Item embedding_processed;
+@@ -153,7 +245,11 @@ std::vector<io::Item> load_items(void* current) {
+   for (uint64_t i = 0; i < num_headers; ++i) {
+     Item& item = items[i];
+     uint64_t size = headers[i].data_length;
+-    char* ptr = emit<char>(current, size);
++    if (required[i] > size ||
++        (item.type != Type::ig8 && reader.position() % sizeof(float) != 0)) {
++      corrupt();
++    }
++    char* ptr = reader.emit<char>(size);
+     // We're about to read-data.
+     // We can either make it point to mmap, which is aligned,
+     // or we can create a new aligned.
+@@ -287,20 +383,20 @@ std::ostream& operator<<(std::ostream& out, const Item& item) {
+ MmapFile::MmapFile(const std::string& filepath) {
+   fd_ = open(filepath.c_str(), O_RDONLY);
+   if (fd_ == -1) {
+-    throw std::runtime_error("Failed to open file: " + filepath);
++    throw std::runtime_error("Failed to open file");
+   }
+ 
+   struct stat st;
+   if (fstat(fd_, &st) == -1) {
+     close(fd_);
+-    throw std::runtime_error("Failed to get file size: " + filepath);
++    throw std::runtime_error("Failed to get file size");
+   }
+   size_ = st.st_size;
+ 
+   data_ = mmap(nullptr, size_, PROT_READ, MAP_PRIVATE, fd_, 0);
+   if (data_ == MAP_FAILED) {  // NOLINT
+     close(fd_);
+-    throw std::runtime_error("Failed to mmap file: " + filepath);
++    throw std::runtime_error("Failed to mmap file");
+   }
+ }
+ 
+diff --git a/slimt/Io.hh b/slimt/Io.hh
+index 4dc6a9c..48a917e 100644
+--- a/slimt/Io.hh
++++ b/slimt/Io.hh
+@@ -41,7 +41,9 @@ using Items = std::vector<Item>;
+ 
+ void set_item(Item& item, Aligned&& aligned);
+ 
+-std::vector<io::Item> load_items(void* current);
++// file_size: bytes readable from current. Throws std::runtime_error if the
++// headers or the data would read past it (truncated or corrupt file).
++std::vector<io::Item> load_items(void* current, size_t file_size);
+ std::ostream& operator<<(std::ostream& out, const Item& item);
+ 
+ void unquantize_embedding_weights(const int8_t* quantized_weights,
+diff --git a/slimt/Shortlist.cc b/slimt/Shortlist.cc
+index a7a3cc2..eb96129 100644
+--- a/slimt/Shortlist.cc
++++ b/slimt/Shortlist.cc
+@@ -46,23 +46,33 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
+    * short_lists array
+    */
+   (void)blob_size;
+-  SLIMT_ABORT_IF(blob_size < sizeof(Header),
+-                 "Shortlist length too short to have a header: " +
+-                     std::to_string(blob_size));
++  SLIMT_ABORT_IF(data == nullptr || blob_size < sizeof(Header),
++                 "Shortlist file is truncated or corrupt");
+ 
+   const char* ptr = static_cast<const char*>(data);
+   const Header& header = *reinterpret_cast<const Header*>(ptr);
+   ptr += sizeof(Header);
+   SLIMT_ABORT_IF(header.magic != kMagic, "Incorrect magic in binary shortlist");
+ 
+-  uint64_t expected_size = sizeof(Header) +
+-                           header.word_to_offset_size * sizeof(uint64_t) +
+-                           header.shortlist_size * sizeof(Word);
++  // Overflow-checked: wrapped products could otherwise match blob_size.
++  uint64_t offsets_bytes = 0;
++  uint64_t words_bytes = 0;
++  uint64_t expected_size = 0;
++  SLIMT_ABORT_IF(
++      __builtin_mul_overflow(header.word_to_offset_size, sizeof(uint64_t),
++                             &offsets_bytes) ||
++          __builtin_mul_overflow(header.shortlist_size, sizeof(Word),
++                                 &words_bytes) ||
++          __builtin_add_overflow(sizeof(Header), offsets_bytes,
++                                 &expected_size) ||
++          __builtin_add_overflow(expected_size, words_bytes, &expected_size),
++      "Shortlist file is truncated or corrupt");
+ 
+   SLIMT_ABORT_IF(expected_size != blob_size,
+-                 "Shortlist header claims file size should be " +
+-                     std::to_string(expected_size) + " but file is " +
+-                     std::to_string(blob_size));
++                 "Shortlist file is truncated or corrupt");
++  // content_check() and generate() read word_to_offset_[size - 1].
++  SLIMT_ABORT_IF(header.word_to_offset_size == 0,
++                 "Shortlist file is truncated or corrupt");
+ 
+   if (check) {
+     size_t length = (       //
+@@ -91,6 +101,19 @@ void ShortlistGenerator::load(const void* data, size_t blob_size,
+ 
+   shortlist_ = reinterpret_cast<const Word*>(ptr);
+ 
++  // Always checked (check only adds the checksum and content_check()):
++  // generate() reads shortlist_[word_to_offset_[w]..word_to_offset_[w + 1])
++  // and writes target_table[shortlist_[j]].
++  for (uint64_t i = 0; i < word_to_offset_size_; i++) {
++    SLIMT_ABORT_IF(word_to_offset_[i] > shortlist_size_,
++                   "Shortlist file is truncated or corrupt");
++  }
++  size_t target_vocabulary_size = target_.size();
++  for (uint64_t j = 0; j < shortlist_size_; j++) {
++    SLIMT_ABORT_IF(shortlist_[j] >= target_vocabulary_size,
++                   "Shortlist file is truncated or corrupt");
++  }
++
+   // Verify offsets and vocab ids are within bounds if requested by user.
+   if (check) {
+     content_check();
+@@ -129,6 +152,12 @@ Shortlist ShortlistGenerator::generate(const Words& words) const {
+   // Collect unique words from source.
+   // Add aligned target words: mark target_table[word] to 1
+   for (auto word : words) {
++    // Words without an entry in the offset table (or outside the vocabularies)
++    // get no shortlist candidates instead of reading out of bounds.
++    if (word >= source_size || word + 1ULL >= word_to_offset_size_ ||
++        (shared_ && word >= target_size)) {
++      continue;
++    }
+     if (shared_) {
+       target_table[word] = true;
+     }
+diff --git a/slimt/Transformer.cc b/slimt/Transformer.cc
+index e5e8a7f..6254ecc 100644
+--- a/slimt/Transformer.cc
++++ b/slimt/Transformer.cc
+@@ -6,6 +6,7 @@
+ #include <cstdio>
+ #include <iostream>
+ #include <optional>
++#include <stdexcept>
+ #include <string>
+ #include <tuple>
+ #include <utility>
+@@ -87,7 +88,7 @@ std::vector<Tensor> Decoder::start_states(size_t batch_size) const {
+ Transformer::Transformer(size_t encoder_layers, size_t decoder_layers,
+                          size_t num_heads, size_t feed_forward_depth,
+                          View model)
+-    : items_(io::load_items(model.data)),
++    : items_(io::load_items(model.data, model.size)),
+       encoder_(encoder_layers, num_heads, feed_forward_depth),  //
+       decoder_(decoder_layers, num_heads, feed_forward_depth, embedding_) {
+   load_parameters();
+@@ -218,9 +219,11 @@ void Transformer::load_parameters() {
+   for (std::string &entry : missed) {
+     std::cerr << "[warn] Failed to ingest expected load of " << entry << "\n";
+   }
+-  for (auto &parameter : parameters) {
+-    std::cerr << "[warn] Failed to complete expected load of ";
+-    std::cerr << parameter.first << "\n";
++  // A parameter the layers expect but the file does not have would stay an
++  // empty tensor (null data) and crash later, while translating. This also
++  // catches more layers in slimt.json than the model has.
++  if (!parameters.empty()) {
++    throw std::runtime_error("Model file is missing parameters");
+   }
+ }
+ 
+diff --git a/slimt/Vocabulary.cc b/slimt/Vocabulary.cc
+index fb7be84..b8e28e8 100644
+--- a/slimt/Vocabulary.cc
++++ b/slimt/Vocabulary.cc
+@@ -4,6 +4,7 @@
+ 
+ #include <cstddef>
+ #include <cstdint>
++#include <stdexcept>
+ #include <string>
+ #include <string_view>
+ #include <tuple>
+@@ -22,8 +23,15 @@
+ namespace slimt {
+ 
+ Vocabulary::Vocabulary(View view) {
++  if (view.data == nullptr || view.size == 0) {
++    throw std::runtime_error("Vocabulary file is truncated or corrupt");
++  }
+   absl::string_view serialized(reinterpret_cast<char *>(view.data), view.size);
+-  processor_.LoadFromSerializedProto(serialized);
++  // The status was ignored: a corrupt file left an unloaded processor that
++  // crashes on first use. Now it fails here, with a fixed message.
++  if (!processor_.LoadFromSerializedProto(serialized).ok()) {
++    throw std::runtime_error("Vocabulary file is truncated or corrupt");
++  }
+ }
+ 
+ Vocabulary::Vocabulary(const std::string &fpath) {

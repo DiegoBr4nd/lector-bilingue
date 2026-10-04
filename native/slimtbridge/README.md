@@ -14,6 +14,7 @@ Puente JNI entre `SlimtNativeBridge` (Kotlin, módulo `:engine:firefox`) y **sli
   - `0001`: `posix_memalign` en vez de `aligned_alloc` (API 26).
   - `0002`: arregla el sesgo de la lista corta en ruy (sin esto, traducciones rotas).
   - `0003`: los `abort()` de slimt lanzan excepción (un modelo dañado no cierra la app).
+  - `0004`: límites al leer modelo, lista corta y vocabulario: un archivo cortado o dañado lanza excepción en vez de leer fuera de la memoria (y faltan parámetros = error al cargar, no al traducir).
 - Sin PCRE2: no se compila el divisor de oraciones de slimt (`Splitter.cc`, `Regex.cc`). Lo reemplaza `compat/SentenceStreamNoSplit.cc`: cada texto que llega es **una** oración. Las oraciones ya vienen partidas por `:core:text`.
 - Sin rutas de la laptop en el `.so`: `-ffile-prefix-map`.
 

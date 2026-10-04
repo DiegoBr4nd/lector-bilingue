@@ -48,7 +48,8 @@ find_package(Git REQUIRED)
 set(SLIMT_PATCHES
   "${CMAKE_CURRENT_LIST_DIR}/patches/0001-posix-memalign.patch"
   "${CMAKE_CURRENT_LIST_DIR}/patches/0002-ruy-selected-bias.patch"
-  "${CMAKE_CURRENT_LIST_DIR}/patches/0003-abort-lanza-excepcion.patch")
+  "${CMAKE_CURRENT_LIST_DIR}/patches/0003-abort-lanza-excepcion.patch"
+  "${CMAKE_CURRENT_LIST_DIR}/patches/0004-limites-al-leer-modelo.patch")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SLIMT_PATCHES})
 
 file(GLOB_RECURSE SLIMT_ORIGINALS RELATIVE "${SLIMT_DIR}"
