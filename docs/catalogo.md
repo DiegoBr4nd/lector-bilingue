@@ -168,10 +168,10 @@ Hay tres modelos más por publicar. Cada uno sigue los pasos 4 a 8, con estas di
 |---|---|---|---|---|---|
 | Firefox en → es | `firefox-model` | `en-es` | `firefox-en-es-v1` | `firefox-en-es-3.0` | MPL-2.0 |
 | Firefox es → en | `firefox-model` | `es-en` | `firefox-es-en-v1` | `firefox-es-en-3.0` | MPL-2.0 |
-| OPUS es → en | `model` | `es-en` | `opus-es-en-v1` | `opus-es-en-tcbig-AAAA.MM` | CC-BY-4.0 |
+| OPUS es → en | `model` | `es-en` | `opus-es-en-v1` | `opus-es-en-tcbig-AAAA.MM` (fecha de hoy) | CC-BY-4.0 |
 
 - El `3.0` es la versión de Mozilla de los modelos (queda anotada en `tools/models/firefox_sources.json`). Si Mozilla publica otra, el id cambia.
-- **Ojo con OPUS es → en:** Helsinki-NLP **no publica** un modelo `opus-mt-tc-big-es-en`. Hoy `model` solo acepta `en-es`. Esa fila queda pendiente hasta elegir otro modelo es → en y fijar sus huellas en `tools/models/convert_opus.py` (tabla `PAIRS`). Cuando exista, se publica igual que los de Firefox pero con el flujo `model`.
+- **OPUS es → en:** no existe un `opus-mt-tc-big-es-en`. Por decisión de Juan se usa `Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en` (OPUS-MT tc-big "muchos a uno": catalán, occitano y español a inglés; CC-BY-4.0). Se corre con el flujo `model` eligiendo `es-en`, igual que `en-es`. Su `MODEL_CARD.md` avisa de que es ese modelo multi-origen; la calidad es → en se comprueba en la puerta.
 - **Qué hace `firefox-model`:** baja de Mozilla los archivos oficiales del par, comprueba **dos** huellas SHA-256 por archivo (la del `.zst` comprimido y la del archivo descomprimido, ambas publicadas por Mozilla) y los deja **sin modificar**. Agrega `slimt.json` (nuestro: dice cuántas capas tiene el modelo; slimt no lo lee del modelo), `LICENSE` (MPL-2.0), `ATTRIBUTION.txt` y `MODEL_CARD.md`. Todo queda en `SHA256SUMS`, así el catálogo firmado también protege `slimt.json`.
 - **zstd:** Mozilla comprime sus archivos con zstd. El flujo instala el programa `zstd` en el servidor de GitHub; tú no necesitas instalarlo.
 
@@ -242,7 +242,10 @@ python tools/catalog/build_catalog.py \
   --catalog /c/Users/JUAN/trabajo-modelo/catalog.json
 ```
 - `--engine firefox` le dice a la app qué motor usa el modelo.
-- Cuando exista el modelo OPUS es → en, el comando es el del paso 6 con `--id opus-es-en-tcbig-AAAA.MM --pair es-en --engine opus --license CC-BY-4.0 --attribution "Helsinki-NLP / OPUS-MT, Tiedemann et al." --release opus-es-en-v1` (el nombre `tcbig` cambia si el modelo elegido no es tc-big).
+- Para OPUS es → en, baja el artefacto `modelo-es-en` del flujo `model` (pasos 4 y 5 con `es-en` en vez de `en-es`; el `.tar.zst` se llama `es-en.tar.zst`) y corre el comando del paso 6 con estos valores (cambia `AAAA.MM` por el año y mes de hoy):
+  - `--id opus-es-en-tcbig-AAAA.MM --pair es-en --engine opus --model-version tc-big-AAAA.MM`
+  - `--license CC-BY-4.0 --attribution "Helsinki-NLP / OPUS-MT, Tiedemann et al."`
+  - `--release opus-es-en-v1`, y `--sums` / `--sizes-from` apuntando a la carpeta `es-en`.
 
 Luego firma (paso 7) y publica el catálogo (paso 8, reemplazando los dos archivos del release `catalogo`). Mira el resultado antes de firmar: debe listar los modelos que esperas, cada uno con sus archivos y direcciones.
 

@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       pair:
-        description: "Par de idiomas (solo en-es: Helsinki-NLP no publica opus-mt-tc-big-es-en)"
+        description: "Par de idiomas (es-en usa el modelo cat/oci/spa a inglés de OPUS-MT)"
         required: true
         type: choice
         default: en-es
         options:
           - en-es
+          - es-en
   pull_request:
     paths:
       - "tools/models/**"
@@ -33,7 +34,7 @@ jobs:
         env:
           PAIR_INPUT: ${{ inputs.pair || 'en-es' }}
         run: |
-          if [[ ! "$PAIR_INPUT" =~ ^(en-es)$ ]]; then
+          if [[ ! "$PAIR_INPUT" =~ ^(en-es|es-en)$ ]]; then
             echo "Par no permitido" >&2
             exit 1
           fi

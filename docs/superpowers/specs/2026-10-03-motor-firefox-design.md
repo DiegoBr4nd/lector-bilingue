@@ -48,7 +48,7 @@ Pares al cerrar la 2c: `en-es` y `es-en`, cada uno con OPUS y con Firefox.
 | Carpetas | `models/<engine>/<pair>/` | Un modelo Firefox `en-es` ya no pisa al OPUS `en-es` (pendiente de la 2b) |
 | Carga de modelos | Solo modelos instalados por el gestor: `.installed.json` válido, con motor coincidente y todos sus archivos presentes | Nada copiado a mano ni borrado a medias llega al código C++ (pendiente de la 2b) |
 | Origen de los modelos Firefox | Registro oficial de Mozilla, **sin modificar**. Se copian a releases de `lector-bilingue-modelos` | La app solo habla con GitHub (lista blanca de la 2b). El catálogo firmado fija la huella de cada archivo |
-| OPUS `es-en` | `model.yml` recibe el par como parámetro y convierte `Helsinki-NLP/opus-mt-tc-big-es-en` con la misma receta (int8) | Reusar la tubería verificada de la Fase 1 |
+| OPUS `es-en` | `model.yml` recibe el par como parámetro y convierte `Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en` (revisión fijada, int8, misma receta) | No existe un tc-big es-en; decisión de Juan: el modelo muchos-a-uno cat/oci/spa a inglés, misma familia y licencia CC-BY-4.0. Sin tokens de idioma. Sus pesos son un `.bin` (pickle): se carga solo con `weights_only=True` y se reescribe como safetensors |
 | Cambio de motor | Nunca automático tras un error: si el modo es Automático y el motor elegido falla al cargar, se **ofrece** el otro | Juan siempre sabe qué motor traduce |
 
 ## 3. Módulo `:engine:firefox`
@@ -115,7 +115,7 @@ choose(pair, installed: Set<EngineId>, totalRamBytes: Long, forced: EngineId?) �
   4. **Artefacto:** `firefox-<pair>`, con un `SHA256SUMS`.
 - **Lo hace Juan:** sube los archivos a los releases `firefox-en-es-v1` y `firefox-es-en-v1`.
 
-**OPUS `es-en`:** `model.yml` recibe el par como parámetro. Juan sube a `opus-es-en-v1`.
+**OPUS `es-en`:** `model.yml` recibe el par como parámetro y convierte `Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en` (no existe un tc-big es-en; decisión de Juan). Juan sube a `opus-es-en-v1`. La calidad es-en se comprueba en la puerta.
 
 **Catálogo:**
 - **Armado:** Juan corre `build_catalog.py` (`--engine firefox` / `opus`), que ya admite los dos motores, y vuelve a firmar el catálogo.

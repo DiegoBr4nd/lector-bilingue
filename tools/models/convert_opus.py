@@ -7,6 +7,19 @@ out/<par>.tar.zst y, solo si el idioma de origen es inglés, out/reference-outpu
 
 Pares: la tabla PAIRS fija repositorio, revisión y SHA-256 de cada par. Agregar un par es agregar
 una entrada (con sus huellas); un par que no esté en la tabla se rechaza.
+- en-es: Helsinki-NLP/opus-mt-tc-big-en-es (pesos en model.safetensors).
+- es-en: Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en (decisión de Juan: no existe un tc-big es-en).
+  Es un modelo "muchos a uno" (cat, oci, spa -> eng): NO lleva token de idioma de destino ni de
+  origen (la tarjeta del modelo traduce con el texto tal cual). Sus pesos solo vienen como
+  pytorch_model.bin.
+
+Seguridad de pytorch_model.bin: un .bin es un pickle y un pickle puede ejecutar código al
+cargarse. Garantía de este script: (1) el archivo se verifica contra el SHA-256 fijado antes de
+abrirlo; (2) se carga SOLO con torch.load(..., weights_only=True, map_location="cpu"), que
+rechaza todo lo que no sea tensores y tipos básicos; (3) se reescribe como model.safetensors
+(formato sin código) y el .bin se borra, así el conversor de CTranslate2/transformers nunca ve
+el pickle. La conversión solo corre en GitHub Actions o en la máquina de desarrollo, jamás en el
+teléfono.
 """
 import argparse
 import hashlib
@@ -18,7 +31,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BENCH_FILE = ROOT / "bench" / "sustitutos.txt"
 
 # SHA-256 de los archivos de la revisión fijada (fuente: API de Hugging Face para
 # los archivos LFS y descarga directa de la misma revisión para los pequeños).
@@ -43,10 +55,26 @@ class PairSpec:
     expected_sha256: dict
     source_name: str
     target_name: str
+    weights_file: str = "model.safetensors"
+    note: str = ""  # línea extra para ATTRIBUTION.txt y MODEL_CARD.md
 
 
-# Un par solo se puede convertir si está aquí. es-en NO está: Helsinki-NLP no publica
-# opus-mt-tc-big-es-en (ver informe de la Tarea 7); hay que elegir otro modelo y fijar sus huellas.
+# SHA-256 de la revisión fijada de cat_oci_spa-en (fuente: API de Hugging Face, árbol de la
+# revisión, para los archivos LFS; descarga directa de la misma revisión para los pequeños).
+_ES_EN_SHA256 = {
+    "README.md": "b0191805e0fd4d8727148c199f9ecf93c478744500a982cde57aca34a8b9e608",
+    "config.json": "20bcf8051922fc896a1daed645a2d3a0790cc6fbc69a1ee6833c758ea8a2c679",
+    "generation_config.json": "df26d6b6267aee9f16f8be224304864e6605a1e851f18ac14099016b8f9f26d9",
+    "pytorch_model.bin": "cbd1e70a9eb5ec95aaf1407319e91acfbe0e1b0d5f7855b3e4f3cfd2422ba7e3",
+    "source.spm": "0a23783d3c79054e9033fa55aaaeeeb6513cf712063ea87b4eeff5014ee49134",
+    "special_tokens_map.json": "09059cedc26bc46bc09a52f05b92d4922e11917e87f3b92059bb1a63a59ab2c4",
+    "target.spm": "e8ba58a95c4029a5c5a16c43f6784ee30fe197a1766bf2dbacc9f9b255f9361e",
+    "tokenizer_config.json": "43786f76f99a5e137030ed97021ed0e4d04f8c3e86d93f1d7ffb36d72311d01d",
+    "vocab.json": "8ca07a99593025777e3d72bac2fbc8fecc225c47c9c085c1b87cc7da7246ccd1",
+}
+
+# Un par solo se puede convertir si está aquí. No existe opus-mt-tc-big-es-en en Hugging Face:
+# para es-en Juan eligió el modelo muchos-a-uno cat/oci/spa -> en (misma familia tc-big, CC-BY-4.0).
 PAIRS = {
     "en-es": PairSpec(
         "Helsinki-NLP/opus-mt-tc-big-en-es",
@@ -54,6 +82,16 @@ PAIRS = {
         _EN_ES_SHA256,
         "inglés",
         "español",
+    ),
+    "es-en": PairSpec(
+        "Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en",
+        "bf61da0ad53492bb780ec0b2c52981b9c95332e9",
+        _ES_EN_SHA256,
+        "español",
+        "inglés",
+        weights_file="pytorch_model.bin",
+        note="Es el modelo OPUS-MT tc-big multi-origen catalán/occitano/español -> inglés "
+        "(cat+oci+spa-eng). No usa tokens de idioma. La calidad es -> en se comprueba en la puerta de la fase.",
     ),
 }
 PAIR_RE = re.compile(r"[a-z]{2}-[a-z]{2}")
@@ -66,9 +104,15 @@ def spec_for(pair, table=None) -> PairSpec:
     return table[pair]
 
 
-def can_run_bench(pair: str) -> bool:
-    """bench/sustitutos.txt está en inglés: solo sirve si el origen del par es inglés."""
-    return pair.split("-")[0] == "en"
+BENCH_BY_SOURCE = {
+    "en": ROOT / "bench" / "sustitutos.txt",
+    "es": ROOT / "bench" / "sustitutos-es.txt",  # opcional: si no existe, no hay salidas de referencia
+}
+
+
+def bench_file_for(pair: str, table=None):
+    """Archivo de entradas del idioma de origen del par (None si no hay uno para ese idioma)."""
+    return (BENCH_BY_SOURCE if table is None else table).get(pair.split("-")[0])
 
 
 CC_BY_4_0 = """Creative Commons Attribution 4.0 International (CC BY 4.0)
@@ -145,9 +189,44 @@ def write_attribution(directory: Path, revision: str, spec: PairSpec | None = No
         f"Fuente: https://huggingface.co/{spec.repo_id} (revisión {revision})\n"
         "Autores: Helsinki-NLP / OPUS-MT, Jörg Tiedemann et al.\n"
         "Licencia: CC-BY-4.0. Convertido a CTranslate2 int8 por el proyecto lector-bilingue.\n"
-        "Se distribuye sin garantías; ver la sección 5 de la licencia CC-BY-4.0.\n",
+        "Se distribuye sin garantías; ver la sección 5 de la licencia CC-BY-4.0.\n"
+        + (spec.note + "\n" if spec.note else ""),
         encoding="utf-8",
     )
+
+
+def write_model_card(directory: Path, readme: Path, spec: PairSpec) -> None:
+    """MODEL_CARD.md = README del repositorio; si el par tiene nota, va primero."""
+    text = readme.read_text(encoding="utf-8")
+    if spec.note:
+        text = (
+            f"> {spec.note}\n> Fuente: https://huggingface.co/{spec.repo_id} (revisión {spec.revision}).\n\n" + text
+        )
+    (directory / "MODEL_CARD.md").write_text(text, encoding="utf-8")
+
+
+def bin_to_safetensors(directory: Path, weights_file: str = "pytorch_model.bin", torch_mod=None, save_file=None) -> None:
+    """Reescribe un pytorch_model.bin (pickle) como model.safetensors sin ejecutar código.
+
+    torch.load con weights_only=True rechaza todo lo que no sea tensores y tipos básicos. Después
+    se borra el .bin para que nadie más lo cargue. Los tensores se clonan porque safetensors no
+    admite tensores que comparten memoria (embeddings atados).
+    """
+    if torch_mod is None:
+        import torch as torch_mod
+    if save_file is None:
+        from safetensors.torch import save_file
+    path = directory / weights_file
+    state = torch_mod.load(path, weights_only=True, map_location="cpu")
+    if not isinstance(state, dict) or not state:
+        raise RuntimeError("pytorch_model.bin no contiene un diccionario de pesos")
+    clean = {}
+    for key, tensor in state.items():
+        if not isinstance(key, str) or not hasattr(tensor, "contiguous"):
+            raise RuntimeError("pytorch_model.bin contiene algo que no es un tensor")
+        clean[key] = tensor.contiguous().clone()
+    save_file(clean, str(directory / "model.safetensors"), metadata={"format": "pt"})
+    path.unlink()
 
 
 def download(dest: Path, spec: PairSpec) -> Path:
@@ -158,7 +237,7 @@ def download(dest: Path, spec: PairSpec) -> Path:
             repo_id=spec.repo_id,
             revision=spec.revision,
             local_dir=dest,
-            allow_patterns=["*.json", "*.spm", "model.safetensors", "README.md"],
+            allow_patterns=["*.json", "*.spm", spec.weights_file, "README.md"],
         )
     )
 
@@ -206,20 +285,21 @@ def main(argv: list[str]) -> int:
 
     src = download(out / "hf", spec)
     verify_downloaded(src, spec.expected_sha256)
+    if spec.weights_file.endswith(".bin"):
+        bin_to_safetensors(src, spec.weights_file)
     model_dir = out / pair
     if model_dir.exists():
         shutil.rmtree(model_dir)
     convert(src, model_dir)
     write_attribution(model_dir, spec.revision, spec)
-    shutil.copyfile(src / "README.md", model_dir / "MODEL_CARD.md")
+    write_model_card(model_dir, src / "README.md", spec)
 
-    if not can_run_bench(pair):
-        print(f"Aviso: el banco de pruebas está en inglés; sin salidas de referencia para {pair}", file=sys.stderr)
-    elif BENCH_FILE.exists():
-        outputs = reference_outputs(model_dir, read_bench_sentences(BENCH_FILE))
-        (out / "reference-outputs.txt").write_text("\n\n".join(outputs) + "\n", encoding="utf-8")
+    bench = bench_file_for(pair)
+    if bench is None or not bench.exists():
+        print(f"Aviso: no hay textos de prueba del idioma de origen de {pair}; sin salidas de referencia", file=sys.stderr)
     else:
-        print(f"Aviso: {BENCH_FILE} no existe; sin salidas de referencia", file=sys.stderr)
+        outputs = reference_outputs(model_dir, read_bench_sentences(bench))
+        (out / "reference-outputs.txt").write_text("\n\n".join(outputs) + "\n", encoding="utf-8")
 
     write_sha256sums(model_dir)
     subprocess.run(["tar", "--zstd", "-cf", str(out / f"{pair}.tar.zst"), "-C", str(out), pair], check=True)
