@@ -35,7 +35,7 @@ Pares al cerrar la 2c: `en-es` y `es-en`, cada uno con OPUS y con Firefox.
 - Otros pares de idiomas.
 - Glosario de modismos.
 - Elegir el motor según la RAM libre en el momento: la regla usa la RAM **total**.
-- Prueba de la build release en el teléfono (sigue pendiente de la 2b; ver la memoria del proyecto).
+- Prueba de la build release en el teléfono (pendiente de la 2b, anotado en el PR #10; bloquea la primera publicación).
 
 ## 2. Decisiones tomadas
 
