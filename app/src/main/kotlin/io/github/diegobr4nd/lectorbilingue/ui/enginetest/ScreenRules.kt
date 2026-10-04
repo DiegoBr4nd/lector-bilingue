@@ -21,6 +21,21 @@ object ScreenRules {
     /** El aviso "mejor con Wi-Fi" solo tiene sentido si hay algo que descargar o se está descargando. */
     fun showWifiHint(s: EngineTestUiState): Boolean = s.downloading || s.models.any { !it.installed }
 
-    /** La medición de velocidad aún aún no tiene textos en español: solo se ofrece en → es. */
-    fun benchAvailable(s: EngineTestUiState): Boolean = s.pair == PairChoice.EN_ES
+    /** Medir velocidad: siempre en en → es; en es → en solo si el usuario puso `bench/textos-es.txt`. */
+    fun benchAvailable(s: EngineTestUiState): Boolean = s.pair == PairChoice.EN_ES || s.spanishBenchTexts
+
+    /** null si se puede traducir; si no, el motivo (primero bloqueos, luego "sin modelo", luego "sin texto"). */
+    fun translateBlock(s: EngineTestUiState): ActionBlock? = measureBlock(s)
+        ?: if (s.input.isBlank()) ActionBlock.EmptyInput else null
+
+    /** null si se puede medir (sin contar si hay textos: eso lo dice [benchAvailable]). */
+    fun measureBlock(s: EngineTestUiState): ActionBlock? = lockReason(s)?.let { ActionBlock.Lock(it) }
+        ?: if (s.modelStatus != ModelStatus.READY) ActionBlock.NotReady else null
+}
+
+/** Por qué un botón de acción (Traducir, Medir velocidad) está desactivado. */
+sealed interface ActionBlock {
+    data class Lock(val reason: LockReason) : ActionBlock
+    data object NotReady : ActionBlock
+    data object EmptyInput : ActionBlock
 }

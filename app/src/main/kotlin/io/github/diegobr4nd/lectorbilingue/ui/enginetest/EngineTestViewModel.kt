@@ -79,6 +79,8 @@ data class EngineTestUiState(
     val measuring: Boolean = false,
     /** El par elegido no tiene textos de prueba (es → en sin textos-es.txt). */
     val benchNoTexts: Boolean = false,
+    /** Existe `files/bench/textos-es.txt`: entonces la medición también se ofrece en es → en. */
+    val spanishBenchTexts: Boolean = false,
     val errorMessage: String? = null,
     /** Hay una operación de modelos en marcha (preparando, descargando, importando o borrando). */
     val modelBusy: Boolean = false,
@@ -126,6 +128,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             // Recuperación del arranque (barata tras la primera vez): limpia restos de instalaciones cortadas.
             runCatching { Models.recover(getApplication()) }
+            checkSpanishBenchTexts()
             refreshModels()
             reloadEngine()
         }
@@ -238,9 +241,18 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             it.copy(pair = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false, modelMessage = null)
         }
         viewModelScope.launch {
+            checkSpanishBenchTexts()
             refreshModels()
             reloadEngine()
         }
+    }
+
+    /** ¿Hay textos de prueba en español? (lee el disco fuera del hilo principal). */
+    private suspend fun checkSpanishBenchTexts() {
+        val present = withContext(Dispatchers.IO) {
+            runCatching { File(app().filesDir, "bench/textos-es.txt").isFile }.getOrDefault(false)
+        }
+        _state.update { it.copy(spanishBenchTexts = present) }
     }
 
     /** Lista de modelos del catálogo guardado (sin red) para el par elegido; retoma una descarga en curso. */

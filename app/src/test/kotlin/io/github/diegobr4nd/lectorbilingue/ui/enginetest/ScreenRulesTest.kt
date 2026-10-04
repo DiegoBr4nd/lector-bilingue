@@ -49,8 +49,30 @@ class ScreenRulesTest {
         assertTrue(ScreenRules.showWifiHint(ready.copy(models = listOf(installed), downloading = true)))
     }
 
-    @Test fun `la medicion solo esta disponible en en a es`() {
+    @Test fun `la medicion en es a en depende de los textos en español`() {
         assertTrue(ScreenRules.benchAvailable(ready.copy(pair = PairChoice.EN_ES)))
         assertFalse(ScreenRules.benchAvailable(ready.copy(pair = PairChoice.ES_EN)))
+        assertTrue(ScreenRules.benchAvailable(ready.copy(pair = PairChoice.ES_EN, spanishBenchTexts = true)))
+    }
+
+    @Test fun `motivos por los que Traducir esta desactivado`() {
+        val withText = ready.copy(input = "Hello")
+        assertNull(ScreenRules.translateBlock(withText))
+        assertEquals(ActionBlock.EmptyInput, ScreenRules.translateBlock(ready))
+        assertEquals(ActionBlock.NotReady, ScreenRules.translateBlock(withText.copy(modelStatus = ModelStatus.MISSING)))
+        assertEquals(
+            ActionBlock.Lock(LockReason.LOADING),
+            ScreenRules.translateBlock(withText.copy(modelStatus = ModelStatus.LOADING)),
+        )
+        assertEquals(ActionBlock.Lock(LockReason.TRANSLATING), ScreenRules.translateBlock(withText.copy(busy = true)))
+    }
+
+    @Test fun `motivos por los que Medir esta desactivado`() {
+        assertNull(ScreenRules.measureBlock(ready))
+        assertEquals(ActionBlock.NotReady, ScreenRules.measureBlock(ready.copy(modelStatus = ModelStatus.ERROR)))
+        assertEquals(
+            ActionBlock.Lock(LockReason.MEASURING),
+            ScreenRules.measureBlock(ready.copy(busy = true, measuring = true)),
+        )
     }
 }

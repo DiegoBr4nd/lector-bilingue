@@ -83,6 +83,8 @@
     <string name="cancel_row_button">Cancelar %1$s</string>
     <string name="bench_no_texts">La medición de velocidad aún no tiene textos en español; por ahora úsala con en → es</string>
     <string name="bench_measured_with">Medido con %1$s · %2$s</string>
+    <string name="action_not_ready">Primero carga un modelo</string>
+    <string name="action_empty_input">Escribe un texto para traducir</string>
     <string name="lock_downloading">Espera a que termine la descarga</string>
     <string name="lock_model_busy">Espera a que termine la operación con el modelo</string>
     <string name="lock_loading">Espera a que cargue el modelo</string>

@@ -18,6 +18,8 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -110,7 +112,6 @@ fun EngineTestContent(
     onCancelDownload: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val ready = state.modelStatus == ModelStatus.READY
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(
             modifier = Modifier
@@ -134,10 +135,11 @@ fun EngineTestContent(
                 minLines = 4,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
-                onClick = onTranslate,
-                enabled = !state.busy && ready && state.input.isNotBlank(),
-            ) { Text(stringResource(R.string.translate_button)) }
+            val translateBlock = ScreenRules.translateBlock(state)
+            Button(onClick = onTranslate, enabled = translateBlock == null) {
+                Text(stringResource(R.string.translate_button))
+            }
+            BlockReason(translateBlock)
             if (state.busy && !state.measuring) BusyRow(R.string.translating)
             if (state.output.isNotEmpty()) {
                 SelectionContainer {
@@ -146,9 +148,11 @@ fun EngineTestContent(
                 state.lastMillis?.let { Text(stringResource(R.string.elapsed_ms, it)) }
             }
             val benchAvailable = ScreenRules.benchAvailable(state)
-            Button(onClick = onBenchmark, enabled = !state.busy && ready && benchAvailable) {
+            val measureBlock = ScreenRules.measureBlock(state)
+            Button(onClick = onBenchmark, enabled = measureBlock == null && benchAvailable) {
                 Text(stringResource(R.string.benchmark_button))
             }
+            BlockReason(measureBlock)
             if (state.busy && state.measuring) BusyRow(R.string.bench_measuring)
             if (!benchAvailable || state.benchNoTexts) {
                 Text(
@@ -280,7 +284,10 @@ private fun <T> ChoiceChips(
                 onClick = { onSelect(option) },
                 enabled = enabled,
                 label = { Text(label(option), maxLines = 1) },
-                modifier = Modifier.heightIn(min = 48.dp),
+                // Elección única: se anuncia como botón de radio, no como casilla.
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .semantics { role = Role.RadioButton },
             )
         }
     }
@@ -612,4 +619,22 @@ private fun EngineTestErrorPreview() {
             onBenchmark = {},
         )
     }
+}
+
+/** Por qué un botón de acción está desactivado: un texto corto y "vivo" justo debajo del botón. */
+@Composable
+private fun BlockReason(block: ActionBlock?) {
+    if (block == null) return
+    Text(
+        stringResource(
+            when (block) {
+                is ActionBlock.Lock -> block.reason.textRes()
+                ActionBlock.NotReady -> R.string.action_not_ready
+                ActionBlock.EmptyInput -> R.string.action_empty_input
+            },
+        ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }
