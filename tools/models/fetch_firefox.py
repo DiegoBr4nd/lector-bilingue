@@ -10,13 +10,14 @@ con los nombres originales) más slimt.json (nuestro), LICENSE (MPL-2.0), ATTRIB
 MODEL_CARD.md y SHA256SUMS.
 
 Seguridad:
-- Solo HTTPS, solo desde los hosts de "allowed_hosts" de firefox_sources.json, sin seguir redirecciones.
+- Solo HTTPS (puerto 443), solo desde los hosts de "allowed_hosts" de firefox_sources.json, sin seguir redirecciones.
 - Se verifican DOS huellas por archivo: la del .zst que Mozilla publica y la del archivo descomprimido.
 - Si algo falla no queda carpeta de salida (se arma en una carpeta temporal y se renombra al final).
 - Nunca se imprime contenido de archivos; los errores solo nombran archivos.
 """
 import argparse
 import hashlib
+import http.client
 import json
 import re
 import shutil
@@ -90,7 +91,8 @@ def _download(url: str, dest: Path, name: str) -> None:
                 fh.write(chunk)
     except FetchError:
         raise
-    except (urllib.error.URLError, OSError, ValueError):
+    # http.client.HTTPException: respuesta cortada (IncompleteRead) o mal formada.
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
         raise FetchError(f"{name}: no se pudo descargar") from None
 
 
@@ -181,7 +183,7 @@ def write_sha256sums(folder: Path) -> None:
     (folder / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _check_spec(spec: dict, allowed_hosts: list, schemes: tuple) -> None:
+def _check_spec(spec: dict, allowed_hosts: list, schemes: tuple, ports: tuple = (None, 443)) -> None:
     names = set()
     roles = [f.get("role") for f in spec["files"]]
     if roles != list(ROLES):
@@ -196,18 +198,27 @@ def _check_spec(spec: dict, allowed_hosts: list, schemes: tuple) -> None:
         if type(f["size"]) is not int or not 1 <= f["size"] <= MAX_DECOMPRESSED:
             raise FetchError(f"{name}: tamaño no permitido en firefox_sources.json")
         u = urlparse(f["url"])
-        if u.scheme not in schemes or u.hostname not in allowed_hosts or u.username or u.password:
+        try:
+            port = u.port  # ValueError si el puerto no es un número válido
+        except ValueError:
+            raise FetchError(f"{name}: dirección fuera de los hosts permitidos") from None
+        if (u.scheme not in schemes or u.hostname not in allowed_hosts or u.username or u.password
+                or port not in ports):
             raise FetchError(f"{name}: dirección fuera de los hosts permitidos")
 
 
-def fetch(pair, out, sources_path=SOURCES, *, decompress=zstd_decompress, schemes=("https",)) -> Path:
-    """Descarga, verifica y arma out/firefox-<pair>/. Devuelve esa carpeta."""
+def fetch(pair, out, sources_path=SOURCES, *, decompress=zstd_decompress, schemes=("https",),
+          ports=(None, 443)) -> Path:
+    """Descarga, verifica y arma out/firefox-<pair>/. Devuelve esa carpeta.
+
+    schemes y ports solo se cambian en las pruebas (servidor local http en otro puerto).
+    """
     validate_pair(pair)
     try:
         sources = json.loads(Path(sources_path).read_text(encoding="utf-8"))
         spec = sources["pairs"][pair]
         allowed_hosts = list(sources["allowed_hosts"])
-        _check_spec(spec, allowed_hosts, tuple(schemes))
+        _check_spec(spec, allowed_hosts, tuple(schemes), tuple(ports))
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         raise FetchError("firefox_sources.json ilegible o incompleto") from None
 

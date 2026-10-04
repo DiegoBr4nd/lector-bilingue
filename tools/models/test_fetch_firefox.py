@@ -7,6 +7,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 import fetch_firefox
 from fetch_firefox import FetchError, fetch, validate_pair, write_slimt_json
@@ -93,8 +94,9 @@ class FetchFirefoxTest(unittest.TestCase):
         self.sources_path.write_text(json.dumps(sources), encoding="utf-8")
 
     def run_fetch(self, pair="en-es", out=None):
+        # Servidor local: http y su puerto (en producción solo https y el puerto 443).
         return fetch(pair, out or self.tmp / "out", self.sources_path,
-                     decompress=fake_decompress, schemes=("http",))
+                     decompress=fake_decompress, schemes=("http",), ports=(urlparse(self.base).port,))
 
     def test_descarga_correcta(self):
         out = self.tmp / "out"
@@ -169,6 +171,83 @@ class FetchFirefoxTest(unittest.TestCase):
         with self.assertRaises(FetchError):
             fetch("en-es", self.tmp / "out", self.sources_path, decompress=fake_decompress)
         self.assertEqual(self.handler.hits, [])
+
+    def test_puerto_distinto_de_443_no_conecta(self):
+        def tweak(files):
+            for f in files:
+                f["url"] = f"https://{self.host}:{self.port}/{f['name']}.zst"
+        self.write_sources(tweak)
+        self.handler.hits.clear()
+        with self.assertRaises(FetchError) as cm:
+            fetch("en-es", self.tmp / "out", self.sources_path, decompress=fake_decompress)
+        self.assertIn("hosts permitidos", str(cm.exception))
+        self.assertEqual(self.handler.hits, [])
+
+    def test_check_spec_puertos(self):
+        def spec(url):
+            files = []
+            for role, name in zip(fetch_firefox.ROLES, ("m.bin", "v.spm", "s.bin")):
+                files.append({"role": role, "name": name, "url": url, "sha256": "0" * 64,
+                              "zst_sha256": "0" * 64, "size": 1})
+            return {"files": files}
+        hosts = ["a.example"]
+        # Sin puerto o con 443: aceptado.
+        fetch_firefox._check_spec(spec("https://a.example/x.zst"), hosts, ("https",))
+        fetch_firefox._check_spec(spec("https://a.example:443/x.zst"), hosts, ("https",))
+        for bad in ("https://a.example:8443/x.zst", "https://a.example:80/x.zst",
+                    "https://a.example:99999/x.zst", "https://a.example:abc/x.zst"):
+            with self.assertRaises(FetchError, msg=bad):
+                fetch_firefox._check_spec(spec(bad), hosts, ("https",))
+
+    def test_descarga_cortada_da_fetch_error(self):
+        class Short(_Handler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):
+                # Bloque chunked que promete 1000 bytes (0x3e8), manda 10 y cierra:
+                # http.client lanza IncompleteRead (una HTTPException, no un OSError).
+                self.send_response(200)
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.write(b"3e8\r\n0123456789")
+                self.wfile.flush()
+                self.close_connection = True
+
+        srv = HTTPServer(("127.0.0.1", 0), Short)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        self.base = f"http://127.0.0.1:{srv.server_address[1]}"
+        self.write_sources()
+        out = self.tmp / "out"
+        with self.assertRaises(FetchError) as cm:
+            self.run_fetch(out=out)
+        self.assertIn("no se pudo descargar", str(cm.exception))
+        self.assertFalse(out.exists() and any(out.iterdir()))
+
+    def test_http_exception_da_fetch_error(self):
+        import http.client
+        from unittest import mock
+
+        class Boom:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n):
+                raise http.client.IncompleteRead(b"parcial", 100)
+
+        class Opener:
+            def open(self, req, timeout):
+                return Boom()
+
+        with mock.patch.object(fetch_firefox.urllib.request, "build_opener", return_value=Opener()):
+            with self.assertRaises(FetchError) as cm:
+                fetch_firefox._download("https://a.example/x", self.tmp / "x", "x.bin")
+        self.assertEqual(str(cm.exception), "x.bin: no se pudo descargar")
+        self.assertIsNone(cm.exception.__cause__)
 
     def test_redireccion_rechazada(self):
         class Redirect(_Handler):
