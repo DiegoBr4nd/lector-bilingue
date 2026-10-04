@@ -14,7 +14,9 @@ import java.nio.file.StandardCopyOption
  *
  * 1. Re-verifica: la carpeta contiene exactamente los archivos del catálogo (sin extras, sin
  *    subcarpetas, sin enlaces), cada uno con su tamaño y SHA-256. Si no → [IntegrityException].
- * 2. Escribe `.installed.json` dentro de la carpeta temporal.
+ * 2. Sincroniza a disco (fsync) cada archivo del modelo y luego escribe `.installed.json` (con los tamaños)
+ *    en la carpeta temporal vía archivo temporal + fsync + renombrado atómico; sincroniza también la
+ *    carpeta (en Android/Linux funciona; si el sistema no lo permite, se ignora).
  * 3. Reemplazo (todo dentro de `<engine>/`, sin tocar otros motores): si ya hay un modelo en
  *    `<engine>/<pair>/`, se renombra a `<engine>/.old-<pair>-<nanoTime>`; luego la carpeta temporal se
  *    renombra (atómico) a `<engine>/<pair>/`; al final se borra la vieja. Si el segundo renombrado
@@ -71,10 +73,18 @@ class ModelInstaller internal constructor(
         // Un .installed.json en staging solo puede venir de un intento anterior fallido: se reescribe.
         val installedJson = File(expectedStaging, ModelFiles.INSTALLED_JSON).toPath()
         ModelFiles.deleteTree(installedJson)
+        ModelFiles.deleteTree(File(expectedStaging, ModelFiles.INSTALLED_JSON + ".tmp").toPath())
         verify(model, expectedStaging)
 
-        val installed = InstalledModel(model.id, model.pair, model.engine, model.modelVersion, model.files.map { it.name })
-        Files.write(installedJson, installed.toJson().toByteArray(Charsets.UTF_8))
+        // Durabilidad: primero los archivos del modelo a disco (fsync), después `.installed.json` (temporal +
+        // fsync + renombrado atómico) y la carpeta. Así un corte de luz nunca deja un JSON válido con un .bin truncado.
+        for (f in model.files) ModelFiles.fsyncFile(ModelFiles.child(expectedStaging, f.name).toPath())
+        val installed = InstalledModel(
+            model.id, model.pair, model.engine, model.modelVersion,
+            model.files.map { it.name }, model.files.associate { it.name to it.size },
+        )
+        ModelFiles.writeAtomic(installedJson, installed.toJson().toByteArray(Charsets.UTF_8))
+        ModelFiles.fsyncDir(stagingPath)
 
         // La carpeta del motor debe ser real antes de `child`, que comprueba que nada salga de modelsDir.
         ModelFiles.ensureRealDir(File(modelsDir, model.engine))
@@ -107,6 +117,7 @@ class ModelInstaller internal constructor(
                 // Igual: el fallo al borrar la vieja nunca hace fallar una instalación ya hecha.
             }
         }
+        ModelFiles.fsyncDir(engineDir.toPath())
         // La carpeta .tmp se borra solo si quedó vacía (puede haber otras descargas en curso).
         tmpRoot.delete()
         return installed

@@ -265,8 +265,9 @@ class ModelStore internal constructor(
 
     /** Renombra [from] a `<engine>/<pair>` si ese destino no existe (la carpeta del motor queda real). */
     private fun moveIntoEngine(from: Path, engine: String, pair: String) {
-        val engineDir = File(modelsDir, engine)
-        ModelFiles.ensureRealDir(engineDir)
+        ModelFiles.requireEngine(engine)
+        ModelFiles.ensureRealDir(File(modelsDir, engine))
+        val engineDir = ModelFiles.child(modelsDir, engine)
         val target = File(engineDir, pair).toPath()
         if (!ModelFiles.existsNoFollow(target)) move(from, target)
     }
@@ -324,7 +325,14 @@ class ModelStore internal constructor(
     private fun checkedInstalled(dir: Path, engine: String, pair: String): InstalledModel? {
         val model = readInstalled(dir, pair) ?: return null
         if (model.engine != engine) return null
-        return model.takeIf { m -> m.files.all { ModelFiles.isRegularFileNoFollow(dir.resolve(it)) } }
+        return model.takeIf { m ->
+            m.files.all { name ->
+                val f = dir.resolve(name)
+                // Con tamaños (2c) un archivo truncado no cuenta; los `.installed.json` de la 2b no los traen.
+                ModelFiles.isRegularFileNoFollow(f) &&
+                    (m.sizes[name]?.let { runCatching { Files.size(f) == it }.getOrDefault(false) } ?: true)
+            }
+        }
     }
 
     /** Lee `<dir>/.installed.json` sin seguir enlaces; null si algo no cuadra o no es de [pair]. */

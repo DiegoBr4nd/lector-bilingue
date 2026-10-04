@@ -564,4 +564,47 @@ class ModelStoreTest {
         assertEquals(listOf("en-es"), opusDir().list()!!.toList())
         assertFalse(File(modelsDir, "no-existe").exists())
     }
+
+    // ---------------------------------------------------------------- tamaños en .installed.json
+
+    private fun withSizes(bin: Long, spm: Long) =
+        installedModel("en-es").copy(sizes = mapOf("model.bin" to bin, "vocab.spm" to spm))
+
+    @Test
+    fun tamanos_coincidentesCuentanComoInstalado() {
+        install("en-es", withSizes(100, 23))
+        assertTrue(store.isInstalled("opus", "en-es"))
+        assertEquals(1, store.installed().size)
+    }
+
+    @Test
+    fun tamanos_distintosExcluyenElModelo() {
+        val dir = install("en-es", withSizes(100, 23))
+        File(dir, "model.bin").writeBytes(ByteArray(10)) // truncado
+        assertEquals(null, store.installedDir("opus", "en-es"))
+        assertEquals(emptyList(), store.installed())
+    }
+
+    @Test
+    fun tamanos_ausentesDeLa2bSeAceptanSinComprobar() {
+        val dir = install("en-es", installedModel("en-es"))
+        File(dir, "model.bin").writeBytes(ByteArray(10))
+        assertTrue(store.isInstalled("opus", "en-es"))
+    }
+
+    @Test
+    fun tamanos_jsonDe2bSinSizesSeLee() {
+        val json = """{"id":"opus-en-es-1","pair":"en-es","engine":"opus","modelVersion":"1.0","files":["model.bin"]}"""
+        assertEquals(emptyMap(), InstalledModel.fromJson(json).sizes)
+    }
+
+    @Test
+    fun tamanos_roundTripYValidacion() {
+        val m = withSizes(100, 23)
+        assertEquals(m, InstalledModel.fromJson(m.toJson()))
+        val bad = """{"id":"opus-en-es-1","pair":"en-es","engine":"opus","modelVersion":"1.0","files":["model.bin"],"sizes":{"model.bin":-1}}"""
+        assertFailsWith<IllegalArgumentException> { InstalledModel.fromJson(bad) }
+        val missing = """{"id":"opus-en-es-1","pair":"en-es","engine":"opus","modelVersion":"1.0","files":["model.bin"],"sizes":{}}"""
+        assertFailsWith<IllegalArgumentException> { InstalledModel.fromJson(missing) }
+    }
 }

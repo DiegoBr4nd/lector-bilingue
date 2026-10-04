@@ -87,7 +87,7 @@ class ModelInstallerTest {
     fun install_instalaEnLaCarpetaDelParYDevuelveElModelo() {
         val st = staging()
         val result = ModelInstaller(modelsDir).install(model(), st)
-        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")), result)
+        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm"), mapOf("model.bin" to 5000L, "vocab.spm" to 3000L)), result)
         val dir = File(modelsDir, "opus/en-es")
         assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), dir.list()!!.sorted())
         assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
@@ -115,9 +115,26 @@ class ModelInstallerTest {
         val files = o.getJSONArray("files")
         assertEquals(listOf("model.bin", "vocab.spm"), (0 until files.length()).map { files.getString(it) })
         assertEquals(
-            InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")),
+            InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm"), mapOf("model.bin" to 5000L, "vocab.spm" to 3000L)),
             InstalledModel.fromJson(text),
         )
+    }
+
+    @Test
+    fun install_escribeLosTamanosEnInstalledJson() {
+        ModelInstaller(modelsDir).install(model(), staging())
+        val sizes = JSONObject(File(modelsDir, "opus/en-es/.installed.json").readText()).getJSONObject("sizes")
+        assertEquals(5000L, sizes.getLong("model.bin"))
+        assertEquals(3000L, sizes.getLong("vocab.spm"))
+        assertFalse(File(modelsDir, "opus/en-es/.installed.json.tmp").exists(), "no queda el temporal")
+    }
+
+    @Test
+    fun install_ignoraUnTemporalDeInstalledJsonDeUnIntentoAnterior() {
+        val st = staging()
+        File(st, ".installed.json.tmp").writeText("resto")
+        ModelInstaller(modelsDir).install(model(), st)
+        assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), File(modelsDir, "opus/en-es").list()!!.sorted())
     }
 
     // ---------------------------------------------------------------- reemplazo

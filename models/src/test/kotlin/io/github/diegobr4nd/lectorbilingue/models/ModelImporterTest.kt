@@ -135,7 +135,7 @@ class ModelImporterTest {
     @Test
     fun import_zipValidoSeInstala() {
         val result = import(validZip())
-        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")), result)
+        assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm"), mapOf("model.bin" to 5000L, "vocab.spm" to 3000L)), result)
         val dir = File(modelsDir, "opus/en-es")
         assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), dir.list()!!.sorted())
         assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
