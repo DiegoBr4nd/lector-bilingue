@@ -208,7 +208,7 @@ mkdir -p /c/Users/JUAN/trabajo-modelo/firefox-en-es
 /c/Windows/System32/tar.exe -xf /c/Users/JUAN/Downloads/firefox-en-es.zip -C /c/Users/JUAN/trabajo-modelo/firefox-en-es
 cd /c/Users/JUAN/trabajo-modelo/firefox-en-es && sha256sum -c SHA256SUMS
 ```
-Todas deben decir `OK`. Si alguna dice `FALLA`, no sigas: vuelve a descargar el artefacto. La carpeta debe traer 8 archivos: el modelo (`model.enes.intgemm.alphas.bin`), `vocab.enes.spm`, `lex.50.50.enes.s2t.bin`, `slimt.json`, `LICENSE`, `ATTRIBUTION.txt`, `MODEL_CARD.md` y `SHA256SUMS`. Para `es-en` los nombres dicen `esen` en vez de `enes`.
+Deben salir **7 líneas `OK`**. `SHA256SUMS` no aparece en la lista porque no puede contener su propia huella: al escribirla, el archivo cambiaría. Si alguna dice `FALLA`, no sigas: vuelve a descargar el artefacto. La carpeta debe traer 8 archivos: el modelo (`model.enes.intgemm.alphas.bin`), `vocab.enes.spm`, `lex.50.50.enes.s2t.bin`, `slimt.json`, `LICENSE`, `ATTRIBUTION.txt`, `MODEL_CARD.md` y `SHA256SUMS`. Para `es-en` los nombres dicen `esen` en vez de `enes`.
 
 Haz lo mismo con `firefox-es-en` (cambia `en-es` por `es-en` en todos los comandos).
 
