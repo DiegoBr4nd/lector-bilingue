@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-10-03T23:02:37Z",
+  "generated": "2026-10-04T22:00:14Z",
   "models": [
     {
       "id": "opus-en-es-tcbig-2026.10",
@@ -57,6 +57,168 @@
           "size": 824118,
           "sha256": "c70086dcac73d9c759cca0b5f195a073033906dcd29433d6c5fe74e66b2cc8da",
           "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-en-es-v1/target.spm"
+        }
+      ]
+    },
+    {
+      "id": "firefox-en-es-3.0",
+      "pair": "en-es",
+      "engine": "firefox",
+      "modelVersion": "3.0",
+      "license": "MPL-2.0",
+      "attribution": "Mozilla, Firefox Translations (mozilla/translations)",
+      "files": [
+        {
+          "name": "ATTRIBUTION.txt",
+          "size": 552,
+          "sha256": "f7b779cbda14082b2fa58ebd7c9cc2948b92fb33b3f8204acbeb23b7f4867843",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/ATTRIBUTION.txt"
+        },
+        {
+          "name": "LICENSE",
+          "size": 16726,
+          "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/LICENSE"
+        },
+        {
+          "name": "MODEL_CARD.md",
+          "size": 776,
+          "sha256": "d12c6e33982dd749f9ac973da56fd4b6d7e160750a1dc30245612cec3d9f84fd",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/MODEL_CARD.md"
+        },
+        {
+          "name": "lex.50.50.enes.s2t.bin",
+          "size": 4198436,
+          "sha256": "7d51237c0a07027dcd61643cfbbb0f8c48597d19907ef53d2cae9d6bec2cf25c",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/lex.50.50.enes.s2t.bin"
+        },
+        {
+          "name": "model.enes.intgemm.alphas.bin",
+          "size": 31561787,
+          "sha256": "3b1c399511c01c84c36fae5c0524df44096288efdc8236e182b5c97d7ad2244c",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/model.enes.intgemm.alphas.bin"
+        },
+        {
+          "name": "slimt.json",
+          "size": 182,
+          "sha256": "68f05aa50cf130a98022ff98316b845dc820f6706b4b34cc09e989e5b96c5686",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/slimt.json"
+        },
+        {
+          "name": "vocab.enes.spm",
+          "size": 816054,
+          "sha256": "5ae254fa9b15aa182e70fd2a6186b1333c63a29a48043a9224c6aa4fcac058ad",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-en-es-v1/vocab.enes.spm"
+        }
+      ]
+    },
+    {
+      "id": "firefox-es-en-3.0",
+      "pair": "es-en",
+      "engine": "firefox",
+      "modelVersion": "3.0",
+      "license": "MPL-2.0",
+      "attribution": "Mozilla, Firefox Translations (mozilla/translations)",
+      "files": [
+        {
+          "name": "ATTRIBUTION.txt",
+          "size": 552,
+          "sha256": "cabfb30114862cb7d48d51aaba5509c97dcd8854c63f53de5c1f5e9614e19612",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/ATTRIBUTION.txt"
+        },
+        {
+          "name": "LICENSE",
+          "size": 16726,
+          "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/LICENSE"
+        },
+        {
+          "name": "MODEL_CARD.md",
+          "size": 776,
+          "sha256": "1227f1cc3c7824890c71e9136c37ebb6e6efd0fcc07f29833ae920b0f391fe60",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/MODEL_CARD.md"
+        },
+        {
+          "name": "lex.50.50.esen.s2t.bin",
+          "size": 4636248,
+          "sha256": "e2610211d3b9577d012638fe7e7e74ed7b4b708ce96b9e792e67c282a6492daa",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/lex.50.50.esen.s2t.bin"
+        },
+        {
+          "name": "model.esen.intgemm.alphas.bin",
+          "size": 31561787,
+          "sha256": "4aed7734152ae0045d1a69ae49c86cfda18f53c61f90e95e1d1de1c7c7c3b033",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/model.esen.intgemm.alphas.bin"
+        },
+        {
+          "name": "slimt.json",
+          "size": 182,
+          "sha256": "a708cb10494e71b0c51ea8751fefc53faac549d94972432e523052f1139005f7",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/slimt.json"
+        },
+        {
+          "name": "vocab.esen.spm",
+          "size": 816054,
+          "sha256": "5ae254fa9b15aa182e70fd2a6186b1333c63a29a48043a9224c6aa4fcac058ad",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/firefox-es-en-v1/vocab.esen.spm"
+        }
+      ]
+    },
+    {
+      "id": "opus-es-en-tcbig-2026.10",
+      "pair": "es-en",
+      "engine": "opus",
+      "modelVersion": "tc-big-2026.10",
+      "license": "CC-BY-4.0",
+      "attribution": "Helsinki-NLP / OPUS-MT, Tiedemann et al.",
+      "files": [
+        {
+          "name": "ATTRIBUTION.txt",
+          "size": 581,
+          "sha256": "f3ac3a8c16261f7d91ffb22b6332a5134e9d325ae2c144bb1249065dd00ebbc8",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/ATTRIBUTION.txt"
+        },
+        {
+          "name": "LICENSE",
+          "size": 113,
+          "sha256": "d3f951deb57edda449b97db2d7dc4a540dad98f3674515ed28beeb12d6ae8e4b",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/LICENSE"
+        },
+        {
+          "name": "MODEL_CARD.md",
+          "size": 9354,
+          "sha256": "d7fa83c401950dad932e10a204866f723681f9d2b3c99aaeffcab9ae4bb0a43c",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/MODEL_CARD.md"
+        },
+        {
+          "name": "config.json",
+          "size": 223,
+          "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/config.json"
+        },
+        {
+          "name": "model.bin",
+          "size": 235576963,
+          "sha256": "01db09bd751bf4f835180f8ff811997d431eedce25c8c5b7921bbc3f90b53f88",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/model.bin"
+        },
+        {
+          "name": "shared_vocabulary.json",
+          "size": 993705,
+          "sha256": "c6bfcb4a8aa172c7aecda8e0b77e008cab430f9bb68025a2950c3cc6abdb8388",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/shared_vocabulary.json"
+        },
+        {
+          "name": "source.spm",
+          "size": 820182,
+          "sha256": "0a23783d3c79054e9033fa55aaaeeeb6513cf712063ea87b4eeff5014ee49134",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/source.spm"
+        },
+        {
+          "name": "target.spm",
+          "size": 802657,
+          "sha256": "e8ba58a95c4029a5c5a16c43f6784ee30fe197a1766bf2dbacc9f9b255f9361e",
+          "url": "https://github.com/DiegoBr4nd/lector-bilingue-modelos/releases/download/opus-es-en-v2/target.spm"
         }
       ]
     }

@@ -103,7 +103,7 @@ choose(pair, installed: Set<EngineId>, totalRamBytes: Long, forced: EngineId?) �
   - `isInstalled(engine, pair)` comprueba el JSON, el motor y que existan todos los archivos listados;
   - `delete(engine, pair)`.
 - **`ModelInstaller` e importador:** instalan en la carpeta del motor del modelo del catálogo.
-- **Motores:** reciben la carpeta ya validada por `ModelStore` y re-comprueban que esté dentro de su raíz, como hoy `OpusEngine`.
+- **Motores:** reciben la carpeta que devuelve `ModelStore.installedDir`, que es la única puerta de validación: solo da carpetas dentro de la raíz del motor, con nombres válidos y sin enlaces simbólicos (más estricta que la comprobación de raíz que hacía cada motor). Por eso los motores solo comprueban `isDirectory` y no repiten la comprobación de raíz.
 
 ## 6. Modelos y publicación
 

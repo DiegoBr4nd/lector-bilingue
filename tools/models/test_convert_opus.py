@@ -68,8 +68,8 @@ class PairTest(unittest.TestCase):
         self.assertIn("model.safetensors", spec.expected_sha256)
 
     def test_id_del_repo_sale_del_par(self):
-        table = {"es-en": PairSpec("Helsinki-NLP/opus-mt-tc-big-es-en", "a" * 40, {}, "español", "inglés")}
-        self.assertEqual(spec_for("es-en", table).repo_id, "Helsinki-NLP/opus-mt-tc-big-es-en")
+        table = {"es-en": PairSpec("org/fake-model-xx-yy", "a" * 40, {}, "español", "inglés")}
+        self.assertEqual(spec_for("es-en", table).repo_id, "org/fake-model-xx-yy")
 
     def test_par_invalido_falla(self):
         for bad in ("../x", "en-es/../..", "EN-ES", "", "xx-yy", "fr-en"):

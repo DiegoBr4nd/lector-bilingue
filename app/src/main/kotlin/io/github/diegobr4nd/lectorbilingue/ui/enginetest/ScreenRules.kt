@@ -15,6 +15,21 @@ object ScreenRules {
         else -> null
     }
 
+    /**
+     * Estado justo al cambiar el interruptor o el par: lo medido ya no corresponde y el modelo pasa a LOADING
+     * en la MISMA actualización, así "Traducir" no se cuela antes de que empiece la recarga.
+     */
+    fun afterSwitch(s: EngineTestUiState, choice: EngineSwitch): EngineTestUiState =
+        resetForReload(s).copy(engineSwitch = choice)
+
+    fun afterPair(s: EngineTestUiState, choice: PairChoice): EngineTestUiState =
+        resetForReload(s).copy(pair = choice)
+
+    private fun resetForReload(s: EngineTestUiState) = s.copy(
+        modelStatus = ModelStatus.LOADING, output = "", lastMillis = null, benchmark = null,
+        benchNoTexts = false, modelMessage = null,
+    )
+
     /** Traducir y medir se rechazan mientras el modelo carga o hay una operación de modelos. */
     fun modelBlocksWork(s: EngineTestUiState): Boolean = s.modelBusy || s.modelStatus == ModelStatus.LOADING
 
