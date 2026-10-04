@@ -161,7 +161,92 @@ La app descarga:
 4. Firma de nuevo (paso 7). Cada vez hay que volver a firmar.
 5. En el release `catalogo`: **Edit**, borra los dos archivos viejos y sube los nuevos (`catalog.json` y `catalog.json.minisig`). Que los dos sean del mismo momento: si no, la firma no coincide y la app rechaza el catálogo.
 
-## 10. Rotación de llaves (hazlo ya, antes de necesitarla)
+## 10. Publicar modelos de Firefox y de otro par
+Hay tres modelos más por publicar. Cada uno sigue los pasos 4 a 8, con estas diferencias.
+
+| Qué | Flujo (workflow) | Par | Release | Id en el catálogo | Licencia |
+|---|---|---|---|---|---|
+| Firefox en → es | `firefox-model` | `en-es` | `firefox-en-es-v1` | `firefox-en-es-3.0` | MPL-2.0 |
+| Firefox es → en | `firefox-model` | `es-en` | `firefox-es-en-v1` | `firefox-es-en-3.0` | MPL-2.0 |
+| OPUS es → en | `model` | `es-en` | `opus-es-en-v1` | `opus-es-en-tcbig-AAAA.MM` | CC-BY-4.0 |
+
+- El `3.0` es la versión de Mozilla de los modelos (queda anotada en `tools/models/firefox_sources.json`). Si Mozilla publica otra, el id cambia.
+- **Ojo con OPUS es → en:** Helsinki-NLP **no publica** un modelo `opus-mt-tc-big-es-en`. Hoy `model` solo acepta `en-es`. Esa fila queda pendiente hasta elegir otro modelo es → en y fijar sus huellas en `tools/models/convert_opus.py` (tabla `PAIRS`). Cuando exista, se publica igual que los de Firefox pero con el flujo `model`.
+- **Qué hace `firefox-model`:** baja de Mozilla los archivos oficiales del par, comprueba **dos** huellas SHA-256 por archivo (la del `.zst` comprimido y la del archivo descomprimido, ambas publicadas por Mozilla) y los deja **sin modificar**. Agrega `slimt.json` (nuestro: dice cuántas capas tiene el modelo; slimt no lo lee del modelo), `LICENSE` (MPL-2.0), `ATTRIBUTION.txt` y `MODEL_CARD.md`. Todo queda en `SHA256SUMS`, así el catálogo firmado también protege `slimt.json`.
+- **zstd:** Mozilla comprime sus archivos con zstd. El flujo instala el programa `zstd` en el servidor de GitHub; tú no necesitas instalarlo.
+
+### 10.1 Correr el flujo (desde la web, para cada par)
+1. En github.com, repo `lector-bilingue`, pestaña **Actions**.
+2. A la izquierda, elige **firefox-model**.
+3. Botón **Run workflow** (a la derecha). En **Par de idiomas** elige `en-es`. Botón verde **Run workflow**.
+4. Espera a que la ejecución quede con la palomita verde (unos minutos). Ábrela.
+5. Abajo, en **Artifacts**, descarga **`firefox-en-es`** (un `.zip`).
+6. Repite los pasos 3 a 5 eligiendo `es-en`: baja **`firefox-es-en`**.
+
+### 10.2 Desempaquetar y comprobar
+El `.zip` trae los archivos sueltos. Ponlos en una carpeta con el nombre del modelo.
+
+PowerShell:
+```
+mkdir C:\Users\JUAN\trabajo-modelo\firefox-en-es
+tar -xf C:\Users\JUAN\Downloads\firefox-en-es.zip -C C:\Users\JUAN\trabajo-modelo\firefox-en-es
+cd C:\Users\JUAN\trabajo-modelo\firefox-en-es
+Get-Content SHA256SUMS | Where-Object { $_.Trim() } | ForEach-Object { $h, $n = $_ -split '\s+', 2; $n = $n.TrimStart('*'); if ((Get-FileHash $n -Algorithm SHA256).Hash.ToLower() -eq $h) { "OK     $n" } else { "FALLA  $n" } }
+```
+Git Bash:
+```
+mkdir -p /c/Users/JUAN/trabajo-modelo/firefox-en-es
+/c/Windows/System32/tar.exe -xf /c/Users/JUAN/Downloads/firefox-en-es.zip -C /c/Users/JUAN/trabajo-modelo/firefox-en-es
+cd /c/Users/JUAN/trabajo-modelo/firefox-en-es && sha256sum -c SHA256SUMS
+```
+Todas deben decir `OK`. Si alguna dice `FALLA`, no sigas: vuelve a descargar el artefacto. La carpeta debe traer 8 archivos: el modelo (`model.enes.intgemm.alphas.bin`), `vocab.enes.spm`, `lex.50.50.enes.s2t.bin`, `slimt.json`, `LICENSE`, `ATTRIBUTION.txt`, `MODEL_CARD.md` y `SHA256SUMS`. Para `es-en` los nombres dicen `esen` en vez de `enes`.
+
+Haz lo mismo con `firefox-es-en` (cambia `en-es` por `es-en` en todos los comandos).
+
+### 10.3 Subir los archivos a un release
+Igual que el paso 5, pero en `lector-bilingue-modelos`:
+1. **Releases > Create a new release**.
+2. Etiqueta (tag) y título: `firefox-en-es-v1`.
+3. Arrastra **todos los archivos de la carpeta** `firefox-en-es` (incluidos `slimt.json`, `LICENSE` y `SHA256SUMS`). Archivos, no la carpeta.
+4. **Publish release**.
+
+Repite con `firefox-es-en-v1` y la carpeta `firefox-es-en`.
+
+### 10.4 Agregarlos al catálogo
+Parte del `catalog.json` actual (el del release `catalogo`, paso 9) y agrega los modelos **uno por uno**: cada comando reemplaza o agrega solo el modelo con su `--id` y deja los demás. Desde la raíz del repo `lector-bilingue`. Deja pasar **unos segundos** entre un comando y el siguiente: el catálogo guarda la hora en segundos y no acepta una hora igual o anterior a la de la versión anterior.
+
+PowerShell (una sola línea cada uno):
+```
+python tools/catalog/build_catalog.py --sums C:\Users\JUAN\trabajo-modelo\firefox-en-es\SHA256SUMS --sizes-from C:\Users\JUAN\trabajo-modelo\firefox-en-es --id firefox-en-es-3.0 --pair en-es --engine firefox --model-version 3.0 --license MPL-2.0 --attribution "Mozilla, Firefox Translations (mozilla/translations)" --release firefox-en-es-v1 --catalog C:\Users\JUAN\trabajo-modelo\catalog.json
+Start-Sleep -Seconds 2
+python tools/catalog/build_catalog.py --sums C:\Users\JUAN\trabajo-modelo\firefox-es-en\SHA256SUMS --sizes-from C:\Users\JUAN\trabajo-modelo\firefox-es-en --id firefox-es-en-3.0 --pair es-en --engine firefox --model-version 3.0 --license MPL-2.0 --attribution "Mozilla, Firefox Translations (mozilla/translations)" --release firefox-es-en-v1 --catalog C:\Users\JUAN\trabajo-modelo\catalog.json
+```
+Git Bash:
+```
+python tools/catalog/build_catalog.py \
+  --sums /c/Users/JUAN/trabajo-modelo/firefox-en-es/SHA256SUMS \
+  --sizes-from /c/Users/JUAN/trabajo-modelo/firefox-en-es \
+  --id firefox-en-es-3.0 --pair en-es --engine firefox \
+  --model-version 3.0 --license MPL-2.0 \
+  --attribution "Mozilla, Firefox Translations (mozilla/translations)" \
+  --release firefox-en-es-v1 \
+  --catalog /c/Users/JUAN/trabajo-modelo/catalog.json
+sleep 2
+python tools/catalog/build_catalog.py \
+  --sums /c/Users/JUAN/trabajo-modelo/firefox-es-en/SHA256SUMS \
+  --sizes-from /c/Users/JUAN/trabajo-modelo/firefox-es-en \
+  --id firefox-es-en-3.0 --pair es-en --engine firefox \
+  --model-version 3.0 --license MPL-2.0 \
+  --attribution "Mozilla, Firefox Translations (mozilla/translations)" \
+  --release firefox-es-en-v1 \
+  --catalog /c/Users/JUAN/trabajo-modelo/catalog.json
+```
+- `--engine firefox` le dice a la app qué motor usa el modelo.
+- Cuando exista el modelo OPUS es → en, el comando es el del paso 6 con `--id opus-es-en-tcbig-AAAA.MM --pair es-en --engine opus --license CC-BY-4.0 --attribution "Helsinki-NLP / OPUS-MT, Tiedemann et al." --release opus-es-en-v1` (el nombre `tcbig` cambia si el modelo elegido no es tc-big).
+
+Luego firma (paso 7) y publica el catálogo (paso 8, reemplazando los dos archivos del release `catalogo`). Mira el resultado antes de firmar: debe listar los modelos que esperas, cada uno con sus archivos y direcciones.
+
+## 11. Rotación de llaves (hazlo ya, antes de necesitarla)
 **Rotar** es cambiar a otra llave. Conviene tener lista una segunda llave para el día que la primera se pierda o se filtre.
 
 **Ahora mismo**, crea la llave de reserva (otro nombre, otra contraseña):

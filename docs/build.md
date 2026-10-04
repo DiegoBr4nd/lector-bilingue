@@ -53,7 +53,7 @@ tools/native/init-submodules.sh
 ```
 No uses `--recursive` ni `git submodule update --init --recursive`: CTranslate2 trae submódulos de CUDA que pesan varios GB y no se necesitan. El script baja solo lo necesario.
 
-### Obtener el modelo
+### Obtener el modelo (para publicarlo; ver docs/catalogo.md)
 1. En GitHub: pestaña *Actions* -> *model* -> *Run workflow* (o abre el run del PR).
 2. Descarga el artefacto `modelo-en-es` y descomprime el `.zip`.
 3. Descomprime el modelo con el `tar` que trae Windows (bsdtar 3.8.8 con zstd, comprobado con `--version`; Git Bash no trae `zstd`, por eso no se usa su `tar`):
@@ -69,32 +69,30 @@ Convierte tu HTML en el formato del benchmark (el archivo queda en `private/`, q
 python tools/bench/html_to_txt.py textos_para_firefox.html private/textos.txt
 ```
 
-### Copiar al teléfono
+### Instalar el modelo en el teléfono
+Ya no se copia el modelo con `adb`. La app solo carga modelos que instaló su gestor (carpeta `files/models/<motor>/<par>/` con un archivo `.installed.json`); una carpeta copiada a mano se ignora.
+- En la app, pantalla de modelos: botón **Descargar modelo** (baja el modelo del catálogo firmado) o **Importar modelo (.zip)** (para un `.zip` que ya tienes en el teléfono; la app lo revisa contra el catálogo).
+- Cómo se publican los modelos y el catálogo: `docs/catalogo.md`.
+
+### Copiar los textos privados al teléfono
 Pixel por USB con depuración activada y la app *debug* instalada (`./gradlew installFdroidDebug`).
 
 Git Bash:
 ```bash
 # Git Bash convierte rutas que empiezan con / en rutas de Windows; esto lo desactiva
 export MSYS_NO_PATHCONV=1
-adb push en-es /data/local/tmp/en-es
-adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/models
-adb shell run-as io.github.diegobr4nd.lectorbilingue cp -r /data/local/tmp/en-es files/models/
 adb push private/textos.txt /data/local/tmp/textos.txt
 adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/bench
 adb shell run-as io.github.diegobr4nd.lectorbilingue cp /data/local/tmp/textos.txt files/bench/textos.txt
-adb shell rm -r /data/local/tmp/en-es /data/local/tmp/textos.txt
+adb shell rm /data/local/tmp/textos.txt
 ```
 PowerShell (no cambia las rutas, no hace falta la variable):
 ```powershell
-adb push en-es /data/local/tmp/en-es
-adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/models
-adb shell run-as io.github.diegobr4nd.lectorbilingue cp -r /data/local/tmp/en-es files/models/
 adb push private/textos.txt /data/local/tmp/textos.txt
 adb shell run-as io.github.diegobr4nd.lectorbilingue mkdir -p files/bench
 adb shell run-as io.github.diegobr4nd.lectorbilingue cp /data/local/tmp/textos.txt files/bench/textos.txt
-adb shell rm -r /data/local/tmp/en-es /data/local/tmp/textos.txt
+adb shell rm /data/local/tmp/textos.txt
 ```
-Si la copia queda a medias (carpeta `en-es/` incompleta), la prueba del teléfono falla en vez de saltarse: borra y vuelve a copiar con `adb shell run-as io.github.diegobr4nd.lectorbilingue rm -r files/models/en-es`.
 
 ### Prueba en el teléfono
 ```bash
@@ -105,12 +103,13 @@ adb shell am instrument -w io.github.diegobr4nd.lectorbilingue.test/androidx.tes
 ```
 Cierra la app antes (`force-stop`): la pantalla de prueba carga su propio motor en el mismo proceso y falsea la medición de memoria.
 
-No uses `connectedAndroidTest`: desinstala la app al terminar y con ella se borra el modelo copiado. Sin el modelo, las pruebas que lo necesitan se saltan solas.
+No uses `connectedAndroidTest`: desinstala la app al terminar y con ella se borra el modelo instalado. Sin el modelo, las pruebas que lo necesitan se saltan solas.
 
 ### Pruebas de las herramientas Python
 ```bash
 (cd tools/bench && python -m unittest -v)
-(cd tools/models && python -m unittest -v test_convert_opus)
+(cd tools/models && python -m unittest -v test_convert_opus test_fetch_firefox)
+(cd tools/catalog && python -m unittest -v)
 ```
 
 ## Comparación de calidad beam 1 vs beam 4
@@ -119,7 +118,7 @@ Beam es cuántas "opciones" prueba el motor mientras traduce: con beam 1 toma si
 Todo queda en `private/` (ignorada por git). Los textos y sus traducciones nunca se suben.
 
 ### 1. Generar las traducciones en el teléfono
-Requiere el modelo y los textos ya copiados (ver "Copiar al teléfono") y la app instalada.
+Requiere el modelo instalado desde la app (ver "Instalar el modelo en el teléfono"), los textos ya copiados (ver "Copiar los textos privados al teléfono") y la app instalada.
 ```bash
 export MSYS_NO_PATHCONV=1
 adb shell am force-stop io.github.diegobr4nd.lectorbilingue

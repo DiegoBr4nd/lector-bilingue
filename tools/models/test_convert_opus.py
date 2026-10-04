@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 
 from convert_opus import (
+    PAIRS,
+    PairSpec,
     add_eos,
+    can_run_bench,
+    spec_for,
     read_bench_paragraphs,
     read_bench_sentences,
     verify_downloaded,
@@ -52,6 +56,34 @@ class HelpersTest(unittest.TestCase):
             self.assertIn("Helsinki-NLP/opus-mt-tc-big-en-es", text)
             self.assertIn("abc123", text)
             self.assertIn("Se distribuye sin garantías; ver la sección 5 de la licencia CC-BY-4.0.", text)
+
+
+class PairTest(unittest.TestCase):
+    def test_en_es_por_defecto_es_tc_big(self):
+        spec = spec_for("en-es")
+        self.assertEqual(spec.repo_id, "Helsinki-NLP/opus-mt-tc-big-en-es")
+        self.assertEqual(len(spec.revision), 40)
+        self.assertIn("model.safetensors", spec.expected_sha256)
+
+    def test_id_del_repo_sale_del_par(self):
+        table = {"es-en": PairSpec("Helsinki-NLP/opus-mt-tc-big-es-en", "a" * 40, {}, "español", "inglés")}
+        self.assertEqual(spec_for("es-en", table).repo_id, "Helsinki-NLP/opus-mt-tc-big-es-en")
+
+    def test_par_invalido_falla(self):
+        for bad in ("../x", "en-es/../..", "EN-ES", "", "xx-yy", "es-en"):
+            with self.assertRaises(ValueError, msg=bad):
+                spec_for(bad)
+
+    def test_bench_solo_si_el_origen_es_ingles(self):
+        self.assertTrue(can_run_bench("en-es"))
+        self.assertFalse(can_run_bench("es-en"))
+
+    def test_attribution_usa_el_par(self):
+        spec = spec_for("en-es")
+        with tempfile.TemporaryDirectory() as d:
+            write_attribution(Path(d), "abc", spec)
+            text = (Path(d) / "ATTRIBUTION.txt").read_text(encoding="utf-8")
+            self.assertIn("inglés → español", text)
 
 
 class VerifyDownloadedTest(unittest.TestCase):

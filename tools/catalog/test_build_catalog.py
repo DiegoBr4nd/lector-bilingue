@@ -72,6 +72,33 @@ class BuildCatalogTest(unittest.TestCase):
         self.assertEqual(data["models"][1]["modelVersion"], "v2")
         self.assertEqual(data["generated"], "2026-10-05T00:00:00Z")
 
+    def test_carpeta_firefox_con_slimt_json_se_agrega_a_un_catalogo_opus(self):
+        self.run_build()
+        fx = self.dir / "firefox-en-es"
+        fx.mkdir()
+        files = {
+            "model.enes.intgemm.alphas.bin": b"m" * 20,
+            "vocab.enes.spm": b"v" * 5,
+            "lex.50.50.enes.s2t.bin": b"l" * 7,
+            "slimt.json": b'{"model": "model.enes.intgemm.alphas.bin"}' + bytes([10]),
+            "LICENSE": b"MPL",
+        }
+        for n, d in files.items():
+            (fx / n).write_bytes(d)
+        (fx / "SHA256SUMS").write_text(
+            "".join(f"{hashlib.sha256(d).hexdigest()}  {n}" + chr(10) for n, d in sorted(files.items())), encoding="utf-8")
+        later = datetime(2026, 10, 4, tzinfo=timezone.utc)
+        bc.build(now=later, **self.args(
+            sums=str(fx / "SHA256SUMS"), sizes_from=str(fx), id="firefox-en-es-3.0", engine="firefox",
+            model_version="3.0", license="MPL-2.0", attribution="Mozilla, Firefox Translations",
+            release="firefox-en-es-v1"))
+        data = json.loads(self.catalog.read_text(encoding="utf-8"))
+        self.assertEqual([m["id"] for m in data["models"]], ["opus-en-es-tcbig-2026.10", "firefox-en-es-3.0"])
+        fx_model = data["models"][1]
+        self.assertEqual(fx_model["engine"], "firefox")
+        self.assertIn("slimt.json", [f["name"] for f in fx_model["files"]])
+        self.assertTrue(all(f["url"].startswith(PREFIX + "firefox-en-es-v1/") for f in fx_model["files"]))
+
     def test_reloj_no_retrocede(self):
         self.run_build()
         with self.assertRaises(bc.CatalogError):
