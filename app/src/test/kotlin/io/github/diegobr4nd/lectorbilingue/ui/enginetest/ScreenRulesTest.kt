@@ -75,4 +75,18 @@ class ScreenRulesTest {
             ScreenRules.measureBlock(ready.copy(busy = true, measuring = true)),
         )
     }
+
+    @Test fun `cambiar motor o par pasa a LOADING de inmediato y bloquea traducir`() {
+        val used = ready.copy(input = "hola", output = "hello", lastMillis = 5L)
+        val sw = ScreenRules.afterSwitch(used, EngineSwitch.FIREFOX)
+        assertEquals(EngineSwitch.FIREFOX, sw.engineSwitch)
+        assertEquals(ModelStatus.LOADING, sw.modelStatus)
+        assertEquals("", sw.output)
+        assertNull(sw.lastMillis)
+        assertEquals(ActionBlock.Lock(LockReason.LOADING), ScreenRules.translateBlock(sw))
+        val pr = ScreenRules.afterPair(used, PairChoice.ES_EN)
+        assertEquals(PairChoice.ES_EN, pr.pair)
+        assertEquals(ModelStatus.LOADING, pr.modelStatus)
+        assertEquals(ActionBlock.Lock(LockReason.LOADING), ScreenRules.translateBlock(pr))
+    }
 }

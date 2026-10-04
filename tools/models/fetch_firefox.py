@@ -41,7 +41,10 @@ RESERVED = {"LICENSE", "ATTRIBUTION.txt", "MODEL_CARD.md", "slimt.json", "SHA256
 MAX_DOWNLOAD = 128 << 20  # tope del .zst descargado
 MAX_DECOMPRESSED = 256 << 20  # tope absoluto del archivo descomprimido
 TIMEOUT = 60
-QUALITY_NOTE = "Nota de calidad de nuestras pruebas: 3,28/5 (menor que OPUS tc-big, 4,44/5)."
+QUALITY_NOTES = {
+    "en-es": "Nota de calidad de nuestras pruebas: 3,28/5 (menor que OPUS tc-big, 4,44/5) (medido en→es, fase 2a).",
+    "es-en": "Nota de calidad: aún no medida con una prueba ciega en es→en.",
+}
 
 
 class FetchError(Exception):
@@ -166,7 +169,7 @@ def _write_docs(folder: Path, pair: str, spec: dict, sources: dict) -> None:
         f"- Versión de Mozilla: {version} ({arch})\n"
         f"- Huellas verificadas el: {sources['verified_on']}\n"
         f"- Licencia: {sources['license']}\n"
-        f"- {QUALITY_NOTE}\n"
+        f"- {QUALITY_NOTES[pair]}\n"
         "- Motor: slimt (Marian), solo beam 1.\n"
         "- `slimt.json` (capas y cabezas del modelo) lo escribe nuestro script; no viene de Mozilla.\n\n"
         f"Archivos de Mozilla sin modificar:\n{rows}\n",

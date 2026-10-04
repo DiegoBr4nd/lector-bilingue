@@ -85,11 +85,11 @@ class FetchFirefoxTest(unittest.TestCase):
         sources = {
             "version": 1, "source": "origen de prueba", "license": "MPL-2.0", "verified_on": "2026-10-03",
             "allowed_hosts": hosts if hosts is not None else [self.host],
-            "pairs": {"en-es": {
+            "pairs": {p: {
                 "mozilla_version": "3.0", "architecture": "base-memory",
                 "slimt": {"encoder_layers": 6, "decoder_layers": 4, "heads": 8, "source": "prueba"},
                 "files": files,
-            }},
+            } for p in ("en-es", "es-en")},
         }
         self.sources_path.write_text(json.dumps(sources), encoding="utf-8")
 
@@ -107,7 +107,9 @@ class FetchFirefoxTest(unittest.TestCase):
         for extra in ("LICENSE", "ATTRIBUTION.txt", "MODEL_CARD.md", "slimt.json", "SHA256SUMS"):
             self.assertTrue((folder / extra).is_file(), extra)
         self.assertIn("Mozilla Public License Version 2.0", (folder / "LICENSE").read_text(encoding="utf-8"))
-        self.assertIn("3,28/5", (folder / "MODEL_CARD.md").read_text(encoding="utf-8"))
+        card = (folder / "MODEL_CARD.md").read_text(encoding="utf-8")
+        self.assertIn("3,28/5", card)
+        self.assertIn("medido en→es, fase 2a", card)
         sums = {}
         for line in (folder / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ", 1)
@@ -118,6 +120,11 @@ class FetchFirefoxTest(unittest.TestCase):
             self.assertEqual(sha((folder / name).read_bytes()), digest)
         self.assertEqual(sorted(sums), sorted(p.name for p in folder.iterdir() if p.name != "SHA256SUMS"))
         self.assertEqual([p.name for p in out.iterdir()], ["firefox-en-es"])
+
+    def test_nota_de_calidad_es_en_no_copia_los_numeros_de_en_es(self):
+        card = (self.run_fetch("es-en") / "MODEL_CARD.md").read_text(encoding="utf-8")
+        self.assertNotIn("3,28", card)
+        self.assertIn("aún no medida", card)
 
     def test_slimt_json_formato_exacto(self):
         folder = self.run_fetch()

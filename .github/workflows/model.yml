@@ -13,8 +13,10 @@ on:
           - es-en
   pull_request:
     paths:
-      - "tools/models/**"
-      - "bench/sustitutos.txt"
+      - "tools/models/convert_opus.py"
+      - "tools/models/requirements.txt"
+      - "tools/models/test_convert_opus.py"
+      - "bench/**"
       - ".github/workflows/model.yml"
 
 permissions:

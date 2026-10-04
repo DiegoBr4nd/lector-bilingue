@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -35,5 +36,34 @@ class FirefoxOnDeviceTest {
         } finally {
             engine.unload()
         }
+    }
+
+    /** Entradas raras: no debe romperse nada y siempre sale una traducción por entrada. No se imprime texto. */
+    @Test fun entradasRarasNoRompen() = runBlocking<Unit> {
+        Models.recover(context)
+        var ran = 0
+        for ((src, dst) in listOf("en" to "es", "es" to "en")) {
+            val dir = Models.installedDir(context, "firefox", "$src-$dst")
+            if (dir == null) continue
+            ran++
+            val engine = FirefoxEngine({ dir })
+            engine.load(LanguagePair(src, dst), EngineConfig(threads = 1))
+            try {
+                val cases = listOf(
+                    "emoji" to listOf("😀😀😀"),
+                    "maxima" to listOf("x".repeat(1000)),
+                    "vacia" to listOf(""),
+                    "puntuacion" to listOf("...?!;:,-"),
+                    "mezcla" to listOf("Hello мир 世界 مرحبا 😀 hola"),
+                    "lote" to List(64) { "Sentence number $it." },
+                )
+                for ((name, input) in cases) {
+                    assertEquals(input.size, engine.translate(input).size, "$src-$dst caso $name")
+                }
+            } finally {
+                engine.unload()
+            }
+        }
+        assumeTrue("ningun modelo Firefox instalado", ran > 0)
     }
 }

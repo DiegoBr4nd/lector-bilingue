@@ -159,24 +159,26 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta). */
     private suspend fun reloadEngine() {
-        // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
-        _state.first { !it.busy }
-        engineLock.withLock {
-            _state.update {
-                it.copy(
-                    modelStatus = ModelStatus.LOADING, engineInUse = null, reason = null, missingEngine = null,
-                    loadOffer = null, errorMessage = null,
-                )
-            }
-            try {
+        try {
+            // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
+            _state.first { !it.busy }
+            engineLock.withLock {
+                _state.update {
+                    it.copy(
+                        modelStatus = ModelStatus.LOADING, engineInUse = null, reason = null, missingEngine = null,
+                        loadOffer = null, errorMessage = null,
+                    )
+                }
                 unloadLocked()
                 loadChosenEngine()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Pase lo que pase, la pantalla no se queda en LOADING con los controles bloqueados.
-                _state.update { it.copy(modelStatus = ModelStatus.ERROR) }
             }
+        } catch (e: CancellationException) {
+            // Cancelada en cualquier punto: LOADING lo pusieron selectEngine/selectPair y no debe quedarse.
+            _state.update { if (it.modelStatus == ModelStatus.LOADING) it.copy(modelStatus = ModelStatus.ERROR) else it }
+            throw e
+        } catch (e: Exception) {
+            // Pase lo que pase, la pantalla no se queda en LOADING con los controles bloqueados.
+            _state.update { it.copy(modelStatus = ModelStatus.ERROR) }
         }
     }
 
@@ -225,21 +227,14 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         val s = _state.value
         if (controlsLocked(s) || s.engineSwitch == choice) return
         // Como al cambiar de par: lo medido o traducido con el otro motor ya no corresponde.
-        _state.update {
-            it.copy(
-                engineSwitch = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false,
-                modelMessage = null,
-            )
-        }
+        _state.update { ScreenRules.afterSwitch(it, choice) }
         viewModelScope.launch { reloadEngine() }
     }
 
     fun selectPair(choice: PairChoice) {
         val s = _state.value
         if (controlsLocked(s) || s.pair == choice) return
-        _state.update {
-            it.copy(pair = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false, modelMessage = null)
-        }
+        _state.update { ScreenRules.afterPair(it, choice) }
         viewModelScope.launch {
             checkSpanishBenchTexts()
             refreshModels()
