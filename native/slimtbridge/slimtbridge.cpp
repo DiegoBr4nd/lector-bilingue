@@ -200,6 +200,9 @@ struct Engine {
 };
 
 std::mutex g_registry_mutex;
+// slimt incrementa un contador global (static model_id) sin candado en Model::Model:
+// se construye un modelo a la vez.
+std::mutex g_model_construct_mutex;
 std::unordered_map<jlong, std::shared_ptr<Engine>> g_registry;
 // Contador monótono: un handle nunca se reutiliza. 0 queda reservado como inválido.
 std::atomic<jlong> g_next_handle{1};
@@ -313,10 +316,21 @@ std::vector<std::string> translateAll(Engine& engine, const std::vector<std::str
     std::vector<std::exception_ptr> errors(n);
     std::vector<std::thread> pool;
     pool.reserve(n);
-    for (size_t t = 0; t < n; ++t) {
-        pool.emplace_back([&, t] {
-            try { work(t); } catch (...) { errors[t] = std::current_exception(); }
-        });
+    // Si crear un hilo falla (std::system_error), los hilos ya creados siguen usando
+    // out/errors/sentences: hay que unirlos antes de salir. Nunca se destruye un
+    // std::thread unible (eso llama a std::terminate). Las partes sin hilo se hacen aquí.
+    size_t started = 0;
+    try {
+        for (; started < n; ++started) {
+            pool.emplace_back([&, t = started] {
+                try { work(t); } catch (...) { errors[t] = std::current_exception(); }
+            });
+        }
+    } catch (...) {
+        // Sin hilo para las partes started..n-1: se traducen en este hilo.
+    }
+    for (size_t t = started; t < n; ++t) {
+        try { work(t); } catch (...) { errors[t] = std::current_exception(); }
     }
     for (auto& th : pool) th.join();
     for (const auto& e : errors) {
@@ -354,7 +368,10 @@ Java_io_github_diegobr4nd_lectorbilingue_engine_firefox_SlimtNativeBridge_native
         modelConfig.num_heads = static_cast<size_t>(cfg.heads);
 
         auto engine = std::make_shared<Engine>();
-        engine->model = std::make_shared<slimt::Model>(modelConfig, package);
+        {
+            std::lock_guard<std::mutex> lock(g_model_construct_mutex);
+            engine->model = std::make_shared<slimt::Model>(modelConfig, package);
+        }
         slimt::Config serviceConfig;
         serviceConfig.cache_size = 0;  // sin caché: no guarda textos entre llamadas
         for (jint t = 0; t < threads; ++t) {

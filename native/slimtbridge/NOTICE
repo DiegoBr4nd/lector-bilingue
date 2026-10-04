@@ -3,7 +3,8 @@ libslimtbridge.so (motor Firefox de lector-bilingue)
 
 Esta biblioteca une el puente JNI de lector-bilingue (GPL-3.0, ver LICENSE en la raíz)
 con el siguiente código de terceros, compilado desde submódulos de git con commit fijo.
-Los textos completos de cada licencia están en la carpeta de cada submódulo.
+Los textos completos de las licencias están en la carpeta de cada submódulo, salvo
+XHScanner (abajo), que solo trae la nota "BSD license" en su encabezado.
 
 slimt
   https://github.com/jerinphilip/slimt  commit 9f0b1a20d14871cc94dbe65b7a3df128e5e81f55
@@ -13,6 +14,14 @@ slimt
     Licencia: MPL-2.0 (https://www.mozilla.org/en-US/MPL/2.0/)
   slimt/simd/neon.h parece derivado de neon_mathfun de Julien Pommier (licencia zlib).
   Parches propios (native/slimtbridge/patches/0001..0003): GPL-2.0-or-later.
+
+XHScanner (slimt/XHScanner.cc y .hh, compilado; lo usa el modo HTML de slimt)
+  https://www.codeproject.com/Articles/14076/Fast-and-Compact-HTML-XML-Scanner-Tokenizer
+  (C) Andrew Fedoniouk @ terrainformatica.com
+  Licencia: BSD (el encabezado dice solo "BSD license", sin texto completo ni
+  variante). Se conserva el aviso de copyright tal cual. Términos BSD: se permite
+  usar, modificar y redistribuir en código fuente o binario siempre que se conserve
+  el aviso de copyright y esta nota; se distribuye SIN GARANTÍA.
 
 browsermt/ssplit-cpp (Splitter/Regex de slimt)
   https://github.com/browsermt/ssplit-cpp
@@ -43,7 +52,7 @@ cpuinfo (submódulo de ruy)
 
 Licencia del conjunto
   slimt es GPL-2.0-or-later; lector-bilingue es GPL-3.0. El binario combinado se
-  distribuye bajo GPL-3.0. Las licencias Apache-2.0, MPL-2.0, BSD y zlib de las
+  distribuye bajo GPL-3.0. Las licencias Apache-2.0, MPL-2.0, BSD (incluida la de XHScanner) y zlib de las
   partes anteriores son compatibles con GPL-3.0.
 
 Modelos

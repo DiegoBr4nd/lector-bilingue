@@ -1,23 +1,32 @@
 Parche 0001 para slimt (https://github.com/jerinphilip/slimt, commit 9f0b1a20d14871cc94dbe65b7a3df128e5e81f55).
 Qué hace: cambia aligned_alloc por posix_memalign. Bionic solo trae aligned_alloc desde la API 28
-y nuestra API mínima es 26.
-Origen: escrito para lector-bilingue (prueba rápida de la fase 2c). Es el mismo cambio que el commit
-b4836a2 del fork https://github.com/DavidVentura/slimt.
+y nuestra API mínima es 26. Si no hay memoria lanza std::bad_alloc (antes devolvía
+nullptr y slimt escribía en él); así el puente JNI atrapa el error.
+Origen: escrito para lector-bilingue (prueba rápida de la fase 2c). Basado en el commit
+b4836a2 del fork https://github.com/DavidVentura/slimt (que devuelve nullptr al fallar).
 Licencia: GPL-2.0-or-later (obra derivada de slimt; ver native/third_party/slimt/COPYRIGHT).
 Se aplica al compilar (native/slimtbridge/CMakeLists.txt) sobre una copia; el submódulo no se toca.
 
 diff --git a/slimt/Aligned.cc b/slimt/Aligned.cc
-index e9bdb89..bd3dd0e 100644
+index e9bdb89..18b643f 100644
 --- a/slimt/Aligned.cc
 +++ b/slimt/Aligned.cc
-@@ -48,7 +48,11 @@ void* Aligned::allocate(size_t alignment, size_t size) {
+@@ -3,6 +3,7 @@
+ #include <cassert>
+ #include <cstddef>
+ #include <cstdlib>
++#include <new>
+ 
+ namespace slimt {
+ 
+@@ -48,7 +49,11 @@ void* Aligned::allocate(size_t alignment, size_t size) {
      aligned_size += alignment;
    }
    assert(aligned_size >= size);
 -  return aligned_alloc(alignment, aligned_size);
 +  void* ptr = nullptr;
 +  if (posix_memalign(&ptr, alignment, aligned_size) != 0) {
-+    return nullptr;
++    throw std::bad_alloc();
 +  }
 +  return ptr;
  }

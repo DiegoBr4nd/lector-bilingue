@@ -8,7 +8,12 @@ package io.github.diegobr4nd.lectorbilingue.engine.firefox
  * con mensajes que nunca contienen el texto traducido.
  */
 interface NativeBridge {
-    /** Devuelve un handle opaco; 0 = error. [threads] va de 1 a [MAX_THREADS]. */
+    /**
+     * Carga el modelo de [modelDir] y devuelve un handle opaco (nunca 0).
+     * [threads] va de 1 a [MAX_THREADS].
+     * Si falla lanza IllegalArgumentException (argumentos o slimt.json inválidos,
+     * falta un archivo) o IllegalStateException (no se pudo cargar el modelo).
+     */
     fun load(modelDir: String, threads: Int): Long
     fun translate(handle: Long, sentences: Array<String>): Array<String>
     fun release(handle: Long)
