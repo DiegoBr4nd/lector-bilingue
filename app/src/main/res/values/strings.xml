@@ -63,7 +63,7 @@
     <string name="pair_en_es">en → es</string>
     <string name="pair_es_en">es → en</string>
     <string name="engine_line_forced">Motor en uso: %1$s (elegido por ti)</string>
-    <string name="engine_line_ram">Motor en uso: %1$s (tu teléfono tiene %2$d GB de RAM)</string>
+    <string name="engine_line_ram">Motor en uso: %1$s (tu teléfono tiene %2$s GB de RAM)</string>
     <string name="engine_line_only">Motor en uso: %1$s (es el único instalado)</string>
     <string name="engine_line_none">Ningún motor cargado</string>
     <string name="model_missing_engine">Falta el modelo de %1$s para %2$s. Descárgalo en la lista de abajo.</string>

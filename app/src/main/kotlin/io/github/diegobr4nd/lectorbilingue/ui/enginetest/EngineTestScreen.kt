@@ -123,7 +123,7 @@ fun EngineTestContent(
         ) {
             Text(stringResource(R.string.engine_test_title), style = MaterialTheme.typography.titleLarge)
             EngineControlsCard(state, onSelectEngine, onSelectPair)
-            ModelStatusCard(state, onUseOffer = onSelectEngine)
+            ModelStatusCard(state, onUseOffer = onSelectEngine, onDownload = onDownload)
             ModelManagerCard(state, onDownload, onDeleteModel, onImport, onCancelDownload)
             OutlinedTextField(
                 value = state.input,
@@ -189,6 +189,7 @@ private fun EngineControlsCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val controlsEnabled = !state.busy && !state.modelBusy && state.modelStatus != ModelStatus.LOADING
             Text(stringResource(R.string.engine_section_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.engine_switch_label), style = MaterialTheme.typography.labelLarge)
             val switches = EngineSwitch.entries
@@ -197,7 +198,7 @@ private fun EngineControlsCard(
                     SegmentedButton(
                         selected = state.engineSwitch == option,
                         onClick = { onSelectEngine(option) },
-                        enabled = !state.busy,
+                        enabled = controlsEnabled,
                         shape = SegmentedButtonDefaults.itemShape(i, switches.size),
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) {
@@ -218,7 +219,7 @@ private fun EngineControlsCard(
                     SegmentedButton(
                         selected = state.pair == option,
                         onClick = { onSelectPair(option) },
-                        enabled = !state.busy,
+                        enabled = controlsEnabled,
                         shape = SegmentedButtonDefaults.itemShape(i, pairs.size),
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) { Text(option.label()) }
@@ -237,7 +238,7 @@ private fun EngineLine(state: EngineTestUiState) {
     } else {
         when (reason) {
             Reason.FORCED -> stringResource(R.string.engine_line_forced, engine.label())
-            Reason.RAM -> stringResource(R.string.engine_line_ram, engine.label(), state.totalRamGb)
+            Reason.RAM -> stringResource(R.string.engine_line_ram, engine.label(), state.ramText)
             Reason.ONLY_INSTALLED -> stringResource(R.string.engine_line_only, engine.label())
         }
     }
@@ -245,7 +246,11 @@ private fun EngineLine(state: EngineTestUiState) {
 }
 
 @Composable
-private fun ModelStatusCard(state: EngineTestUiState, onUseOffer: (EngineSwitch) -> Unit) {
+private fun ModelStatusCard(
+    state: EngineTestUiState,
+    onUseOffer: (EngineSwitch) -> Unit,
+    onDownload: (String) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Región "viva": TalkBack anuncia el cambio de estado del modelo sin que el usuario lo busque.
@@ -269,6 +274,14 @@ private fun ModelStatusCard(state: EngineTestUiState, onUseOffer: (EngineSwitch)
                         Text(stringResource(R.string.model_missing_engine, it.label(), state.pair.label()))
                     }
                     Text(stringResource(R.string.model_missing_hint))
+                    val missingRow = state.models.firstOrNull { it.engine == state.missingEngine && !it.installed }
+                    if (missingRow != null) {
+                        Button(
+                            onClick = { onDownload(missingRow.id) },
+                            enabled = !state.modelBusy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text(stringResource(R.string.download_row_button, missingRow.engine.label())) }
+                    }
                 }
                 ModelStatus.ERROR -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.model_error), color = MaterialTheme.colorScheme.error)
@@ -276,7 +289,7 @@ private fun ModelStatusCard(state: EngineTestUiState, onUseOffer: (EngineSwitch)
                         Text(stringResource(R.string.load_offer_text, offer.failed.label(), offer.alternative.label()))
                         OutlinedButton(
                             onClick = {
-                                onUseOffer(if (offer.alternative == EngineId.OPUS) EngineSwitch.OPUS else EngineSwitch.FIREFOX)
+                                onUseOffer(EngineSwitch.of(offer.alternative))
                             },
                             modifier = Modifier.heightIn(min = 48.dp),
                         ) { Text(stringResource(R.string.load_offer_button, offer.alternative.label())) }
@@ -326,7 +339,7 @@ private fun ModelManagerCard(
             }
             OutlinedButton(
                 onClick = onImport,
-                enabled = !state.modelBusy,
+                enabled = !state.modelBusy && !state.busy,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.import_button)) }
             state.modelMessage?.let {
@@ -399,7 +412,7 @@ private fun ModelRowItem(
         } else if (row.installed) {
             OutlinedButton(
                 onClick = { onDeleteModel(row.id) },
-                enabled = !state.modelBusy,
+                enabled = !state.modelBusy && !state.busy,
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.delete_row_button, engineName)) }
         } else {

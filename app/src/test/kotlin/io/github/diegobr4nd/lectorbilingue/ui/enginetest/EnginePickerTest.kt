@@ -44,6 +44,29 @@ class EnginePickerTest {
         assertEquals(4L, EnginePicker.ramGb((3.9 * gib).toLong()))
     }
 
+    @Test fun `el texto de RAM lleva decimal cerca del umbral de 4 GB`() {
+        val es = java.util.Locale.forLanguageTag("es")
+        assertEquals("3,6", EnginePicker.ramText((3.6 * gib).toLong(), es))
+        assertEquals("7", EnginePicker.ramText((7.4 * gib).toLong(), es))
+        assertEquals("8", EnginePicker.ramText((7.6 * gib).toLong(), es))
+    }
+
+    @Test fun `automatico con un motor ausente pide el preferido por RAM`() {
+        assertEquals(
+            EnginePlan.Download(EngineId.OPUS),
+            EnginePicker.plan(EngineSwitch.AUTO, emptySet(), 8 * gib),
+        )
+        assertEquals(
+            EnginePlan.Download(EngineId.FIREFOX),
+            EnginePicker.plan(EngineSwitch.AUTO, emptySet(), 2 * gib),
+        )
+    }
+
+    @Test fun `el interruptor se obtiene del motor`() {
+        assertEquals(EngineSwitch.OPUS, EngineSwitch.of(EngineId.OPUS))
+        assertEquals(EngineSwitch.FIREFOX, EngineSwitch.of(EngineId.FIREFOX))
+    }
+
     @Test fun `los pares tienen su carpeta y su texto`() {
         assertEquals("en-es", PairChoice.EN_ES.wire)
         assertEquals("es-en", PairChoice.ES_EN.wire)

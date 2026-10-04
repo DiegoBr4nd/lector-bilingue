@@ -5,10 +5,19 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineSelector
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
+import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /** Interruptor de prueba: Automático deja decidir a [EngineSelector]; los otros fuerzan un motor. */
-enum class EngineSwitch(val forced: EngineId?) { AUTO(null), OPUS(EngineId.OPUS), FIREFOX(EngineId.FIREFOX) }
+enum class EngineSwitch(val forced: EngineId?) {
+    AUTO(null), OPUS(EngineId.OPUS), FIREFOX(EngineId.FIREFOX);
+
+    companion object {
+        /** El interruptor que fuerza [engine]. */
+        fun of(engine: EngineId): EngineSwitch = entries.first { it.forced == engine }
+    }
+}
 
 /** Los dos pares de la pantalla. [wire] es el nombre en el catálogo y en las carpetas. */
 enum class PairChoice(val source: String, val target: String) {
@@ -43,4 +52,14 @@ object EnginePicker {
 
     /** RAM total en GB redondeados (7,6 GiB se muestra como 8). */
     fun ramGb(totalRamBytes: Long): Long = (totalRamBytes / GIB).roundToLong()
+
+    /**
+     * Texto de la RAM para la pantalla: GB enteros, salvo a ±0,5 GB del umbral de 4 GiB, donde lleva un decimal
+     * (así "3,6" nunca se lee como "4" junto a "Firefox por RAM").
+     */
+    fun ramText(totalRamBytes: Long, locale: Locale = Locale.getDefault()): String {
+        val gib = totalRamBytes / GIB
+        val threshold = EngineSelector.OPUS_MIN_RAM_BYTES / GIB
+        return if (abs(gib - threshold) <= 0.5) String.format(locale, "%.1f", gib) else ramGb(totalRamBytes).toString()
+    }
 }

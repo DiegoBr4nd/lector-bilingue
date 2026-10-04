@@ -31,6 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -45,7 +46,7 @@ enum class BenchSource { PRIVATE, SUBSTITUTES }
 enum class ModelPhase { NONE, LOOKING_UP_CATALOG, IMPORTING, DELETING }
 
 /** Una fila de la lista de modelos del catálogo para el par elegido. */
-data class ModelRow(val id: String, val engine: EngineId, val sizeMb: Long, val installed: Boolean)
+data class ModelRow(val id: String, val engine: EngineId, val pair: PairChoice, val sizeMb: Long, val installed: Boolean)
 
 /** Carga fallida en Automático: se ofrece, con un botón, probar con el otro motor instalado. */
 data class LoadOffer(val failed: EngineId, val alternative: EngineId)
@@ -54,7 +55,8 @@ data class EngineTestUiState(
     val modelStatus: ModelStatus = ModelStatus.LOADING,
     val engineSwitch: EngineSwitch = EngineSwitch.AUTO,
     val pair: PairChoice = PairChoice.EN_ES,
-    val totalRamGb: Long = 0,
+    /** RAM total ya formateada para mostrar (ver [EnginePicker.ramText]). */
+    val ramText: String = "",
     /** Motor cargado (o que se está cargando) y por qué se eligió. */
     val engineInUse: EngineId? = null,
     val reason: Reason? = null,
@@ -108,7 +110,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     @Volatile private var loaded: TranslationEngine? = null
 
     private val totalRamBytes = totalRam(application)
-    private val _state = MutableStateFlow(EngineTestUiState(totalRamGb = EnginePicker.ramGb(totalRamBytes)))
+    private val _state = MutableStateFlow(EngineTestUiState(ramText = EnginePicker.ramText(totalRamBytes)))
     val state: StateFlow<EngineTestUiState> = _state.asStateFlow()
 
     private fun app(): Application = getApplication()
@@ -134,9 +136,6 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             runCatching { Models.installedDir(app(), it.wire, pair.wire) != null }.getOrDefault(false)
         }
 
-    /** Descarga el motor cargado (si hay), fuera del hilo principal: unload() espera el candado nativo. */
-    private suspend fun unloadLoaded() = engineLock.withLock { unloadLocked() }
-
     private suspend fun unloadLocked() {
         val e = loaded ?: return
         loaded = null
@@ -145,6 +144,8 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta). */
     private suspend fun reloadEngine() {
+        // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
+        _state.first { !it.busy }
         engineLock.withLock {
             _state.update {
                 it.copy(
@@ -191,16 +192,19 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** Mientras algo trabaja o carga, no se cambia motor ni par (así las recargas no se apilan). */
+    private fun controlsLocked(s: EngineTestUiState) = s.busy || s.modelBusy || s.modelStatus == ModelStatus.LOADING
+
     fun selectEngine(choice: EngineSwitch) {
         val s = _state.value
-        if (s.busy || s.engineSwitch == choice) return
+        if (controlsLocked(s) || s.engineSwitch == choice) return
         _state.update { it.copy(engineSwitch = choice) }
         viewModelScope.launch { reloadEngine() }
     }
 
     fun selectPair(choice: PairChoice) {
         val s = _state.value
-        if (s.busy || s.pair == choice) return
+        if (controlsLocked(s) || s.pair == choice) return
         _state.update {
             it.copy(pair = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false, modelMessage = null)
         }
@@ -213,7 +217,8 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     /** Lista de modelos del catálogo guardado (sin red) para el par elegido; retoma una descarga en curso. */
     private suspend fun refreshModels() {
         val app = getApplication<Application>()
-        val pairWire = _state.value.pair.wire
+        val pairChoice = _state.value.pair
+        val pairWire = pairChoice.wire
         val (rows, resumeId) = withContext(Dispatchers.IO) {
             val catalog = runCatching { Models.catalogRepository(app).current() }.getOrNull()
             val installed = runCatching { Models.store(app).installed() }.getOrDefault(emptyList())
@@ -221,7 +226,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             val rows = models.mapNotNull { m ->
                 EngineId.fromWire(m.engine)?.let { e ->
                     ModelRow(
-                        m.id, e, ModelActions.megabytes(m.totalSize),
+                        m.id, e, pairChoice, ModelActions.megabytes(m.totalSize),
                         installed.any { it.engine == m.engine && it.pair == pairWire },
                     )
                 }
@@ -229,7 +234,13 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             val active = models.firstOrNull { runCatching { Models.isDownloading(app, it.id) }.getOrDefault(false) }
             rows to active?.id
         }
-        _state.update { it.copy(models = rows) }
+        // Si mientras tanto cambió el par, esta lista ya no vale: la del par nuevo la calcula su propio refresco.
+        var stale = false
+        _state.update {
+            stale = it.pair != pairChoice
+            if (stale) it else it.copy(models = rows)
+        }
+        if (stale) return
         if (resumeId != null && !_state.value.modelBusy) {
             _state.update { it.copy(activeModelId = resumeId, modelBusy = true, downloading = true) }
             observeDownload(resumeId, null)
@@ -372,6 +383,7 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Importa un modelo desde un .zip que eligió el usuario y recarga el motor. */
     fun importModel(uri: Uri) {
+        if (_state.value.busy) return
         if (!tryStartModelOperation(ModelPhase.IMPORTING)) return
         viewModelScope.launch {
             val app = getApplication<Application>()
@@ -402,14 +414,22 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Borra el modelo de la fila: primero descarga el motor cargado (no se borra un modelo en uso). */
+    /**
+     * Borra el modelo de la fila tocada: se captura su motor y su par ANTES de lanzar nada, y el descargar
+     * el motor y el borrado van bajo el mismo candado, para que ninguna recarga cargue el modelo entre medias.
+     */
     fun deleteModel(modelId: String) {
         val row = _state.value.models.firstOrNull { it.id == modelId } ?: return
+        if (_state.value.busy) return
         if (!tryStartModelOperation(ModelPhase.DELETING)) return
+        val engine = row.engine.wire
+        val pair = row.pair.wire
         viewModelScope.launch {
             val problem: ModelMessage? = try {
-                unloadLoaded()
-                Models.deleteModel(getApplication(), row.engine.wire, _state.value.pair.wire)
+                engineLock.withLock {
+                    unloadLocked()
+                    Models.deleteModel(getApplication(), engine, pair)
+                }
                 null
             } catch (e: CancellationException) {
                 throw e
