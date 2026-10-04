@@ -8,11 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -23,6 +20,9 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -123,7 +123,7 @@ fun EngineTestContent(
         ) {
             Text(stringResource(R.string.engine_test_title), style = MaterialTheme.typography.titleLarge)
             EngineControlsCard(state, onSelectEngine, onSelectPair)
-            ModelStatusCard(state, onUseOffer = onSelectEngine, onDownload = onDownload)
+            ModelStatusCard(state, onUseOffer = onSelectEngine, onDownload = onDownload, onDeleteModel = onDeleteModel)
             ModelManagerCard(state, onDownload, onDeleteModel, onImport, onCancelDownload)
             OutlinedTextField(
                 value = state.input,
@@ -138,33 +138,53 @@ fun EngineTestContent(
                 onClick = onTranslate,
                 enabled = !state.busy && ready && state.input.isNotBlank(),
             ) { Text(stringResource(R.string.translate_button)) }
+            if (state.busy && !state.measuring) BusyRow(R.string.translating)
             if (state.output.isNotEmpty()) {
                 SelectionContainer {
                     Text(state.output, style = MaterialTheme.typography.bodyLarge)
                 }
                 state.lastMillis?.let { Text(stringResource(R.string.elapsed_ms, it)) }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onBenchmark, enabled = !state.busy && ready) {
-                    Text(stringResource(R.string.benchmark_button))
-                }
-                if (state.busy) {
-                    val working = stringResource(R.string.working_description)
-                    CircularProgressIndicator(Modifier.semantics { contentDescription = working })
-                    Text(stringResource(R.string.bench_measuring), style = MaterialTheme.typography.bodyMedium)
-                }
+            val benchAvailable = ScreenRules.benchAvailable(state)
+            Button(onClick = onBenchmark, enabled = !state.busy && ready && benchAvailable) {
+                Text(stringResource(R.string.benchmark_button))
             }
-            if (state.benchNoTexts) {
+            if (state.busy && state.measuring) BusyRow(R.string.bench_measuring)
+            if (!benchAvailable || state.benchNoTexts) {
                 Text(
                     stringResource(R.string.bench_no_texts),
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
-            state.benchmark?.let { BenchmarkCard(it, state.benchSource) }
+            state.benchmark?.let { result ->
+                val engine = state.benchEngine
+                val pair = state.benchPair
+                if (engine != null && pair != null) {
+                    Text(
+                        stringResource(R.string.bench_measured_with, engine.label(), pair.label()),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                BenchmarkCard(result, state.benchSource)
+            }
             state.errorMessage?.takeIf { state.modelStatus != ModelStatus.ERROR }?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
         }
+    }
+}
+
+/** Rueda de progreso con su texto (traduciendo o midiendo). */
+@Composable
+private fun BusyRow(@StringRes text: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val working = stringResource(R.string.working_description)
+        CircularProgressIndicator(Modifier.semantics { contentDescription = working })
+        Text(stringResource(text), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -180,7 +200,6 @@ private fun EngineId.label(): String = stringResource(
 private fun PairChoice.label(): String =
     stringResource(if (this == PairChoice.EN_ES) R.string.pair_en_es else R.string.pair_es_en)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EngineControlsCard(
     state: EngineTestUiState,
@@ -189,42 +208,80 @@ private fun EngineControlsCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val controlsEnabled = !state.busy && !state.modelBusy && state.modelStatus != ModelStatus.LOADING
+            val lock = ScreenRules.lockReason(state)
+            val controlsEnabled = lock == null
             Text(stringResource(R.string.engine_section_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.engine_switch_label), style = MaterialTheme.typography.labelLarge)
-            val switches = EngineSwitch.entries
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                switches.forEachIndexed { i, option ->
-                    SegmentedButton(
-                        selected = state.engineSwitch == option,
-                        onClick = { onSelectEngine(option) },
-                        enabled = controlsEnabled,
-                        shape = SegmentedButtonDefaults.itemShape(i, switches.size),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                        Text(
-                            when (option) {
-                                EngineSwitch.AUTO -> stringResource(R.string.engine_auto)
-                                EngineSwitch.OPUS -> stringResource(R.string.engine_opus)
-                                EngineSwitch.FIREFOX -> stringResource(R.string.engine_firefox)
-                            },
-                        )
-                    }
-                }
+            ChoiceChips(
+                options = EngineSwitch.entries,
+                selected = state.engineSwitch,
+                enabled = controlsEnabled,
+                onSelect = onSelectEngine,
+            ) { option ->
+                stringResource(
+                    when (option) {
+                        EngineSwitch.AUTO -> R.string.engine_auto
+                        EngineSwitch.OPUS -> R.string.engine_opus
+                        EngineSwitch.FIREFOX -> R.string.engine_firefox
+                    },
+                )
             }
             Text(stringResource(R.string.pair_label), style = MaterialTheme.typography.labelLarge)
-            val pairs = PairChoice.entries
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                pairs.forEachIndexed { i, option ->
-                    SegmentedButton(
-                        selected = state.pair == option,
-                        onClick = { onSelectPair(option) },
-                        enabled = controlsEnabled,
-                        shape = SegmentedButtonDefaults.itemShape(i, pairs.size),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) { Text(option.label()) }
-                }
+            ChoiceChips(
+                options = PairChoice.entries,
+                selected = state.pair,
+                enabled = controlsEnabled,
+                onSelect = onSelectPair,
+            ) { option -> option.label() }
+            if (lock != null) {
+                Text(
+                    stringResource(lock.textRes()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
             }
+        }
+    }
+}
+
+@StringRes
+private fun LockReason.textRes(): Int = when (this) {
+    LockReason.DOWNLOADING -> R.string.lock_downloading
+    LockReason.MODEL_BUSY -> R.string.lock_model_busy
+    LockReason.LOADING -> R.string.lock_loading
+    LockReason.TRANSLATING -> R.string.lock_translating
+    LockReason.MEASURING -> R.string.lock_measuring
+}
+
+/**
+ * Elección única con chips que saltan de línea (FlowRow). Antes eran botones segmentados, pero con la letra
+ * al 200 % "Automático" no cabía en un tercio del ancho; los chips se acomodan solos.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChoiceChips(
+    options: List<T>,
+    selected: T,
+    enabled: Boolean,
+    onSelect: (T) -> Unit,
+    label: @Composable (T) -> String,
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                enabled = enabled,
+                label = { Text(label(option), maxLines = 1) },
+                modifier = Modifier.heightIn(min = 48.dp),
+            )
         }
     }
 }
@@ -250,6 +307,7 @@ private fun ModelStatusCard(
     state: EngineTestUiState,
     onUseOffer: (EngineSwitch) -> Unit,
     onDownload: (String) -> Unit,
+    onDeleteModel: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -269,22 +327,32 @@ private fun ModelStatusCard(
                     EngineLine(state)
                 }
                 ModelStatus.MISSING -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.model_missing))
-                    state.missingEngine?.let {
-                        Text(stringResource(R.string.model_missing_engine, it.label(), state.pair.label()))
-                    }
-                    Text(stringResource(R.string.model_missing_hint))
-                    val missingRow = state.models.firstOrNull { it.engine == state.missingEngine && !it.installed }
-                    if (missingRow != null) {
-                        Button(
-                            onClick = { onDownload(missingRow.id) },
-                            enabled = !state.modelBusy,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                        ) { Text(stringResource(R.string.download_row_button, missingRow.engine.label())) }
+                    val missing = state.missingEngine
+                    if (missing != null) {
+                        Text(stringResource(R.string.model_missing_engine, missing.label(), state.pair.label()))
+                        val missingRow = state.models.firstOrNull { it.engine == missing && !it.installed }
+                        if (missingRow != null) {
+                            Button(
+                                onClick = { onDownload(missingRow.id) },
+                                enabled = !state.modelBusy,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) { Text(stringResource(R.string.download_row_button, missingRow.engine.label())) }
+                        } else {
+                            // El catálogo no tiene ese modelo: no hay botón de descarga al que apuntar.
+                            Text(stringResource(R.string.model_missing_no_row, missing.label(), state.pair.label()))
+                        }
                     }
                 }
                 ModelStatus.ERROR -> Column(modifier = live, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.model_error), color = MaterialTheme.colorScheme.error)
+                    val failed = state.engineInUse
+                    Text(
+                        if (failed != null) {
+                            stringResource(R.string.model_error, failed.label(), state.pair.label())
+                        } else {
+                            stringResource(R.string.model_error_generic)
+                        },
+                        color = MaterialTheme.colorScheme.error,
+                    )
                     state.loadOffer?.let { offer ->
                         Text(stringResource(R.string.load_offer_text, offer.failed.label(), offer.alternative.label()))
                         OutlinedButton(
@@ -293,6 +361,15 @@ private fun ModelStatusCard(
                             },
                             modifier = Modifier.heightIn(min = 48.dp),
                         ) { Text(stringResource(R.string.load_offer_button, offer.alternative.label())) }
+                    }
+                    // Borrar el modelo que falló permite descargarlo de nuevo.
+                    val failedRow = state.models.firstOrNull { it.engine == failed && it.installed }
+                    if (failedRow != null) {
+                        OutlinedButton(
+                            onClick = { onDeleteModel(failedRow.id) },
+                            enabled = !state.modelBusy && !state.busy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) { Text(stringResource(R.string.delete_row_button, failedRow.engine.label())) }
                     }
                 }
             }
@@ -315,11 +392,13 @@ private fun ModelManagerCard(
             state.models.forEach { row ->
                 ModelRowItem(state, row, onDownload, onDeleteModel, onCancelDownload)
             }
-            Text(
-                stringResource(R.string.download_wifi_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (ScreenRules.showWifiHint(state)) {
+                Text(
+                    stringResource(R.string.download_wifi_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (state.modelBusy && !state.downloading && state.phase != ModelPhase.NONE) {
                 val busyDescription = stringResource(R.string.model_busy_description)
                 LinearProgressIndicator(
@@ -487,6 +566,46 @@ private fun EngineTestContentPreview() {
                 lastMillis = 420,
                 benchSource = BenchSource.SUBSTITUTES,
                 benchmark = BenchmarkResult(25, 900, 50_000, 18.0, 1500, 3200),
+            ),
+            onInputChange = {},
+            onTranslate = {},
+            onBenchmark = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EngineTestMissingPreview() {
+    LectorBilingueTheme {
+        EngineTestContent(
+            state = EngineTestUiState(
+                modelStatus = ModelStatus.MISSING,
+                pair = PairChoice.ES_EN,
+                missingEngine = EngineId.FIREFOX,
+                models = listOf(ModelRow("firefox-es-en-1", EngineId.FIREFOX, PairChoice.ES_EN, 40, false)),
+            ),
+            onInputChange = {},
+            onTranslate = {},
+            onBenchmark = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EngineTestErrorPreview() {
+    LectorBilingueTheme {
+        EngineTestContent(
+            state = EngineTestUiState(
+                modelStatus = ModelStatus.ERROR,
+                engineInUse = EngineId.OPUS,
+                reason = Reason.RAM,
+                loadOffer = LoadOffer(EngineId.OPUS, EngineId.FIREFOX),
+                models = listOf(
+                    ModelRow("opus-en-es-1", EngineId.OPUS, PairChoice.EN_ES, 120, true),
+                    ModelRow("firefox-en-es-1", EngineId.FIREFOX, PairChoice.EN_ES, 40, true),
+                ),
             ),
             onInputChange = {},
             onTranslate = {},

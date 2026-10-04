@@ -72,6 +72,11 @@ data class EngineTestUiState(
     val busy: Boolean = false,
     val benchmark: BenchmarkResult? = null,
     val benchSource: BenchSource? = null,
+    /** Motor y par con los que se tomó la medición mostrada. */
+    val benchEngine: EngineId? = null,
+    val benchPair: PairChoice? = null,
+    /** Con [busy]: la operación es una medición de velocidad (y no una traducción). */
+    val measuring: Boolean = false,
     /** El par elegido no tiene textos de prueba (es → en sin textos-es.txt). */
     val benchNoTexts: Boolean = false,
     val errorMessage: String? = null,
@@ -139,7 +144,14 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     private suspend fun unloadLocked() {
         val e = loaded ?: return
         loaded = null
-        withContext(Dispatchers.Default) { e.unload() }
+        // Si descargar falla, el motor ya no se usa de todas formas: no se debe quedar la pantalla en LOADING.
+        try {
+            withContext(Dispatchers.Default) { e.unload() }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            // Se ignora a propósito (el mensaje podría llevar rutas); loaded ya es null.
+        }
     }
 
     /** Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta). */
@@ -153,52 +165,69 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     loadOffer = null, errorMessage = null,
                 )
             }
-            unloadLocked()
-            val s = _state.value
-            val installed = withContext(Dispatchers.IO) { installedEngines(s.pair) }
-            when (val plan = EnginePicker.plan(s.engineSwitch, installed, totalRamBytes)) {
-                is EnginePlan.Download ->
-                    _state.update { it.copy(modelStatus = ModelStatus.MISSING, missingEngine = plan.engine) }
-                is EnginePlan.Load -> {
-                    _state.update { it.copy(engineInUse = plan.engine, reason = plan.reason) }
-                    val engine = engineOf(plan.engine)
-                    runCatching { engine.load(s.pair.pair, configOf(plan.engine)) }
-                        .onSuccess {
-                            loaded = engine
-                            _state.update { it.copy(modelStatus = ModelStatus.READY) }
-                        }
-                        .onFailure { e ->
-                            if (e is CancellationException) throw e
-                            if (e is ModelNotInstalledException) {
-                                _state.update {
-                                    it.copy(
-                                        modelStatus = ModelStatus.MISSING, engineInUse = null, reason = null,
-                                        missingEngine = plan.engine,
-                                    )
-                                }
-                            } else {
-                                val alt = EnginePicker.fallbackOffer(s.engineSwitch, plan.engine, installed)
-                                _state.update {
-                                    it.copy(
-                                        modelStatus = ModelStatus.ERROR,
-                                        errorMessage = app().getString(R.string.model_error),
-                                        loadOffer = alt?.let { a -> LoadOffer(plan.engine, a) },
-                                    )
-                                }
+            try {
+                unloadLocked()
+                loadChosenEngine()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Pase lo que pase, la pantalla no se queda en LOADING con los controles bloqueados.
+                _state.update { it.copy(modelStatus = ModelStatus.ERROR) }
+            }
+        }
+    }
+
+    /** Elige el motor según el interruptor y lo instalado, y lo carga (o deja el estado MISSING / ERROR). */
+    private suspend fun loadChosenEngine() {
+        val s = _state.value
+        val installed = withContext(Dispatchers.IO) { installedEngines(s.pair) }
+        when (val plan = EnginePicker.plan(s.engineSwitch, installed, totalRamBytes)) {
+            is EnginePlan.Download ->
+                _state.update { it.copy(modelStatus = ModelStatus.MISSING, missingEngine = plan.engine) }
+            is EnginePlan.Load -> {
+                _state.update { it.copy(engineInUse = plan.engine, reason = plan.reason) }
+                val engine = engineOf(plan.engine)
+                runCatching { engine.load(s.pair.pair, configOf(plan.engine)) }
+                    .onSuccess {
+                        loaded = engine
+                        _state.update { it.copy(modelStatus = ModelStatus.READY) }
+                    }
+                    .onFailure { e ->
+                        if (e is CancellationException) throw e
+                        if (e is ModelNotInstalledException) {
+                            _state.update {
+                                it.copy(
+                                    modelStatus = ModelStatus.MISSING, engineInUse = null, reason = null,
+                                    missingEngine = plan.engine,
+                                )
+                            }
+                        } else {
+                            val alt = EnginePicker.fallbackOffer(s.engineSwitch, plan.engine, installed)
+                            _state.update {
+                                it.copy(
+                                    modelStatus = ModelStatus.ERROR,
+                                    loadOffer = alt?.let { a -> LoadOffer(plan.engine, a) },
+                                )
                             }
                         }
-                }
+                    }
             }
         }
     }
 
     /** Mientras algo trabaja o carga, no se cambia motor ni par (así las recargas no se apilan). */
-    private fun controlsLocked(s: EngineTestUiState) = s.busy || s.modelBusy || s.modelStatus == ModelStatus.LOADING
+    private fun controlsLocked(s: EngineTestUiState) = ScreenRules.lockReason(s) != null
 
     fun selectEngine(choice: EngineSwitch) {
         val s = _state.value
         if (controlsLocked(s) || s.engineSwitch == choice) return
-        _state.update { it.copy(engineSwitch = choice) }
+        // Como al cambiar de par: lo medido o traducido con el otro motor ya no corresponde.
+        _state.update {
+            it.copy(
+                engineSwitch = choice, output = "", lastMillis = null, benchmark = null, benchNoTexts = false,
+                modelMessage = null,
+            )
+        }
         viewModelScope.launch { reloadEngine() }
     }
 
@@ -447,9 +476,14 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
     fun onInputChange(text: String) = _state.update { it.copy(input = text) }
 
     fun translate() {
-        val text = _state.value.input
-        if (text.isBlank() || _state.value.busy) return
-        _state.update { it.copy(busy = true, errorMessage = null) }
+        val s = _state.value
+        val text = s.input
+        if (text.isBlank() || s.busy) return
+        if (ScreenRules.modelBlocksWork(s)) {
+            _state.update { it.copy(errorMessage = app().getString(R.string.error_wait_model)) }
+            return
+        }
+        _state.update { it.copy(busy = true, measuring = false, errorMessage = null) }
         viewModelScope.launch {
             val start = System.nanoTime()
             runCatching { translateParagraph(text) }
@@ -457,16 +491,29 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                     val ms = (System.nanoTime() - start) / 1_000_000
                     _state.update { it.copy(output = out, lastMillis = ms, busy = false) }
                 }
-                .onFailure { _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    _state.update { s2 -> s2.copy(errorMessage = app().getString(R.string.error_translate), busy = false) }
+                }
         }
     }
 
     fun runBenchmark() {
-        if (_state.value.busy) return
-        _state.update { it.copy(busy = true, errorMessage = null, benchmark = null, benchNoTexts = false) }
+        val s = _state.value
+        if (s.busy) return
+        if (ScreenRules.modelBlocksWork(s)) {
+            _state.update { it.copy(errorMessage = app().getString(R.string.error_wait_model)) }
+            return
+        }
+        // Con qué motor y par se mide: se fija al empezar (los controles están bloqueados durante la medición).
+        val engine = s.engineInUse
+        val pair = s.pair
+        _state.update {
+            it.copy(busy = true, measuring = true, errorMessage = null, benchmark = null, benchNoTexts = false)
+        }
         viewModelScope.launch {
             runCatching {
-                val loadedTexts = loadBenchParagraphs(_state.value.pair)
+                val loadedTexts = loadBenchParagraphs(pair)
                 if (loadedTexts == null) {
                     null
                 } else {
@@ -476,12 +523,20 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
             }.onSuccess { done ->
                 _state.update {
                     if (done == null) {
-                        it.copy(benchNoTexts = true, busy = false)
+                        it.copy(benchNoTexts = true, busy = false, measuring = false)
                     } else {
-                        it.copy(benchmark = done.second, benchSource = done.first, busy = false)
+                        it.copy(
+                            benchmark = done.second, benchSource = done.first, benchEngine = engine, benchPair = pair,
+                            busy = false, measuring = false,
+                        )
                     }
                 }
-            }.onFailure { _state.update { it.copy(errorMessage = app().getString(R.string.error_generic), busy = false) } }
+            }.onFailure {
+                if (it is CancellationException) throw it
+                _state.update { s2 ->
+                    s2.copy(errorMessage = app().getString(R.string.error_bench), busy = false, measuring = false)
+                }
+            }
         }
     }
 
