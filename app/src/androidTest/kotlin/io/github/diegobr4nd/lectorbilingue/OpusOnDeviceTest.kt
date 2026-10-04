@@ -32,7 +32,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun traduceHolaMundo() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
+        val engine = OpusEngine(File(filesDir, "models/opus"))
         assumeTrue("modelo no copiado", engine.isModelPresent(pair))
         engine.load(pair, EngineConfig())
         try {
@@ -46,7 +46,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun entradasRarasNoRompen() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
+        val engine = OpusEngine(File(filesDir, "models/opus"))
         assumeTrue("modelo no copiado", engine.isModelPresent(pair))
         engine.load(pair, EngineConfig())
         try {
@@ -69,7 +69,7 @@ class OpusOnDeviceTest {
     }
 
     @Test fun cienCiclosNoPierdenMemoria() = runBlocking<Unit> {
-        val engine = OpusEngine(File(filesDir, "models"))
+        val engine = OpusEngine(File(filesDir, "models/opus"))
         assumeTrue("modelo no copiado", engine.isModelPresent(pair))
         assumeTrue(
             "otro motor ya cargado en el proceso (cierra la app: adb shell am force-stop io.github.diegobr4nd.lectorbilingue)",

@@ -64,7 +64,8 @@ data class EngineTestUiState(
 /** Temporal (fase 1b): prueba el motor y mide el benchmark. Nunca registra el texto. */
 class EngineTestViewModel(application: Application) : AndroidViewModel(application) {
     private val pair = LanguagePair("en", "es")
-    private val engine = OpusEngine(File(application.filesDir, "models"))
+    // Fase 2c: los modelos viven en models/<engine>/<pair>/. Provisional hasta la Tarea 4 (que usará Models.installedDir).
+    private val engine = OpusEngine(File(application.filesDir, "models/opus"))
     private val _state = MutableStateFlow(EngineTestUiState(modelPath = engine.modelDir(pair).path))
     val state: StateFlow<EngineTestUiState> = _state.asStateFlow()
 

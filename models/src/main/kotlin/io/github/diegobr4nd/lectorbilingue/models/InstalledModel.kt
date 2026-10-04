@@ -6,7 +6,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 
 /**
- * Un modelo instalado en `modelsDir/<pair>/`, tal como lo describe su `.installed.json`.
+ * Un modelo instalado en `modelsDir/<engine>/<pair>/`, tal como lo describe su `.installed.json`.
  * [files] son solo los nombres de archivo (sin rutas).
  *
  * [toJson] y [fromJson] son el único sitio que conoce el formato de `.installed.json`.

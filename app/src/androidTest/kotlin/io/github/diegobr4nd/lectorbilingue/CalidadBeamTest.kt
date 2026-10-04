@@ -32,7 +32,7 @@ class CalidadBeamTest {
 
     @Test fun generaComparacionBeam1YBeam4() = runBlocking<Unit> {
         assumeTrue("pasa -e calidad 1 para correrlo", InstrumentationRegistry.getArguments().getString("calidad") == "1")
-        val probe = OpusEngine(File(context.filesDir, "models"))
+        val probe = OpusEngine(File(context.filesDir, "models/opus"))
         assumeTrue("modelo no copiado", probe.isModelPresent(pair))
         assumeTrue("otro motor ya cargado en el proceso", OpusEngine.loadedEngineCount() == 0)
 
@@ -48,7 +48,7 @@ class CalidadBeamTest {
 
         val results = mutableMapOf<Int, List<Pair<String, Long>>>()
         for (beam in listOf(1, 4)) {
-            val engine = OpusEngine(File(context.filesDir, "models"))
+            val engine = OpusEngine(File(context.filesDir, "models/opus"))
             try {
                 engine.load(pair, EngineConfig(beamSize = beam, threads = 4))
                 translateParagraph(engine, paragraphs.first()) // calentamiento, no se registra

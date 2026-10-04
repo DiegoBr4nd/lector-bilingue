@@ -13,7 +13,9 @@ import java.io.File
  * Las reglas de serialización de [Models], sin `Context`, para poder probarlas:
  *
  * - un solo [lock] para descarga (worker), importación, borrado y recuperación;
- * - la recuperación del arranque corre una sola vez por instancia (= por proceso, en [Models]);
+ * - la recuperación del arranque corre una sola vez por instancia (= por proceso, en [Models]), con el
+ *   candado tomado: primero `migrate` (formato 2b → 2c, [ModelStore.migrateLegacyLayout]) y **luego**
+ *   `recover` ([ModelStore.recover]);
  * - importar se niega con [DownloadInProgressException] si hay una descarga activa, sin tomar el candado.
  *
  * El candado NO es reentrante: no llamar a [withLock] desde dentro de otro [withLock].
@@ -27,22 +29,23 @@ internal class ModelsCoordinator(private val io: CoroutineDispatcher = Dispatche
 
     suspend fun <T> withLock(block: suspend () -> T): T = lock.withLock { block() }
 
-    /** Recuperación del arranque. Si ya se hizo, vuelve en el acto (sin esperar al candado). */
-    suspend fun recover(recover: () -> Unit) {
+    /** Recuperación del arranque (migrar y luego recuperar). Si ya se hizo, vuelve en el acto (sin esperar al candado). */
+    suspend fun recover(migrate: () -> Unit, recover: () -> Unit) {
         if (recovered) return
-        withLock { withContext(io) { recoverOnceLocked(recover) } }
+        withLock { withContext(io) { recoverOnceLocked(migrate, recover) } }
     }
 
     /** Importa con [block] tras recuperar, con el candado; antes se niega si [anyDownloadActive]. */
     suspend fun import(
         anyDownloadActive: suspend () -> Boolean,
+        migrate: () -> Unit,
         recover: () -> Unit,
         block: () -> InstalledModel,
     ): InstalledModel {
         if (anyDownloadActive()) throw DownloadInProgressException()
         return withLock {
             withContext(io) {
-                recoverOnceLocked(recover)
+                recoverOnceLocked(migrate, recover)
                 block()
             }
         }
@@ -59,6 +62,7 @@ internal class ModelsCoordinator(private val io: CoroutineDispatcher = Dispatche
         refreshCatalog: () -> Catalog,
         download: (CatalogModel, (Long, Long) -> Unit) -> File,
         install: (CatalogModel, File) -> InstalledModel,
+        migrate: () -> Unit,
         recover: () -> Unit,
     ) = ModelDownloadJob(
         currentCatalog = currentCatalog,
@@ -66,13 +70,14 @@ internal class ModelsCoordinator(private val io: CoroutineDispatcher = Dispatche
         download = download,
         install = install,
         lock = lock,
-        beforeWork = { recoverOnceLocked(recover) },
+        beforeWork = { recoverOnceLocked(migrate, recover) },
         io = io,
     )
 
-    /** Solo con el candado tomado. Si [recover] lanza, se reintenta la próxima vez. */
-    private fun recoverOnceLocked(recover: () -> Unit) {
+    /** Solo con el candado tomado. Primero [migrate], luego [recover]; si alguno lanza, se reintentan los dos la próxima vez. */
+    private fun recoverOnceLocked(migrate: () -> Unit, recover: () -> Unit) {
         if (recovered) return
+        migrate()
         recover()
         recovered = true
     }

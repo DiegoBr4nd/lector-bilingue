@@ -55,7 +55,8 @@ class ModelImporterTest {
         id: String = "opus-en-es-2",
         pair: String = "en-es",
         files: List<ModelFile> = listOf(file("model.bin", bodyA), file("vocab.spm", bodyB)),
-    ) = CatalogModel(id, pair, "opus", "2.0", "CC-BY-4.0", "Helsinki-NLP", files)
+        engine: String = "opus",
+    ) = CatalogModel(id, pair, engine, "2.0", "CC-BY-4.0", "Helsinki-NLP", files)
 
     private fun catalog(vararg models: CatalogModel) = Catalog(1, Instant.parse("2026-10-03T00:00:00Z"), models.toList())
 
@@ -135,7 +136,7 @@ class ModelImporterTest {
     fun import_zipValidoSeInstala() {
         val result = import(validZip())
         assertEquals(InstalledModel("opus-en-es-2", "en-es", "opus", "2.0", listOf("model.bin", "vocab.spm")), result)
-        val dir = File(modelsDir, "en-es")
+        val dir = File(modelsDir, "opus/en-es")
         assertEquals(listOf(".installed.json", "model.bin", "vocab.spm"), dir.list()!!.sorted())
         assertContentEquals(bodyA, File(dir, "model.bin").readBytes())
         assertContentEquals(bodyB, File(dir, "vocab.spm").readBytes())
@@ -145,7 +146,7 @@ class ModelImporterTest {
     @Test
     fun import_zipStoredValidoSeInstala() {
         import(zip("vocab.spm" to bodyB, "model.bin" to bodyA, stored = true))
-        assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
+        assertContentEquals(bodyA, File(modelsDir, "opus/en-es/model.bin").readBytes())
     }
 
     @Test
@@ -155,7 +156,7 @@ class ModelImporterTest {
         File(stale, "model.bin.part").writeText("a medias")
         File(stale, "basura").writeText("x")
         import(validZip())
-        assertContentEquals(bodyA, File(modelsDir, "en-es/model.bin").readBytes())
+        assertContentEquals(bodyA, File(modelsDir, "opus/en-es/model.bin").readBytes())
         assertFalse(File(modelsDir, ".tmp").exists())
     }
 
@@ -181,8 +182,24 @@ class ModelImporterTest {
         val small = model(id = "solo-modelo", pair = "fr-es", files = listOf(file("model.bin", bodyA)))
         val result = import(zip("model.bin" to bodyA), catalog(model(), small))
         assertEquals("solo-modelo", result.id)
-        assertTrue(File(modelsDir, "fr-es/model.bin").isFile)
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertTrue(File(modelsDir, "opus/fr-es/model.bin").isFile)
+        assertFalse(File(modelsDir, "opus/en-es").exists())
+    }
+
+    @Test
+    fun import_zipDeUnModeloFirefoxVaASuCarpeta() {
+        val ff = model(
+            id = "firefox-es-en-1",
+            pair = "es-en",
+            files = listOf(file("model.esen.intgemm.alphas.bin", bodyA), file("vocab.esen.spm", bodyB)),
+            engine = "firefox",
+        )
+        val result = import(zip("model.esen.intgemm.alphas.bin" to bodyA, "vocab.esen.spm" to bodyB), catalog(model(), ff))
+        assertEquals("firefox", result.engine)
+        val dir = File(modelsDir, "firefox/es-en")
+        assertEquals(listOf(".installed.json", "model.esen.intgemm.alphas.bin", "vocab.esen.spm"), dir.list()!!.sorted())
+        assertContentEquals(bodyA, File(dir, "model.esen.intgemm.alphas.bin").readBytes())
+        assertEquals(listOf("firefox"), modelsDir.list()!!.sorted())
     }
 
     // ---------------------------------------------------------------- nombres maliciosos
@@ -261,7 +278,7 @@ class ModelImporterTest {
         assertEquals("el zip no corresponde a ningún modelo del catálogo", e.message)
         assertNoPath(e)
         assertCleanAfterReject()
-        assertFalse(File(modelsDir, "en-es").exists())
+        assertFalse(File(modelsDir, "opus/en-es").exists())
     }
 
     // ---------------------------------------------------------------- entradas sobrantes o faltantes
@@ -455,7 +472,7 @@ class ModelImporterTest {
 
     @Test
     fun import_siFallaLaInstalacionNoQuedaNadaYElModeloAnteriorSigue() {
-        val prev = File(modelsDir, "en-es")
+        val prev = File(modelsDir, "opus/en-es")
         prev.mkdirs()
         File(prev, "model.bin").writeText("viejo")
         var calls = 0
@@ -467,7 +484,7 @@ class ModelImporterTest {
         val e = assertFailsWith<IOException> { import(validZip(), imp = importer(flaky)) }
         assertNoPath(e)
         assertEquals("viejo", File(prev, "model.bin").readText())
-        assertCleanAfterReject(before = setOf("en-es"))
+        assertCleanAfterReject(before = setOf("opus"))
     }
 
     @Test

@@ -21,7 +21,7 @@ class ModelFileException(message: String) : IOException(message)
 
 /** Utilidades compartidas por [ModelDownloader] y [ModelInstaller] (rutas seguras, SHA-256, borrado). */
 internal object ModelFiles {
-    /** Carpeta de descargas en curso dentro de `modelsDir`. */
+    /** Carpeta de descargas en curso dentro de `modelsDir` (una sola para todos los motores). */
     const val TMP_DIR = ".tmp"
     const val PART_SUFFIX = ".part"
     const val INSTALLED_JSON = ".installed.json"
@@ -39,6 +39,16 @@ internal object ModelFiles {
     }
 
     private val FILE_NAME = Regex("^[A-Za-z0-9._-]{1,128}$")
+
+    private val ENGINE = Regex("^(opus|firefox)$")
+
+    /** Motores con carpeta propia en `modelsDir/<engine>/`, en orden alfabético. */
+    val ENGINES = listOf("firefox", "opus")
+
+    /** `engine` ∈ {opus, firefox}; si no → [IllegalArgumentException] (sin el valor en el mensaje). */
+    fun requireEngine(engine: String) {
+        require(ENGINE.matches(engine)) { "motor no válido" }
+    }
 
     /**
      * Regla única para nombres de archivo de modelo (catálogo, `.installed.json`, entradas de zip):

@@ -9,16 +9,31 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 /**
- * Los modelos instalados en `modelsDir/<pair>/` (cada uno con su `.installed.json`).
+ * Los modelos instalados, una carpeta por motor: `modelsDir/<engine>/<pair>/` (cada uno con su
+ * `.installed.json`), con `<engine>` ∈ {opus, firefox}.
  *
- * - Se ignoran `.tmp/` (descargas en curso), `.old-*` (restos de un reemplazo) y cualquier carpeta cuyo
- *   nombre no sea un par válido o cuyo `.installed.json` falte, esté roto o sea de otro par.
- * - Nunca se siguen enlaces simbólicos: un enlace no cuenta como modelo y al borrar se borra el enlace.
- * - Los `pair` que llegan de fuera se validan con `^[a-z]{2,3}-[a-z]{2,3}$`; si no → [IllegalArgumentException].
+ * ```
+ * models/
+ *   .tmp/<id>/              descargas en curso (una sola para todos los motores)
+ *   opus/en-es/             modelo instalado
+ *   opus/.old-en-es-<n>     resto de un reemplazo cortado
+ *   firefox/es-en/
+ * ```
+ *
+ * - La puerta única para los motores es [installedDir]: solo devuelve una carpeta con un
+ *   `.installed.json` válido del mismo motor y par, y con todos sus `files` como archivos regulares.
+ * - Se ignoran `.tmp/`, `.old-*`, motores desconocidos y cualquier carpeta cuyo nombre no sea un par
+ *   válido o cuyo `.installed.json` falte, esté roto o sea de otro par o de otro motor.
+ * - Nunca se siguen enlaces simbólicos: ni la carpeta del motor ni la del par pueden ser enlaces; un
+ *   enlace no cuenta como modelo y al borrar se borra el enlace.
+ * - `pair` se valida con `^[a-z]{2,3}-[a-z]{2,3}$` y `engine` con `^(opus|firefox)$`; si no →
+ *   [IllegalArgumentException].
  * - Errores de archivos: [ModelFileException] con mensaje fijo, sin rutas.
+ * - Formato viejo (2b), `modelsDir/<pair>/`: lo pasa al nuevo [migrateLegacyLayout], y [recover]
+ *   recoloca sus `.old-<pair>-*` de primer nivel.
  *
- * Concurrencia: no es seguro llamar a [delete] ni a [recover] mientras se instala un modelo. La app lo
- * garantiza haciéndolo dentro de [Models.withModelsLock].
+ * Concurrencia: no es seguro llamar a [delete], [migrateLegacyLayout] ni a [recover] mientras se instala
+ * un modelo. La app lo garantiza haciéndolo dentro de [Models.withModelsLock].
  */
 class ModelStore internal constructor(
     private val modelsDir: File,
@@ -42,30 +57,50 @@ class ModelStore internal constructor(
         }
     }
 
-    /** Modelos instalados y válidos, ordenados por par. Nunca lanza: lo ilegible simplemente no aparece. */
-    fun installed(): List<InstalledModel> {
+    /**
+     * Modelos instalados y válidos (la misma regla que [installedDir]) de todos los motores, ordenados
+     * por motor y luego por par. Nunca lanza: lo ilegible simplemente no aparece.
+     */
+    fun installed(): List<InstalledModel> = ModelFiles.ENGINES.flatMap { engine ->
+        val engineDir = realEngineDir(engine) ?: return@flatMap emptyList()
         val names = try {
-            listNames(modelsDir.toPath())
+            listNames(engineDir.toPath())
         } catch (e: IOException) {
-            return emptyList()
+            return@flatMap emptyList()
         } catch (e: DirectoryIteratorException) {
-            return emptyList()
+            return@flatMap emptyList()
         }
-        return names.filter { PAIR.matches(it) }
+        names.filter { PAIR.matches(it) }
             .sorted()
-            .mapNotNull { readInstalled(File(modelsDir, it).toPath(), it) }
+            .mapNotNull { checkedInstalled(File(engineDir, it).toPath(), engine, it) }
     }
 
-    fun isInstalled(pair: String): Boolean {
+    /**
+     * La carpeta `modelsDir/<engine>/<pair>/` si contiene un modelo listo para cargar:
+     * - la carpeta del motor y la del par son carpetas reales (no enlaces);
+     * - su `.installed.json` es válido y dice el mismo [engine] y el mismo [pair];
+     * - todos los `files` que lista existen como archivos regulares (no enlaces).
+     *
+     * Si algo no cuadra → null; nunca lanza por el estado del disco. Solo un [engine] o un [pair] con
+     * formato inválido lanzan [IllegalArgumentException] (un error de programación, no del disco).
+     */
+    fun installedDir(engine: String, pair: String): File? {
+        ModelFiles.requireEngine(engine)
         requirePair(pair)
-        return readInstalled(File(modelsDir, pair).toPath(), pair) != null
+        val engineDir = realEngineDir(engine) ?: return null
+        val dir = File(engineDir, pair)
+        return if (checkedInstalled(dir.toPath(), engine, pair) != null) dir else null
     }
 
-    /** Bytes de los archivos normales dentro de `<pair>/` (sin seguir enlaces); 0 si no existe. */
-    fun sizeOnDisk(pair: String): Long {
+    fun isInstalled(engine: String, pair: String): Boolean = installedDir(engine, pair) != null
+
+    /** Bytes de los archivos normales dentro de `<engine>/<pair>/` (sin seguir enlaces); 0 si no existe. */
+    fun sizeOnDisk(engine: String, pair: String): Long {
+        ModelFiles.requireEngine(engine)
         requirePair(pair)
+        val engineDir = realEngineDir(engine) ?: return 0L
         return try {
-            sizeOf(File(modelsDir, pair).toPath())
+            sizeOf(File(engineDir, pair).toPath())
         } catch (e: IOException) {
             throw ModelFileException("error de archivos al medir el modelo")
         } catch (e: DirectoryIteratorException) {
@@ -74,21 +109,33 @@ class ModelStore internal constructor(
     }
 
     /**
-     * Borra `<pair>/` entera y también sus restos `.old-<pair>-*` (para que [recover] no resucite un
-     * modelo borrado). Si es un enlace, borra solo el enlace. Si no existe, no hace nada.
+     * Borra `<engine>/<pair>/` entera y también sus restos `<engine>/.old-<pair>-*` (para que [recover]
+     * no resucite un modelo borrado). Lo heredado de la 2b de ese mismo motor (`<pair>/` y
+     * `.old-<pair>-*` de primer nivel cuyo `.installed.json` dice [engine]) también se borra, por la
+     * misma razón. Nunca toca otro motor. Si algo es un enlace, borra solo el enlace; si la carpeta del
+     * motor es un enlace, no se entra en ella. Si no existe nada, no hace nada.
      *
      * Orden pensado para un corte a mitad: primero se quita el `.installed.json` de todas (así una carpeta
      * a medio borrar nunca cuenta como modelo válido ni llega al motor nativo), luego se borran las viejas
      * y al final `<pair>/`.
      */
-    fun delete(pair: String) {
+    fun delete(engine: String, pair: String) {
+        ModelFiles.requireEngine(engine)
         requirePair(pair)
         try {
-            val olds = listNames(modelsDir.toPath())
-                .filter { OLD.matchEntire(it)?.groupValues?.get(1) == pair }
+            val engineDir = realEngineDir(engine)
+            val olds = ArrayList<Path>()
+            if (engineDir != null) {
+                listNames(engineDir.toPath())
+                    .filter { OLD.matchEntire(it)?.groupValues?.get(1) == pair }
+                    .mapTo(olds) { File(engineDir, it).toPath() }
+            }
+            val legacy = listNames(modelsDir.toPath())
+                .filter { it == pair || OLD.matchEntire(it)?.groupValues?.get(1) == pair }
                 .map { File(modelsDir, it).toPath() }
-            // listOf: Path es Iterable, así que `olds + path` sumaría sus trozos y no la ruta.
-            val all = olds + listOf(File(modelsDir, pair).toPath())
+                .filter { readInstalled(it, pair)?.engine == engine }
+            val (legacyPair, legacyOlds) = legacy.partition { it.fileName.toString() == pair }
+            val all = olds + legacyOlds + legacyPair + listOfNotNull(engineDir?.let { File(it, pair).toPath() })
             for (dir in all) {
                 if (Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) Files.deleteIfExists(dir.resolve(ModelFiles.INSTALLED_JSON))
             }
@@ -101,17 +148,49 @@ class ModelStore internal constructor(
     }
 
     /**
+     * Pasa el formato de la 2b al de la 2c: cada carpeta de primer nivel `modelsDir/<pair>/` con un
+     * `.installed.json` válido de ese par se renombra (atómico) a `modelsDir/<engine>/<pair>/`, con el
+     * `engine` de su JSON.
+     *
+     * - Lo que no tiene `.installed.json` válido (o es un enlace) se deja quieto.
+     * - Si el destino ya existe, no se toca ni el legado ni el destino.
+     * - Un renombre que falla deja ese par en su sitio y se sigue con los demás.
+     * Idempotente y repetible tras un corte a mitad (cada par es un solo renombre); nunca lanza.
+     */
+    fun migrateLegacyLayout() {
+        val names = try {
+            listNames(modelsDir.toPath())
+        } catch (e: IOException) {
+            return
+        } catch (e: DirectoryIteratorException) {
+            return
+        }
+        for (pair in names.filter { PAIR.matches(it) }.sorted()) {
+            val legacy = File(modelsDir, pair).toPath()
+            val model = readInstalled(legacy, pair) ?: continue
+            quietly { moveIntoEngine(legacy, model.engine, pair) }
+        }
+    }
+
+    /**
      * Repara lo que deja un cierre brusco de la app. Idempotente; nunca lanza por errores de archivos
      * (se hace lo que se pueda y se sigue). Solo toca nombres conocidos dentro de [modelsDir].
      *
-     * 1. Para cada par con restos `.old-<pair>-<n>`:
-     *    - si `<pair>/` no existe, se renombra a `<pair>` la vieja con mayor `n` que tenga un
-     *      `.installed.json` válido de ese par (`n` es `System.nanoTime()`: dentro de un mismo arranque
-     *      del teléfono, mayor = más reciente);
+     * 1. En cada carpeta de motor `<engine>/` (si es una carpeta real), para cada par con restos
+     *    `.old-<pair>-<n>`:
+     *    - si `<engine>/<pair>/` no existe, se renombra a `<pair>` la vieja con mayor `n` que tenga un
+     *      `.installed.json` válido de ese par y de ese motor (`n` es `System.nanoTime()`: dentro de un
+     *      mismo arranque del teléfono, mayor = más reciente);
      *    - después se borran todas las viejas SOLO si `<pair>/` existe o si no había ninguna vieja válida.
      *      Si el renombre falló, se conservan todas (la válida es la única copia) y se reintenta en el
      *      siguiente [recover].
-     * 2. En `.tmp/`: se borran las importaciones a medias (`import-*`) y todo lo que no sea carpeta.
+     * 2. Viejas de primer nivel heredadas de la 2b (`modelsDir/.old-<pair>-<n>`), salvo que
+     *    `modelsDir/<pair>/` siga sin migrar (entonces se espera al siguiente arranque):
+     *    - de la más nueva a la más vieja, cada una con `.installed.json` válido se mueve a
+     *      `<engine>/<pair>/` (su motor según el JSON) si ese destino falta;
+     *    - luego se borran todas las de ese par, salvo que algún movimiento haya fallado (entonces se
+     *      conservan todas y se reintenta).
+     * 3. En `.tmp/`: se borran las importaciones a medias (`import-*`) y todo lo que no sea carpeta.
      *    Las carpetas `.tmp/<id>` (descargas reanudables) se conservan, salvo que [catalogIds] no sea
      *    null y no contenga ese id. Si `.tmp` es un archivo o un enlace, se borra (nunca su destino).
      */
@@ -123,34 +202,86 @@ class ModelStore internal constructor(
         } catch (e: DirectoryIteratorException) {
             return
         }
-        recoverOld(names)
+        for (engine in ModelFiles.ENGINES) {
+            val engineDir = realEngineDir(engine) ?: continue
+            val engineNames = try {
+                listNames(engineDir.toPath())
+            } catch (e: IOException) {
+                continue
+            } catch (e: DirectoryIteratorException) {
+                continue
+            }
+            recoverOld(engineDir, engine, engineNames)
+        }
+        recoverLegacyOld(names)
         if (ModelFiles.TMP_DIR in names) recoverTmp(catalogIds)
     }
 
-    private fun recoverOld(names: List<String>) {
+    private fun recoverOld(engineDir: File, engine: String, names: List<String>) {
+        for ((pair, olds) in oldsByPair(names)) {
+            val pairPath = File(engineDir, pair).toPath()
+            var validBackup = false
+            if (!ModelFiles.existsNoFollow(pairPath)) {
+                val best = olds.firstOrNull { readInstalled(File(engineDir, it).toPath(), pair)?.engine == engine }
+                if (best != null) {
+                    validBackup = true
+                    quietly { move(File(engineDir, best).toPath(), pairPath) }
+                }
+            }
+            // Nunca se borra la única copia válida: solo si el par ya está en su sitio o no había copia.
+            if (!ModelFiles.existsNoFollow(pairPath) && validBackup) continue
+            for (name in olds) {
+                val p = File(engineDir, name).toPath()
+                if (ModelFiles.existsNoFollow(p)) quietly { ModelFiles.deleteTree(p) }
+            }
+        }
+    }
+
+    /** Viejas `.old-<pair>-*` de primer nivel que dejó la 2b: van a su motor o se borran. */
+    private fun recoverLegacyOld(names: List<String>) {
+        for ((pair, olds) in oldsByPair(names)) {
+            // Un `<pair>/` de la 2b sin migrar es más nuevo que sus viejas: se espera a que migre.
+            if (ModelFiles.existsNoFollow(File(modelsDir, pair).toPath())) continue
+            var keep = false
+            for (name in olds) {
+                val p = File(modelsDir, name).toPath()
+                val model = readInstalled(p, pair) ?: continue
+                try {
+                    moveIntoEngine(p, model.engine, pair)
+                } catch (e: IOException) {
+                    keep = true
+                } catch (e: DirectoryIteratorException) {
+                    keep = true
+                }
+            }
+            // Nunca se borra la única copia válida: si un movimiento falló, se conservan todas.
+            if (keep) continue
+            for (name in olds) {
+                val p = File(modelsDir, name).toPath()
+                if (ModelFiles.existsNoFollow(p)) quietly { ModelFiles.deleteTree(p) }
+            }
+        }
+    }
+
+    /** Renombra [from] a `<engine>/<pair>` si ese destino no existe (la carpeta del motor queda real). */
+    private fun moveIntoEngine(from: Path, engine: String, pair: String) {
+        val engineDir = File(modelsDir, engine)
+        ModelFiles.ensureRealDir(engineDir)
+        val target = File(engineDir, pair).toPath()
+        if (!ModelFiles.existsNoFollow(target)) move(from, target)
+    }
+
+    /** Agrupa las `.old-<pair>-<n>` por par, cada grupo de la más nueva a la más vieja. */
+    private fun oldsByPair(names: List<String>): Map<String, List<String>> {
         val byPair = HashMap<String, MutableList<Pair<Long, String>>>()
         for (name in names) {
             val m = OLD.matchEntire(name) ?: continue
             val n = m.groupValues[2].toLongOrNull() ?: continue
             byPair.getOrPut(m.groupValues[1]) { ArrayList() }.add(n to name)
         }
-        for ((pair, olds) in byPair) {
-            val pairPath = File(modelsDir, pair).toPath()
-            var validBackup = false
-            if (!ModelFiles.existsNoFollow(pairPath)) {
-                val best = olds.sortedWith(compareByDescending<Pair<Long, String>> { it.first }.thenByDescending { it.second })
-                    .firstOrNull { readInstalled(File(modelsDir, it.second).toPath(), pair) != null }
-                if (best != null) {
-                    validBackup = true
-                    quietly { move(File(modelsDir, best.second).toPath(), pairPath) }
-                }
-            }
-            // Nunca se borra la única copia válida: solo si el par ya está en su sitio o no había copia.
-            if (!ModelFiles.existsNoFollow(pairPath) && validBackup) continue
-            for ((_, name) in olds) {
-                val p = File(modelsDir, name).toPath()
-                if (ModelFiles.existsNoFollow(p)) quietly { ModelFiles.deleteTree(p) }
-            }
+        return byPair.mapValues { (_, olds) ->
+            olds.sortedWith(compareByDescending<Pair<Long, String>> { it.first }.thenByDescending { it.second })
+                .map { it.second }
         }
     }
 
@@ -177,6 +308,23 @@ class ModelStore internal constructor(
         }
         // Solo si quedó vacía.
         tmpRoot.delete()
+    }
+
+    /** `modelsDir/<engine>` si es una carpeta real (no enlace) justo dentro de [modelsDir]; si no, null. */
+    private fun realEngineDir(engine: String): File? = try {
+        ModelFiles.child(modelsDir, engine).takeIf { Files.isDirectory(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
+    } catch (e: IOException) {
+        null
+    } catch (e: IllegalArgumentException) {
+        // `child` lo lanza si la carpeta del motor es un enlace que lleva fuera de modelsDir.
+        null
+    }
+
+    /** [readInstalled] + mismo motor + todos los `files` presentes como archivos regulares. */
+    private fun checkedInstalled(dir: Path, engine: String, pair: String): InstalledModel? {
+        val model = readInstalled(dir, pair) ?: return null
+        if (model.engine != engine) return null
+        return model.takeIf { m -> m.files.all { ModelFiles.isRegularFileNoFollow(dir.resolve(it)) } }
     }
 
     /** Lee `<dir>/.installed.json` sin seguir enlaces; null si algo no cuadra o no es de [pair]. */

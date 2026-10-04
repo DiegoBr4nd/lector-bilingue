@@ -29,10 +29,11 @@ import java.util.zip.ZipInputStream
  * Al terminar: candidatos = modelos cuyo conjunto de nombres es exactamente el del zip (ninguno →
  * [CatalogException]); gana el primero que coincide en tamaño y SHA-256 de todos sus archivos
  * (ninguno → [IntegrityException]). La carpeta pasa a `.tmp/<id>` (borrando restos de una descarga
- * anterior del mismo modelo) y la instala [ModelInstaller].
+ * anterior del mismo modelo) y la instala [ModelInstaller] en `modelsDir/<engine>/<pair>/`, con el
+ * motor del modelo del catálogo.
  *
  * Cualquier fallo: se borra lo creado (carpeta de importación y `.tmp/<id>`), nunca queda nada nuevo
- * en `modelsDir/<pair>`. Errores sin rutas ni causa: zip roto/truncado/vacío/cifrado →
+ * en `modelsDir/<engine>/<pair>`. Errores sin rutas ni causa: zip roto/truncado/vacío/cifrado →
  * `IOException("zip inválido")`; archivos → `IOException("error de archivos al importar el modelo")`.
  *
  * En Android 14+ (targetSdk ≥ 34) `ZipPathValidator` rechaza nombres con `..` o `/` inicial dentro de

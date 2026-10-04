@@ -24,7 +24,8 @@ class DownloadInProgressException : Exception("hay una descarga de modelo en cur
  * Fábrica que arma las piezas del gestor de modelos con un [Context] (singleton: una "única instancia"
  * por proceso, como un solo mostrador para todos los clientes).
  *
- * Rutas: catálogo en `filesDir/catalog/`, modelos en `filesDir/models/`.
+ * Rutas: catálogo en `filesDir/catalog/`; modelos en `filesDir/models/<engine>/<pair>/` (con `<engine>` ∈
+ * {opus, firefox}) y descargas en curso en `filesDir/models/.tmp/<id>/`. Ver [ModelStore].
  *
  * **Serialización.** Descargar e importar nunca corren a la vez en el proceso: el importador borra
  * `.tmp/<id>`, que una descarga en curso está usando. Por eso:
@@ -36,9 +37,10 @@ class DownloadInProgressException : Exception("hay una descarga de modelo en cur
  *   esperando el candado durante toda una descarga.
  * El candado NO es reentrante: no llamar a [withModelsLock] desde dentro de otro [withModelsLock].
  *
- * **Recuperación.** [ModelStore.recover] corre una vez por proceso, con el candado, antes del primer uso
- * (lo hacen el worker y [importModel]); la interfaz puede llamar antes a [recover]. Las reglas viven en
- * [ModelsCoordinator] (probadas sin Android).
+ * **Recuperación.** Una vez por proceso, con el candado, antes del primer uso (lo hacen el worker y
+ * [importModel]; la interfaz puede llamar antes a [recover]): primero [ModelStore.migrateLegacyLayout]
+ * (pasa `models/<pair>/` de la 2b a `models/<engine>/<pair>/`) y luego [ModelStore.recover]. Las
+ * reglas viven en [ModelsCoordinator] (probadas sin Android).
  */
 object Models {
     private const val CATALOG_DIR = "catalog"
@@ -134,23 +136,39 @@ object Models {
      */
     suspend fun importModel(context: Context, zip: InputStream): InstalledModel {
         val app = context.applicationContext
-        return coordinator.import(anyDownloadActive = { isAnyDownloadActive(app) }, recover = { recoverStore(app) }) {
+        return coordinator.import(
+            anyDownloadActive = { isAnyDownloadActive(app) },
+            migrate = { store(app).migrateLegacyLayout() },
+            recover = { recoverStore(app) },
+        ) {
             val catalog = catalogRepository(app).current() ?: throw CatalogException("no hay catálogo de modelos")
             val dir = modelsDir(app)
             ModelImporter(dir, ModelInstaller(dir)).import(zip, catalog)
         }
     }
 
-    /** Borra el modelo instalado de [pair] con el candado tomado (nunca a mitad de una instalación). */
-    suspend fun deleteModel(context: Context, pair: String) {
+    /**
+     * Borra el modelo instalado de [engine] y [pair] con el candado tomado (nunca a mitad de una
+     * instalación). No toca el modelo del mismo par de otro motor. Ver [ModelStore.delete].
+     */
+    suspend fun deleteModel(context: Context, engine: String, pair: String) {
         val app = context.applicationContext
-        coordinator.delete { store(app).delete(pair) }
+        coordinator.delete { store(app).delete(engine, pair) }
     }
 
-    /** Recuperación del arranque (una vez por proceso). Ver [ModelStore.recover]. */
+    /**
+     * La carpeta del modelo de [engine] y [pair] lista para cargar, o null (ver [ModelStore.installedDir]).
+     * Es la única forma en que un motor debe obtener su carpeta. Conviene llamar antes a [recover], para
+     * que un modelo de la 2b ya esté migrado. No toma el candado: un borrado o una instalación en curso
+     * pueden hacer que la carpeta deje de valer justo después, así que el motor vuelve a comprobarla al cargar.
+     */
+    fun installedDir(context: Context, engine: String, pair: String): File? =
+        store(context).installedDir(engine, pair)
+
+    /** Recuperación del arranque (una vez por proceso): migración de la 2b y luego [ModelStore.recover]. */
     suspend fun recover(context: Context) {
         val app = context.applicationContext
-        coordinator.recover { recoverStore(app) }
+        coordinator.recover(migrate = { store(app).migrateLegacyLayout() }, recover = { recoverStore(app) })
     }
 
     /** El trabajo del worker con las piezas reales. */
@@ -165,6 +183,7 @@ object Models {
             refreshCatalog = repo::refresh,
             download = downloader::download,
             install = installer::install,
+            migrate = { store(app).migrateLegacyLayout() },
             recover = { recoverStore(app) },
         )
     }
