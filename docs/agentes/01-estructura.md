@@ -56,7 +56,7 @@ data class EngineConfig(
 ```
 
 **Reglas del motor:**
-- `EngineSelector` elige motor por par de idiomas y RAM disponible: OPUS si existe el modelo y hay **≥ 3 GB de RAM total**; si no, Firefox.
+- `EngineSelector` elige motor por par de idiomas y RAM disponible: OPUS si existe el modelo y hay **≥ 4 GB de RAM total** (decisión de Juan, fase 2c); si no, Firefox.
 - Hilos: detectar núcleos rápidos (frecuencia máxima por núcleo en `/sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq`); por defecto 4. **Prohibido** usar todos los núcleos: medimos que 8 hilos es 4 veces más lento.
 - Un solo motor cargado a la vez (RAM). Liberar con `unload()` al salir del lector.
 - Todo en `Dispatchers.Default` con una cola única: nunca dos traducciones en paralelo sobre el mismo motor.
