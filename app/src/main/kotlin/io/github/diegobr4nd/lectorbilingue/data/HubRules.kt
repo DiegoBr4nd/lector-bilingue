@@ -59,6 +59,12 @@ object HubRules {
     /** Volver a descargar un modelo ya instalado pide confirmación. */
     fun needsConfirmToDownload(row: RowStatus): Boolean = row.installed
 
+    /**
+     * Al pedir la descarga de un modelo cuyo último estado es [current]: si ya está en cola o en curso,
+     * se conserva ese estado (y su avance) en vez de volver a "en cola" desde cero.
+     */
+    fun keepsCurrentDownload(current: DownloadState?): Boolean = ModelActions.isActive(current)
+
     private fun pick(status: PairStatus, engines: Set<EngineId>, ram: Long, forced: EngineId?): RowStatus? =
         when (val c = EngineSelector.choose(engines, ram, forced)) {
             is EngineChoice.Use -> status.rows.firstOrNull { it.engine == c.engine }

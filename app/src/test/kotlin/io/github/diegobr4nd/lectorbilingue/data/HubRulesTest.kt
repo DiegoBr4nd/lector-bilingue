@@ -107,6 +107,16 @@ class HubRulesTest {
         assertFalse(HubRules.needsConfirmToDownload(s.rows[1]))
     }
 
+    @Test fun `pedir otra vez una descarga activa conserva su avance`() {
+        fun state(s: DownloadState.Status) = DownloadState(s, 10, 100, null)
+        assertTrue(HubRules.keepsCurrentDownload(state(DownloadState.Status.QUEUED)))
+        assertTrue(HubRules.keepsCurrentDownload(state(DownloadState.Status.RUNNING)))
+        assertFalse(HubRules.keepsCurrentDownload(null))
+        assertFalse(HubRules.keepsCurrentDownload(state(DownloadState.Status.SUCCEEDED)))
+        assertFalse(HubRules.keepsCurrentDownload(state(DownloadState.Status.FAILED)))
+        assertFalse(HubRules.keepsCurrentDownload(state(DownloadState.Status.CANCELLED)))
+    }
+
     // Movidas desde EnginePickerTest: el texto de la RAM ahora vive en HubRules.
     @Test fun `la RAM redondea 7,6 GiB a 8 GB`() {
         assertEquals(8L, HubRules.ramGb((7.6 * gib).toLong()))

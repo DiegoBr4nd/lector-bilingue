@@ -11,20 +11,21 @@ import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -35,6 +36,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 interface ModelHubApi {
     /** Pares del catálogo con sus filas; cambia con [refresh], con las descargas, al borrar y al importar. */
     val pairs: StateFlow<List<PairStatus>>
+
+    /** false hasta terminar la primera lectura del catálogo y lo instalado: antes, [pairs] vacío no significa "sin catálogo". */
+    val loaded: StateFlow<Boolean>
 
     /** Refresca el catálogo de la red con un tope de espera; devuelve un mensaje fijo o null si no hay nada que avisar. */
     suspend fun refresh(): ModelMessage?
@@ -70,19 +74,26 @@ class ModelHub(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val refreshTimeoutMs: Long = 5_000,
 ) : ModelHubApi {
-    /** Lo que se combina para formar [pairs]. */
+    /** Lo que se combina para formar [pairs]. Solo se lee y se cambia con [stateMutex]. */
     private data class Inputs(
         val catalog: Catalog? = null,
         val installed: Set<Pair<String, String>> = emptySet(),
         val downloads: Map<String, DownloadState?> = emptyMap(),
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + io)
-    private val inputs = MutableStateFlow(Inputs())
+    // El manejador no registra nada: solo evita que un error futuro no atrapado cierre la app.
+    private val scope = CoroutineScope(SupervisorJob() + io + CoroutineExceptionHandler { _, _ -> })
 
-    override val pairs: StateFlow<List<PairStatus>> = inputs
-        .map { HubRules.pairStatuses(it.catalog, it.installed, it.downloads) }
-        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+    /**
+     * Candado (un "Mutex": deja pasar a una corrutina a la vez) de [inputs] y [_pairs]: una lectura vieja
+     * del disco nunca pisa una nueva, y [pairs] cambia en el mismo paso que los datos.
+     */
+    private val stateMutex = Mutex()
+    private var inputs = Inputs()
+    private val _pairs = MutableStateFlow<List<PairStatus>>(emptyList())
+    override val pairs: StateFlow<List<PairStatus>> = _pairs.asStateFlow()
+    private val _loaded = MutableStateFlow(false)
+    override val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
     private val watchers = HashMap<String, Job>()
     private val refreshLock = Any()
@@ -99,6 +110,7 @@ class ModelHub(
             // Recuperación del arranque (barata tras la primera vez): limpia restos de instalaciones cortadas.
             runCatching { Models.recover(app) }
             reload()
+            _loaded.value = true
             resumeActiveDownloads()
         }
     }
@@ -109,11 +121,8 @@ class ModelHub(
         // El refresco corre en el ámbito del gestor: si vence el tope, sigue en segundo plano y guarda el
         // catálogo nuevo cuando llegue (withTimeoutOrNull no puede cortar una lectura de red bloqueante).
         val refreshError = withTimeoutOrNull(refreshTimeoutMs) { startRefresh().await() }
-        return withContext(io) {
-            val current = runCatching { Models.catalogRepository(app).current() }.getOrNull()
-            reload(current)
-            ModelActions.resolveCatalog(current, refreshError).second
-        }
+        val current = reload()
+        return ModelActions.resolveCatalog(current, refreshError).second
     }
 
     /** Un solo refresco a la vez: si ya hay uno en marcha, se espera ese. Devuelve su error, o null. */
@@ -133,6 +142,20 @@ class ModelHub(
 
     override fun download(modelId: String) {
         scope.launch {
+            // Si ya está en cola o en curso, se conserva su avance: solo se vuelve a seguir si nadie la sigue.
+            // La comprobación y el "en cola" van en el mismo paso: dos toques seguidos no encolan dos veces.
+            val alreadyActive = withState { s ->
+                if (HubRules.keepsCurrentDownload(s.downloads[modelId])) {
+                    s to true
+                } else {
+                    val queued = DownloadState(DownloadState.Status.QUEUED, 0, 0, null)
+                    s.copy(downloads = s.downloads + (modelId to queued)) to false
+                }
+            }
+            if (alreadyActive) {
+                if (!isWatching(modelId)) watch(modelId, null)
+                return@launch
+            }
             val requestId = try {
                 Models.enqueueDownload(app, modelId)
             } catch (e: CancellationException) {
@@ -185,32 +208,53 @@ class ModelHub(
         return problem ?: ModelMessage.IMPORT_OK
     }
 
-    /** Relee el catálogo guardado (si no se pasa) y lo instalado, fuera del hilo principal. */
-    private suspend fun reload(catalog: Catalog? = null) = withContext(io) {
-        val c = catalog ?: runCatching { Models.catalogRepository(app).current() }.getOrNull()
+    /**
+     * Cambia [inputs] con [transform] y recalcula [pairs] en el mismo paso, con el candado y fuera del hilo
+     * principal. [transform] devuelve los datos nuevos y un resultado para quien llama.
+     */
+    private suspend fun <T> withState(transform: (Inputs) -> Pair<Inputs, T>): T = withContext(io) {
+        stateMutex.withLock {
+            val (next, result) = transform(inputs)
+            if (next != inputs) {
+                inputs = next
+                _pairs.value = HubRules.pairStatuses(next.catalog, next.installed, next.downloads)
+            }
+            result
+        }
+    }
+
+    /**
+     * Relee el catálogo guardado y lo instalado con el candado (las relecturas no se cruzan). Devuelve el
+     * catálogo leído (null si no hay); si esa lectura falla, [pairs] conserva el catálogo anterior.
+     */
+    private suspend fun reload(): Catalog? = withState { s ->
+        val c = runCatching { Models.catalogRepository(app).current() }.getOrNull()
         val installed = runCatching { Models.store(app).installed() }.getOrDefault(emptyList())
             .mapTo(mutableSetOf()) { it.engine to it.pair }
-        inputs.update { it.copy(catalog = c ?: it.catalog, installed = installed) }
+        s.copy(catalog = c ?: s.catalog, installed = installed) to c
     }
 
     /** Al arrancar: vuelve a seguir las descargas que siguen en cola o en curso (p. ej. tras cerrar la app). */
     private suspend fun resumeActiveDownloads() {
-        val models = inputs.value.catalog?.models.orEmpty()
+        val models = withState { s -> s to s.catalog?.models.orEmpty() }
         for (m in models) {
             if (runCatching { Models.isDownloading(app, m.id) }.getOrDefault(false)) watch(m.id, null)
         }
     }
 
-    private fun setDownload(modelId: String, state: DownloadState?) =
-        inputs.update { it.copy(downloads = it.downloads + (modelId to state)) }
+    private suspend fun setDownload(modelId: String, state: DownloadState?) =
+        withState { s -> s.copy(downloads = s.downloads + (modelId to state)) to Unit }
+
+    private fun isWatching(modelId: String): Boolean = synchronized(watchers) { watchers[modelId]?.isActive == true }
 
     /**
      * Sigue la descarga de [modelId] hasta un estado final (por modelo, no por id de petición: con KEEP el
      * id devuelto puede no ser el que corre). Los estados viejos se ignoran como en la pantalla de prueba.
      */
-    private fun watch(modelId: String, requestId: UUID?) = synchronized(watchers) {
+    private fun watch(modelId: String, requestId: UUID?): Unit = synchronized(watchers) {
         watchers[modelId]?.cancel()
-        watchers[modelId] = scope.launch {
+        // LAZY: se registra antes de arrancar, así al terminar se quita del mapa solo si sigue siendo el suyo.
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             // Sin requestId (retomada al abrir la app) no hay estados viejos que ignorar.
             var seenActive = requestId == null
             runCatching {
@@ -228,5 +272,10 @@ class ModelHub(
                 setDownload(modelId, DownloadState(DownloadState.Status.FAILED, 0, 0, null))
             }
         }
+        watchers[modelId] = job
+        job.invokeOnCompletion {
+            synchronized(watchers) { if (watchers[modelId] === job) watchers.remove(modelId) }
+        }
+        job.start()
     }
 }
