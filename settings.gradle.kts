@@ -31,6 +31,7 @@ rootProject.name = "lector-bilingue"
 
 include(":app")
 include(":core:text")
+include(":core:ui")
 include(":engine:api")
 include(":engine:opus")
 include(":engine:firefox")

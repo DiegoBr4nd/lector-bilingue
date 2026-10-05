@@ -82,6 +82,25 @@ jobs:
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libct2bridge.so"
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libslimtbridge.so"
 
+      # R8 ofusca los nombres de clase en release, así que además se busca texto de las pantallas
+      # de desarrollador en resources.arsc (los textos no se ofuscan).
+      - name: El release no incluye la pantalla de desarrollador
+        run: |
+          apk=app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk
+          # Control positivo: sin APK o sin resources.arsc, los grep de abajo pasarían en vacío.
+          test -f "$apk" || { echo "::error::No existe el APK release"; exit 1; }
+          unzip -l "$apk" resources.arsc > /dev/null || { echo "::error::El APK release no trae resources.arsc"; exit 1; }
+          # Se extrae a archivos antes del grep: con pipefail, grep -q cierra la tubería al primer
+          # hallazgo, unzip muere por SIGPIPE y el if lo tomaría como "no encontrado".
+          unzip -p "$apk" 'classes*.dex' > "$RUNNER_TEMP/dex.bin"
+          unzip -p "$apk" resources.arsc > "$RUNNER_TEMP/arsc.bin"
+          if grep -a -q -e 'ui/enginetest' -e 'ui/developer' -e 'EngineTestScreen' "$RUNNER_TEMP/dex.bin"; then
+            echo "::error::La versión release incluye código de la pantalla de desarrollador"; exit 1
+          fi
+          if grep -a -q -e 'Prueba del motor' -e 'Mostrar Bienvenida otra vez' "$RUNNER_TEMP/arsc.bin"; then
+            echo "::error::La versión release incluye textos de la pantalla de desarrollador"; exit 1
+          fi
+
       - name: Reporte de verificación de dependencias (si falló)
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

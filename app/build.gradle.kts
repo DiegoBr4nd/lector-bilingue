@@ -47,6 +47,7 @@ dependencies {
     implementation(project(":engine:api"))
     implementation(project(":engine:opus"))
     implementation(project(":engine:firefox"))
+    implementation(project(":core:ui"))
     implementation(project(":models"))
 
     implementation(libs.androidx.core.ktx)
@@ -58,6 +59,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
@@ -65,4 +69,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
