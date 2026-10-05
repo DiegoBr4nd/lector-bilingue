@@ -8,7 +8,6 @@ import io.github.diegobr4nd.lectorbilingue.data.EnginePreference
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.data.PairStatus
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +16,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** Una acción que espera la respuesta del diálogo de confirmación. [row] es una copia de la fila tocada. */
 data class PendingAction(val pair: String, val row: UiRow, val confirm: Confirm)
@@ -52,16 +50,21 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
     /** Este modelo de vista ya leyó el motor y buscó idiomas al menos una vez. */
     private var started = false
 
+    init {
+        // El motor elegido viene de los ajustes (flujo compartido con Inicio): se refleja aquí en cuanto cambia.
+        viewModelScope.launch {
+            combine(settings.enginePreferenceFlow, settings.enginePreferenceLoaded) { p, l -> p to l }
+                .collect { (p, l) -> _state.update { it.copy(preference = p, preferenceLoaded = l) } }
+        }
+    }
+
     fun autoLine(): AutoLine = LanguagesRules.autoLine(hub.totalRamBytes())
 
     /** Al abrir la pantalla: lee el motor elegido, borra avisos viejos y busca idiomas nuevos. */
     fun onEnter(newVisit: Boolean) {
         if (!LanguagesRules.shouldStartVisit(started, newVisit)) return
         started = true
-        viewModelScope.launch {
-            val pref = withContext(Dispatchers.IO) { settings.enginePreference }
-            _state.update { it.copy(preference = pref, preferenceLoaded = true) }
-        }
+        viewModelScope.launch { settings.loadEnginePreference() }
         refresh()
     }
 
@@ -75,7 +78,6 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
     }
 
     fun selectEngine(value: EnginePreference) {
-        _state.update { it.copy(preference = value) }
         settings.enginePreference = value
     }
 

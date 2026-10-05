@@ -25,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -77,14 +76,6 @@ fun HomeScreen(
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     // El modelo de vista sobrevive a Idiomas: se vuelve a leer el motor elegido al entrar.
-    // Solo en una visita nueva: al girar la pantalla no hace falta (y parpadearía la carga). Un modelo nuevo ya lo lee en init.
-    var entered by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (!entered) {
-            entered = true
-            viewModel.reloadPreference()
-        }
-    }
     HomeContent(
         loaded = loaded,
         state = state,

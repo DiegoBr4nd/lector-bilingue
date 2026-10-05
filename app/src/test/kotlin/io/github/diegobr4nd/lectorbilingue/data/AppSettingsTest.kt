@@ -3,6 +3,7 @@ package io.github.diegobr4nd.lectorbilingue.data
 import android.content.SharedPreferences
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import kotlin.test.Test
+import kotlinx.coroutines.test.runTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -98,5 +99,31 @@ class AppSettingsTest {
         assertNull(EnginePreference.AUTO.toForced())
         assertEquals(EngineId.OPUS, EnginePreference.QUALITY.toForced())
         assertEquals(EngineId.FIREFOX, EnginePreference.FAST.toForced())
+    }
+
+    @Test
+    fun escribir_el_motor_actualiza_el_flujo_al_instante() {
+        val settings = AppSettings(MemoryPrefs())
+        assertEquals(EnginePreference.AUTO, settings.enginePreferenceFlow.value)
+        assertFalse(settings.enginePreferenceLoaded.value)
+        settings.enginePreference = EnginePreference.FAST
+        assertEquals(EnginePreference.FAST, settings.enginePreferenceFlow.value)
+        assertTrue(settings.enginePreferenceLoaded.value)
+        settings.enginePreference = EnginePreference.QUALITY
+        assertEquals(EnginePreference.QUALITY, settings.enginePreferenceFlow.value)
+    }
+
+    @Test
+    fun loadEnginePreference_publica_lo_guardado_y_no_pisa_una_escritura_nueva() = runTest {
+        val prefs = MemoryPrefs()
+        AppSettings(prefs).enginePreference = EnginePreference.FAST
+        val fresh = AppSettings(prefs)
+        assertFalse(fresh.enginePreferenceLoaded.value)
+        fresh.loadEnginePreference(io = kotlinx.coroutines.Dispatchers.Unconfined)
+        assertEquals(EnginePreference.FAST, fresh.enginePreferenceFlow.value)
+        assertTrue(fresh.enginePreferenceLoaded.value)
+        fresh.enginePreference = EnginePreference.QUALITY
+        fresh.loadEnginePreference(io = kotlinx.coroutines.Dispatchers.Unconfined)
+        assertEquals(EnginePreference.QUALITY, fresh.enginePreferenceFlow.value)
     }
 }

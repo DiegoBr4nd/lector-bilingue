@@ -171,4 +171,27 @@ class LanguagesOnDeviceTest {
         rule.onNodeWithText("Inglés → español").assertExists()
         rule.onNodeWithContentDescription("Más opciones").assertHeightIsAtLeast(48.dp)
     }
+
+    @Test
+    fun cambiar_el_motor_en_idiomas_se_ve_en_inicio_al_volver() {
+        settings.welcomeDone = true
+        val both = listOf(
+            PairStatus(
+                "en-es",
+                listOf(
+                    RowStatus("opus-en-es", EngineId.OPUS, 238_524_992, true, null),
+                    RowStatus("firefox-en-es", EngineId.FIREFOX, 36_594_513, true, null),
+                ),
+            ),
+        )
+        val hub = LangFakeHub(both)
+        rule.setContent { LectorTheme { io.github.diegobr4nd.lectorbilingue.ui.nav.AppNav(settings, hub) } }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Listo para traducir · Calidad").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(hasText("Idiomas") and hasClickAction()).performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Motor").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(radio and hasText("Rápido")).performClick()
+        androidx.test.espresso.Espresso.pressBack()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Listo para traducir · Rápido").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Listo para traducir · Calidad").assertDoesNotExist()
+    }
 }
