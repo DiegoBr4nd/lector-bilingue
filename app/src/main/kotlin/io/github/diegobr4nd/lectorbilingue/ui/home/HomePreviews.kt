@@ -28,10 +28,12 @@ private fun Muestra(loaded: Boolean = true, state: HomeState) = LectorTheme {
     HomeContent(loaded = loaded, state = state, onLanguages = {}, onDeveloper = {}, onCancel = {})
 }
 
-private val ready = PairCard("en-es", EngineKind.QUALITY, null)
+private val ready = PairCard("en-es", EngineKind.QUALITY)
 private val downloading = PairCard(
-    "es-en", null, DownloadState(DownloadState.Status.RUNNING, 90_000_000, 238_000_000, null), "opus-es-en",
+    "es-en", null,
+    listOf(PairDownload("opus-es-en", EngineKind.QUALITY, DownloadState(DownloadState.Status.RUNNING, 90_000_000, 238_000_000, null))),
 )
+private val missing = PairCard("en-es", null, missing = EngineKind.QUALITY)
 
 @HomePreviews
 @Composable
@@ -44,3 +46,7 @@ private fun SinIdiomas() = Muestra(state = HomeState(emptyList(), true))
 @HomePreviews
 @Composable
 private fun Cargando() = Muestra(loaded = false, state = HomeState(emptyList(), false))
+
+@HomePreviews
+@Composable
+private fun MotorElegidoAusente() = Muestra(state = HomeState(listOf(missing), false))

@@ -8,15 +8,19 @@ import io.github.diegobr4nd.lectorbilingue.data.PairStatus
 import io.github.diegobr4nd.lectorbilingue.models.DownloadState
 import io.github.diegobr4nd.lectorbilingue.ui.kind
 
+/** Una descarga en curso de un par: [kind] es el motor que se baja. */
+data class PairDownload(val modelId: String, val kind: EngineKind, val state: DownloadState)
+
 /**
- * Una tarjeta del Inicio. [engine] es el motor que se usaría ahora (null si aún no hay ninguno instalado);
- * [download] es la descarga en curso de este par (null si no hay) y [modelId] el modelo que se descarga.
+ * Una tarjeta del Inicio. [engine] es el motor que se usaría ahora; [missing] es el motor que la persona
+ * eligió en Idiomas pero no está instalado (la app nunca cambia de motor sola); [downloads] son todas las
+ * descargas en curso de este par.
  */
 data class PairCard(
     val pair: String,
     val engine: EngineKind?,
-    val download: DownloadState?,
-    val modelId: String? = null,
+    val downloads: List<PairDownload> = emptyList(),
+    val missing: EngineKind? = null,
 )
 
 data class HomeState(val pairCards: List<PairCard>, val showNoLanguages: Boolean)
@@ -26,17 +30,18 @@ object HomeRules {
     /** Una tarjeta por par instalado o descargándose; sin ninguna, el Inicio invita a descargar idiomas. */
     fun cards(pairs: List<PairStatus>, ram: Long, pref: EnginePreference): HomeState {
         val cards = pairs.mapNotNull { status ->
-            val downloading = status.rows.firstOrNull { ModelActions.isActive(it.download) }
+            val downloads = status.rows.mapNotNull { row ->
+                row.download?.takeIf { ModelActions.isActive(it) }?.let { PairDownload(row.modelId, row.engine.kind(), it) }
+            }
             val installed = status.rows.any { it.installed }
-            if (!installed && downloading == null) return@mapNotNull null
-            // Si el motor elegido no está instalado, se muestra el que sí lo está: la tarjeta dice la verdad.
-            val using = HubRules.inUse(status, ram, pref) ?: status.rows.firstOrNull { it.installed }
-            PairCard(
-                pair = status.pair,
-                engine = using?.engine?.kind(),
-                download = downloading?.download,
-                modelId = downloading?.modelId,
-            )
+            if (!installed && downloads.isEmpty()) return@mapNotNull null
+            val using = HubRules.inUse(status, ram, pref)
+            // Motor elegido y ausente: no se usa otro en silencio; la tarjeta avisa que falta.
+            val forced = pref.toForced()
+            val missing = if (using == null && installed && forced != null &&
+                downloads.none { it.kind == forced.kind() }
+            ) forced.kind() else null
+            PairCard(status.pair, using?.engine?.kind(), downloads, missing)
         }
         return HomeState(cards, showNoLanguages = cards.isEmpty())
     }

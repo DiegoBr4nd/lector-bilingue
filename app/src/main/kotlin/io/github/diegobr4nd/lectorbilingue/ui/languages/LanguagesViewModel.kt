@@ -105,6 +105,9 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
         }
     }
 
+    /** Descarga por id (respuesta tardía del permiso de notificaciones); el gestor ignora los duplicados. */
+    fun downloadById(modelId: String) = hub.download(modelId)
+
     fun cancel(modelId: String) = hub.cancel(modelId)
 
     fun import(uri: Uri) {

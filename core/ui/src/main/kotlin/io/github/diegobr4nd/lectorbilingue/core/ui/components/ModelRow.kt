@@ -18,7 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.diegobr4nd.lectorbilingue.core.ui.R
@@ -62,7 +64,8 @@ fun ModelRow(
     val deleteLabel = stringResource(R.string.action_delete_model, engineName)
     val iconRes = if (kind == EngineKind.QUALITY) LectorIcons.WorkspacePremium else LectorIcons.Bolt
     Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
-        Column(Modifier.semantics(mergeDescendants = true) {}) {
+        // Si cambia el estado (Instalado, En uso…), TalkBack lo anuncia con calma.
+        Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.m),

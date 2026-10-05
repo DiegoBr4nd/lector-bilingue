@@ -55,7 +55,9 @@
     <string name="home_menu_developer">Desarrollador</string>
     <string name="home_loading">Cargando…</string>
     <string name="home_ready">Listo para traducir · %1$s</string>
-    <string name="home_cancel_download">Cancelar descarga de %1$s</string>
+    <string name="home_cancel_download">Cancelar descarga de %1$s (%2$s)</string>
+    <string name="home_missing">Falta %1$s · descárgalo en Idiomas</string>
+    <string name="home_missing_action">Ir a Idiomas</string>
     <string name="home_no_languages_title">Aún no tienes idiomas</string>
     <string name="home_no_languages_body">Descarga uno para poder traducir tus libros.</string>
     <string name="home_download_languages">Descargar idiomas</string>

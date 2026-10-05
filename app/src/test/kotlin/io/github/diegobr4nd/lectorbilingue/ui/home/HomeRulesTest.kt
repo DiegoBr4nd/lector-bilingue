@@ -43,7 +43,8 @@ class HomeRulesTest {
         assertEquals(1, state.pairCards.size)
         assertEquals("en-es", state.pairCards[0].pair)
         assertEquals(EngineKind.QUALITY, state.pairCards[0].engine)
-        assertNull(state.pairCards[0].download)
+        assertTrue(state.pairCards[0].downloads.isEmpty())
+        assertNull(state.pairCards[0].missing)
     }
 
     @Test
@@ -51,8 +52,8 @@ class HomeRulesTest {
         val running = DownloadState(DownloadState.Status.RUNNING, 10, 100, null)
         val state = HomeRules.cards(listOf(pair(opusDownload = running)), 8 * gib, EnginePreference.AUTO)
         assertEquals(1, state.pairCards.size)
-        assertEquals(running, state.pairCards[0].download)
-        assertEquals("opus-en-es", state.pairCards[0].modelId)
+        assertEquals(running, state.pairCards[0].downloads.single().state)
+        assertEquals("opus-en-es", state.pairCards[0].downloads.single().modelId)
         assertNull(state.pairCards[0].engine)
     }
 
@@ -63,9 +64,33 @@ class HomeRulesTest {
     }
 
     @Test
-    fun con_motor_forzado_ausente_usa_el_instalado() {
+    fun con_motor_forzado_ausente_avisa_que_falta_y_no_usa_otro() {
         val state = HomeRules.cards(listOf(pair(firefoxInstalled = true)), 8 * gib, EnginePreference.QUALITY)
-        assertEquals(EngineKind.FAST, state.pairCards.single().engine)
+        val card = state.pairCards.single()
+        assertNull(card.engine)
+        assertEquals(EngineKind.QUALITY, card.missing)
+    }
+
+    @Test
+    fun si_el_motor_forzado_ausente_se_esta_descargando_no_dice_que_falta() {
+        val running = DownloadState(DownloadState.Status.RUNNING, 10, 100, null)
+        val state = HomeRules.cards(
+            listOf(pair(opusDownload = running, firefoxInstalled = true)), 8 * gib, EnginePreference.QUALITY,
+        )
+        assertNull(state.pairCards.single().missing)
+    }
+
+    @Test
+    fun muestra_todas_las_descargas_del_par() {
+        val running = DownloadState(DownloadState.Status.RUNNING, 10, 100, null)
+        val p = PairStatus(
+            "en-es",
+            listOf(
+                RowStatus("opus-en-es", EngineId.OPUS, 1, false, running),
+                RowStatus("firefox-en-es", EngineId.FIREFOX, 1, false, running),
+            ),
+        )
+        assertEquals(2, HomeRules.cards(listOf(p), 8 * gib, EnginePreference.AUTO).pairCards.single().downloads.size)
     }
 
     @Test

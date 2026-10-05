@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -44,6 +43,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -87,7 +87,14 @@ fun LanguagesScreen(
     val cards by viewModel.cards.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    LaunchedEffect(Unit) { viewModel.onEnter() }
+    // Una vez por visita (no al girar la pantalla): el aviso de borrar o importar no debe desaparecer al girar.
+    var entered by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!entered) {
+            entered = true
+            viewModel.onEnter()
+        }
+    }
 
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.import(uri)
@@ -98,8 +105,8 @@ fun LanguagesScreen(
     val currentCards by rememberUpdatedState(cards)
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         pendingDownload?.split('|', limit = 2)?.takeIf { it.size == 2 }?.let { (pair, modelId) ->
-            currentCards.firstOrNull { it.pair == pair }?.rows?.firstOrNull { it.modelId == modelId }
-                ?.let { viewModel.request(RowAction.DOWNLOAD, pair, it) }
+            val row = currentCards.firstOrNull { it.pair == pair }?.rows?.firstOrNull { it.modelId == modelId }
+            if (row != null) viewModel.request(RowAction.DOWNLOAD, pair, row) else viewModel.downloadById(modelId)
         }
         pendingDownload = null
     }
@@ -307,13 +314,14 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
 private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Surface(
+        selected = selected,
+        onClick = onClick,
         shape = ButtonShape,
         color = if (selected) scheme.primaryContainer else scheme.surface,
         contentColor = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
         border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) scheme.primary else scheme.outline),
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton),
+        // Elección única: se anuncia como botón de opción; el ripple queda recortado a la forma del botón.
+        modifier = Modifier.heightIn(min = 48.dp).semantics { role = Role.RadioButton },
     ) {
         Row(
             Modifier.heightIn(min = 48.dp).padding(horizontal = Spacing.l),
