@@ -1,10 +1,31 @@
 package io.github.diegobr4nd.lectorbilingue.ui.enginetest
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+
 /** Por qué están bloqueados el interruptor de motor y el selector de par (para explicarlo en pantalla). */
 enum class LockReason { DOWNLOADING, MODEL_BUSY, LOADING, TRANSLATING, MEASURING }
 
 /** Reglas puras (sin Android) de la pantalla de prueba: se prueban en la JVM. */
 object ScreenRules {
+    /**
+     * Corre [block] (pasos previos + recarga del motor) y garantiza que, pase lo que pase, el estado no
+     * se queda en LOADING con los controles bloqueados: si algo lanza o se cancela, termina en ERROR.
+     */
+    suspend fun guarded(state: MutableStateFlow<EngineTestUiState>, block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            // LOADING lo pusieron selectEngine/selectPair y no debe quedarse.
+            state.update { if (it.modelStatus == ModelStatus.LOADING) it.copy(modelStatus = ModelStatus.ERROR) else it }
+            throw e
+        } catch (_: Exception) {
+            // Se ignora a propósito el mensaje (podría llevar rutas).
+            state.update { it.copy(modelStatus = ModelStatus.ERROR) }
+        }
+    }
+
     /** null si los controles están libres; si no, el motivo principal. */
     fun lockReason(s: EngineTestUiState): LockReason? = when {
         s.modelBusy && s.downloading -> LockReason.DOWNLOADING

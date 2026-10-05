@@ -159,28 +159,24 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta). */
-    private suspend fun reloadEngine() {
-        try {
-            // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
-            _state.first { !it.busy }
-            engineLock.withLock {
-                _state.update {
-                    it.copy(
-                        modelStatus = ModelStatus.LOADING, engineInUse = null, reason = null, missingEngine = null,
-                        loadOffer = null, errorMessage = null,
-                    )
-                }
-                unloadLocked()
-                loadChosenEngine()
+    /**
+     * Descarga el motor anterior y carga el que corresponde al interruptor y al par (o avisa qué falta).
+     * [pre] son pasos previos (leer disco): van dentro de la misma protección, así que si lanzan
+     * la pantalla termina en ERROR y nunca se queda en LOADING.
+     */
+    private suspend fun reloadEngine(pre: suspend () -> Unit = {}) = ScreenRules.guarded(_state) {
+        pre()
+        // Un benchmark o una traducción en curso no pierde su motor: la recarga espera a que terminen.
+        _state.first { !it.busy }
+        engineLock.withLock {
+            _state.update {
+                it.copy(
+                    modelStatus = ModelStatus.LOADING, engineInUse = null, reason = null, missingEngine = null,
+                    loadOffer = null, errorMessage = null,
+                )
             }
-        } catch (e: CancellationException) {
-            // Cancelada en cualquier punto: LOADING lo pusieron selectEngine/selectPair y no debe quedarse.
-            _state.update { if (it.modelStatus == ModelStatus.LOADING) it.copy(modelStatus = ModelStatus.ERROR) else it }
-            throw e
-        } catch (e: Exception) {
-            // Pase lo que pase, la pantalla no se queda en LOADING con los controles bloqueados.
-            _state.update { it.copy(modelStatus = ModelStatus.ERROR) }
+            unloadLocked()
+            loadChosenEngine()
         }
     }
 
@@ -238,9 +234,10 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
         if (controlsLocked(s) || s.pair == choice) return
         _state.update { ScreenRules.afterPair(it, choice) }
         viewModelScope.launch {
-            checkSpanishBenchTexts()
-            refreshModels()
-            reloadEngine()
+            reloadEngine(pre = {
+                checkSpanishBenchTexts()
+                refreshModels()
+            })
         }
     }
 

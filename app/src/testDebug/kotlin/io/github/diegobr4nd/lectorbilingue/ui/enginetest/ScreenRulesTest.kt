@@ -5,9 +5,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
 
 class ScreenRulesTest {
     private val ready = EngineTestUiState(modelStatus = ModelStatus.READY)
+
+    @Test fun `un paso previo lanza y el estado termina en ERROR, no en LOADING`() = runTest {
+        val state = MutableStateFlow(ScreenRules.afterPair(ready, PairChoice.ES_EN))
+        assertEquals(ModelStatus.LOADING, state.value.modelStatus)
+        ScreenRules.guarded(state) { throw java.io.IOException("disco") }
+        assertEquals(ModelStatus.ERROR, state.value.modelStatus)
+        assertNull(ScreenRules.lockReason(state.value))
+    }
+
+    @Test fun `si todo sale bien guarded no toca el estado`() = runTest {
+        val state = MutableStateFlow(ready)
+        ScreenRules.guarded(state) { }
+        assertEquals(ModelStatus.READY, state.value.modelStatus)
+    }
 
     @Test fun `listo y libre no bloquea`() = assertNull(ScreenRules.lockReason(ready))
 
