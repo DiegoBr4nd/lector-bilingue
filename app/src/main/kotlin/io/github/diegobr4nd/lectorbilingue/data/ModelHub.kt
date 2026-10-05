@@ -6,6 +6,7 @@ import android.net.Uri
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.models.Catalog
 import io.github.diegobr4nd.lectorbilingue.models.DownloadState
+import io.github.diegobr4nd.lectorbilingue.models.InstalledModel
 import io.github.diegobr4nd.lectorbilingue.models.Models
 import java.io.IOException
 import java.util.UUID
@@ -188,17 +189,19 @@ class ModelHub(
             ModelActions.classify(e)
         }
         reload()
+        if (problem == null) clearFinishedDownloads(engine.wire, pair)
         return problem ?: ModelMessage.DELETE_OK
     }
 
     override suspend fun import(uri: Uri): ModelMessage {
+        var imported: InstalledModel? = null
         val problem = try {
             withContext(io) {
                 if (runCatching { Models.catalogRepository(app).current() }.getOrNull() == null) {
                     ModelMessage.NO_CATALOG_IMPORT
                 } else {
                     val input = app.contentResolver.openInputStream(uri) ?: throw IOException()
-                    input.use { Models.importModel(app, it) }
+                    imported = input.use { Models.importModel(app, it) }
                     null
                 }
             }
@@ -208,6 +211,7 @@ class ModelHub(
             ModelActions.classifyImport(e)
         }
         reload()
+        imported?.let { if (problem == null) clearFinishedDownloads(it.engine, it.pair) }
         return problem ?: ModelMessage.IMPORT_OK
     }
 
@@ -235,6 +239,11 @@ class ModelHub(
         val installed = runCatching { Models.store(app).installed() }.getOrDefault(emptyList())
             .mapTo(mutableSetOf()) { it.engine to it.pair }
         s.copy(catalog = c ?: s.catalog, installed = installed) to c
+    }
+
+    /** Tras importar o borrar: olvida los fallos o finales viejos de las descargas de ese par y motor. */
+    private suspend fun clearFinishedDownloads(engine: String, pair: String) = withState { s ->
+        s.copy(downloads = HubRules.withoutFinishedDownloads(s.catalog, engine, pair, s.downloads)) to Unit
     }
 
     /** Al arrancar: vuelve a seguir las descargas que siguen en cola o en curso (p. ej. tras cerrar la app). */

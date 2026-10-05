@@ -129,4 +129,20 @@ class HubRulesTest {
         assertEquals("7", HubRules.ramText((7.4 * gib).toLong(), es))
         assertEquals("8", HubRules.ramText((7.6 * gib).toLong(), es))
     }
+
+    @Test fun `tras importar o borrar se olvidan los finales del par y motor, no las descargas activas ni otros`() {
+        val failed = DownloadState(DownloadState.Status.FAILED, 0, 0, null)
+        val done = DownloadState(DownloadState.Status.SUCCEEDED, 1, 1, null)
+        val running = DownloadState(DownloadState.Status.RUNNING, 10, 100, null)
+        val downloads = mapOf<String, DownloadState?>(
+            "firefox-en-es-3.0" to failed,
+            "opus-en-es-tcbig-2026.10" to done,
+            "firefox-es-en-3.0" to failed,
+        )
+        val after = HubRules.withoutFinishedDownloads(prod, "firefox", "en-es", downloads)
+        assertEquals(setOf("opus-en-es-tcbig-2026.10", "firefox-es-en-3.0"), after.keys)
+        val active = HubRules.withoutFinishedDownloads(prod, "firefox", "en-es", mapOf("firefox-en-es-3.0" to running))
+        assertEquals(mapOf<String, DownloadState?>("firefox-en-es-3.0" to running), active)
+        assertEquals(downloads, HubRules.withoutFinishedDownloads(null, "firefox", "en-es", downloads))
+    }
 }

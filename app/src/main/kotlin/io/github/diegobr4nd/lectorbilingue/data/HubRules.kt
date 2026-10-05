@@ -65,6 +65,21 @@ object HubRules {
      */
     fun keepsCurrentDownload(current: DownloadState?): Boolean = ModelActions.isActive(current)
 
+    /**
+     * Quita de [downloads] los estados finales (fallo, cancelada, terminada) de los modelos del catálogo de
+     * [engine] (nombre en el catálogo) y [pair]: tras importar o borrar, un fallo viejo ya no dice nada de la
+     * fila. Las descargas en cola o en curso se conservan.
+     */
+    fun withoutFinishedDownloads(
+        catalog: Catalog?,
+        engine: String,
+        pair: String,
+        downloads: Map<String, DownloadState?>,
+    ): Map<String, DownloadState?> {
+        val ids = catalog?.models.orEmpty().filter { it.engine == engine && it.pair == pair }.mapTo(mutableSetOf()) { it.id }
+        return downloads.filterNot { (id, state) -> id in ids && state != null && !ModelActions.isActive(state) }
+    }
+
     private fun pick(status: PairStatus, engines: Set<EngineId>, ram: Long, forced: EngineId?): RowStatus? =
         when (val c = EngineSelector.choose(engines, ram, forced)) {
             is EngineChoice.Use -> status.rows.firstOrNull { it.engine == c.engine }

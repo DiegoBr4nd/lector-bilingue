@@ -76,7 +76,7 @@ fun HomeScreen(
     val viewModel: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(hub, settings) } })
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // El modelo de vista sobrevive a Idiomas: se vuelve a leer el motor elegido al entrar.
+    // El modelo de vista sobrevive a Idiomas: el motor elegido llega como flujo observable (AppSettings.enginePreferenceFlow), así que se actualiza solo.
     HomeContent(
         loaded = loaded,
         state = state,
