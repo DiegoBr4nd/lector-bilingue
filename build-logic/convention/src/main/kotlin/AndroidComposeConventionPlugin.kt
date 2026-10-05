@@ -1,4 +1,5 @@
 import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -10,10 +11,12 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
 
-        extensions.configure<ApplicationExtension> {
-            buildFeatures {
-                compose = true
-            }
+        // Sirve tanto para la app como para bibliotecas Android (p. ej. :core:ui).
+        pluginManager.withPlugin("com.android.application") {
+            extensions.configure<ApplicationExtension> { buildFeatures { compose = true } }
+        }
+        pluginManager.withPlugin("com.android.library") {
+            extensions.configure<LibraryExtension> { buildFeatures { compose = true } }
         }
 
         val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
