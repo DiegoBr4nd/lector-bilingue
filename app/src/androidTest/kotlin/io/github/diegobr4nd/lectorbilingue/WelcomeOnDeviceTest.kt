@@ -159,7 +159,7 @@ class WelcomeOnDeviceTest {
         }
         rule.onNodeWithText("Inglés → español").assertExists()
         rule.onNodeWithText("Importar desde archivo (.zip)").assertExists()
-        rule.onNodeWithText("Descargar (227 MB)").assertHeightIsAtLeast(48.dp).performClick()
+        rule.onNodeWithText("Descargar (227 MB)").assertHeightIsAtLeast(48.dp).performClick()
         rule.waitForIdle()
         assertEquals(listOf("opus-en-es"), hub.downloads)
         assertEquals(1, finished)

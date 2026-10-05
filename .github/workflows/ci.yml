@@ -90,10 +90,14 @@ jobs:
           # Control positivo: sin APK o sin resources.arsc, los grep de abajo pasarían en vacío.
           test -f "$apk" || { echo "::error::No existe el APK release"; exit 1; }
           unzip -l "$apk" resources.arsc > /dev/null || { echo "::error::El APK release no trae resources.arsc"; exit 1; }
-          if unzip -p "$apk" 'classes*.dex' | grep -a -q -e 'ui/enginetest' -e 'ui/developer' -e 'EngineTestScreen'; then
+          # Se extrae a archivos antes del grep: con pipefail, grep -q cierra la tubería al primer
+          # hallazgo, unzip muere por SIGPIPE y el if lo tomaría como "no encontrado".
+          unzip -p "$apk" 'classes*.dex' > "$RUNNER_TEMP/dex.bin"
+          unzip -p "$apk" resources.arsc > "$RUNNER_TEMP/arsc.bin"
+          if grep -a -q -e 'ui/enginetest' -e 'ui/developer' -e 'EngineTestScreen' "$RUNNER_TEMP/dex.bin"; then
             echo "::error::La versión release incluye código de la pantalla de desarrollador"; exit 1
           fi
-          if unzip -p "$apk" resources.arsc | grep -a -q -e 'Prueba del motor' -e 'Mostrar Bienvenida otra vez'; then
+          if grep -a -q -e 'Prueba del motor' -e 'Mostrar Bienvenida otra vez' "$RUNNER_TEMP/arsc.bin"; then
             echo "::error::La versión release incluye textos de la pantalla de desarrollador"; exit 1
           fi
 
