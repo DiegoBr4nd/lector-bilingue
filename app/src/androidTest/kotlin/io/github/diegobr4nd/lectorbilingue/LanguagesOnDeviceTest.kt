@@ -101,11 +101,11 @@ class LanguagesOnDeviceTest {
         val hub = LangFakeHub(installedOpus())
         showLanguages(hub)
         rule.onNodeWithContentDescription("Borrar modelo Calidad").assertHeightIsAtLeast(48.dp).performClick()
-        rule.onNodeWithText("¿Borrar Calidad (inglés → español)?").assertExists()
+        rule.onNodeWithText("¿Borrar Calidad?").assertExists()
         rule.onNodeWithText("Liberarás 227 MB. Para volver a usarlo tendrás que descargarlo otra vez.").assertExists()
         rule.onNode(inDialog("Cancelar")).performClick()
         rule.waitForIdle()
-        rule.onNodeWithText("¿Borrar Calidad (inglés → español)?").assertDoesNotExist()
+        rule.onNodeWithText("¿Borrar Calidad?").assertDoesNotExist()
         assertTrue(hub.deletes.isEmpty())
     }
 
@@ -117,7 +117,7 @@ class LanguagesOnDeviceTest {
         rule.onNode(inDialog("Borrar")).performClick()
         rule.waitUntil(5_000) { hub.deletes.isNotEmpty() }
         assertEquals(listOf(EngineId.OPUS to "en-es"), hub.deletes)
-        rule.onNodeWithText("¿Borrar Calidad (inglés → español)?").assertDoesNotExist()
+        rule.onNodeWithText("¿Borrar Calidad?").assertDoesNotExist()
     }
 
     @Test

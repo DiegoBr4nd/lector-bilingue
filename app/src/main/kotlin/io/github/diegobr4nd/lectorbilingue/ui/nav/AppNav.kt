@@ -73,6 +73,7 @@ fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
                         step = key.step,
                         hub = hub,
                         onNext = { backStack[backStack.lastIndex] = StartRules.next(key) },
+                        onBack = { StartRules.back(key)?.let { backStack[backStack.lastIndex] = it } },
                         onFinish = {
                             settings.welcomeDone = true
                             backStack.clear()

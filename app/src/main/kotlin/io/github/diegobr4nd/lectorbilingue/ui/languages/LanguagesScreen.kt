@@ -8,8 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -64,6 +65,7 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.EnginePreference
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
+import io.github.diegobr4nd.lectorbilingue.ui.BottomInsetSpacer
 import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
@@ -204,7 +206,7 @@ fun LanguagesContent(
                 Spacer(Modifier.width(Spacing.s))
                 Text(stringResource(R.string.languages_import))
             }
-            Spacer(Modifier.size(Spacing.l))
+            BottomInsetSpacer()
         }
     }
     ui.pending?.let { PendingDialog(it, onConfirm, onDismissConfirm) }
@@ -262,7 +264,6 @@ private fun PairCardView(
  * Automático / Calidad / Rápido. Elección única: cada opción se anuncia como botón de opción (radio),
  * y la elegida lleva una marca además del color.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSelect: (EnginePreference) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
@@ -279,23 +280,39 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
                 modifier = Modifier.semantics { heading() },
             )
         }
-        FlowRow(
-            Modifier.fillMaxWidth().selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
-            verticalArrangement = Arrangement.spacedBy(Spacing.s),
-        ) {
-            EnginePreference.entries.forEach { option ->
-                EngineOption(
-                    label = stringResource(
-                        when (option) {
-                            EnginePreference.AUTO -> R.string.languages_engine_auto
-                            EnginePreference.QUALITY -> UiR.string.engine_quality
-                            EnginePreference.FAST -> UiR.string.engine_fast
-                        },
-                    ),
-                    selected = option == selected,
-                    onClick = { onSelect(option) },
-                )
+        val options = EnginePreference.entries.map { option ->
+            option to stringResource(
+                when (option) {
+                    EnginePreference.AUTO -> R.string.languages_engine_auto
+                    EnginePreference.QUALITY -> UiR.string.engine_quality
+                    EnginePreference.FAST -> UiR.string.engine_fast
+                },
+            )
+        }
+        val measurer = rememberTextMeasurer()
+        val labelStyle = MaterialTheme.typography.labelLarge
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Se mide el texto real (con la letra del usuario): si las tres opciones iguales caben en una fila,
+            // se reparten el ancho; si no, se apilan, cada una a todo el ancho.
+            val gap = Spacing.s
+            val optionWidth = with(LocalDensity.current) {
+                // Peor caso: la opción más ancha lleva además la marca de elegida.
+                val widest = options.maxOf { measurer.measure(it.second, labelStyle, maxLines = 1).size.width }
+                widest.toDp() + Spacing.l * 2 + 18.dp + Spacing.s
+            }
+            val sideBySide = optionWidth * options.size + gap * (options.size - 1) <= maxWidth
+            if (sideBySide) {
+                Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    options.forEach { (option, label) ->
+                        EngineOption(label, option == selected, { onSelect(option) }, Modifier.weight(1f))
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                    options.forEach { (option, label) ->
+                        EngineOption(label, option == selected, { onSelect(option) }, Modifier.fillMaxWidth())
+                    }
+                }
             }
         }
         if (selected == EnginePreference.AUTO) {
@@ -310,7 +327,7 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
 }
 
 @Composable
-private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     Surface(
         selected = selected,
@@ -320,12 +337,12 @@ private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit) 
         contentColor = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
         border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) scheme.primary else scheme.outline),
         // Elección única: se anuncia como botón de opción; el ripple queda recortado a la forma del botón.
-        modifier = Modifier.heightIn(min = 48.dp).semantics { role = Role.RadioButton },
+        modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.RadioButton },
     ) {
         Row(
-            Modifier.heightIn(min = 48.dp).padding(horizontal = Spacing.l),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = Spacing.l),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.s, Alignment.CenterHorizontally),
         ) {
             // Marca además del color: la opción elegida nunca depende solo del tono.
             if (selected) {
@@ -339,18 +356,19 @@ private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun PendingDialog(pending: PendingAction, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val engineName = stringResource(if (pending.confirm.kind == EngineKind.QUALITY) UiR.string.engine_quality else UiR.string.engine_fast)
-    val direction = pairDirection(pending.pair)
+    // Espacio sin corte antes de la flecha: nunca empieza una línea.
+    val direction = pairDirection(pending.pair).replace(" →", " →")
     when (pending.confirm.action) {
         RowAction.DELETE -> ConfirmDialog(
-            title = stringResource(R.string.languages_delete_title, engineName, direction),
-            body = stringResource(R.string.languages_delete_body, pending.confirm.sizeMb.toInt()),
+            title = stringResource(R.string.languages_delete_title, engineName),
+            body = stringResource(R.string.languages_delete_body, pending.confirm.sizeMb.toInt(), direction),
             confirmLabel = stringResource(R.string.languages_delete_confirm),
             onConfirm = onConfirm,
             onDismiss = onDismiss,
         )
         RowAction.DOWNLOAD -> ConfirmDialog(
-            title = stringResource(R.string.languages_redownload_title, engineName, direction),
-            body = stringResource(R.string.languages_redownload_body, pending.confirm.sizeMb.toInt()),
+            title = stringResource(R.string.languages_redownload_title, engineName),
+            body = stringResource(R.string.languages_redownload_body, pending.confirm.sizeMb.toInt(), direction),
             confirmLabel = stringResource(R.string.languages_redownload_confirm),
             onConfirm = onConfirm,
             onDismiss = onDismiss,

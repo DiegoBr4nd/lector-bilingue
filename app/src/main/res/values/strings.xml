@@ -75,10 +75,10 @@
     <string name="languages_import">Importar desde archivo (.zip)</string>
     <string name="languages_working">Un momento…</string>
     <string name="languages_retry">Intentar de nuevo</string>
-    <string name="languages_delete_title">¿Borrar %1$s (%2$s)?</string>
-    <string name="languages_delete_body">Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
+    <string name="languages_delete_title">¿Borrar %1$s?</string>
+    <string name="languages_delete_body">Modelo %2$s. Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
     <string name="languages_delete_confirm">Borrar</string>
-    <string name="languages_redownload_title">¿Descargar %1$s (%2$s) otra vez?</string>
-    <string name="languages_redownload_body">Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
+    <string name="languages_redownload_title">¿Descargar %1$s otra vez?</string>
+    <string name="languages_redownload_body">Modelo %2$s. Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
     <string name="languages_redownload_confirm">Descargar</string>
 </resources>

@@ -56,6 +56,7 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelActions
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
+import io.github.diegobr4nd.lectorbilingue.ui.BottomInsetSpacer
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.pairName
@@ -120,6 +121,7 @@ fun HomeContent(
             }
             LibraryCard()
             PrivacyBadge(Modifier.align(Alignment.CenterHorizontally).padding(vertical = Spacing.l))
+            BottomInsetSpacer()
         }
     }
 }

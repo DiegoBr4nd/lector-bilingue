@@ -42,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -86,6 +89,7 @@ fun WelcomeScreen(
     onNext: () -> Unit,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
 ) {
     val viewModel: WelcomeViewModel = viewModel(factory = viewModelFactory { initializer { WelcomeViewModel(hub) } })
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -129,6 +133,7 @@ fun WelcomeScreen(
         importing = state.importing,
         message = state.message,
         onNext = onNext,
+        onBack = onBack,
         onToggle = viewModel::toggle,
         onDownload = {
             val ids = toDownload.map { it.recommended.modelId }
@@ -166,11 +171,35 @@ fun WelcomeContent(
     onLater: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
 ) {
+    val swipeNext by rememberUpdatedState(onNext)
+    val swipeBack by rememberUpdatedState(onBack)
+    val swipeThreshold = with(LocalDensity.current) { SwipeDistance.toPx() }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = ContentMaxWidth).fillMaxSize().padding(horizontal = Spacing.xl, vertical = Spacing.l),
+                Modifier
+                    .widthIn(max = ContentMaxWidth)
+                    .fillMaxSize()
+                    // Deslizar cambia de paso (izquierda: siguiente, derecha: anterior). Sin animación extra.
+                    // En el paso 3 no hay "siguiente": hay que elegir Descargar, Importar o Más tarde.
+                    .pointerInput(step) {
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onDragCancel = { total = 0f },
+                            onDragEnd = {
+                                when {
+                                    total <= -swipeThreshold && step < TOTAL_STEPS -> swipeNext()
+                                    total >= swipeThreshold && step > 1 -> swipeBack()
+                                }
+                                total = 0f
+                            },
+                            onHorizontalDrag = { _, delta -> total += delta },
+                        )
+                    }
+                    .padding(horizontal = Spacing.xl, vertical = Spacing.l),
             ) {
                 when (step) {
                     1 -> InfoStep(
@@ -468,3 +497,6 @@ private fun StepIndicator(step: Int, modifier: Modifier = Modifier) {
 }
 
 private const val TOTAL_STEPS = 3
+
+/** Distancia mínima del deslizamiento para cambiar de paso. */
+private val SwipeDistance = 72.dp

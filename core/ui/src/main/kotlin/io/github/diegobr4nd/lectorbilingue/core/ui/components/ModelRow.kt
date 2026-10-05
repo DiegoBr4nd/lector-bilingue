@@ -3,6 +3,8 @@ package io.github.diegobr4nd.lectorbilingue.core.ui.components
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -46,6 +48,7 @@ sealed interface ModelRowState {
  * Nombre, tamaño y estado se leen juntos; cada botón dice a qué modelo se refiere.
  * "Cancelar" queda activo aunque [enabled] sea falso: siempre se puede frenar una descarga.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ModelRow(
     kind: EngineKind,
@@ -63,8 +66,30 @@ fun ModelRow(
     val cancelLabel = stringResource(R.string.action_cancel_download, engineName)
     val deleteLabel = stringResource(R.string.action_delete_model, engineName)
     val iconRes = if (kind == EngineKind.QUALITY) LectorIcons.WorkspacePremium else LectorIcons.Bolt
-    Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
-        // Si cambia el estado (Instalado, En uso…), TalkBack lo anuncia con calma.
+    val downloading = state as? ModelRowState.Downloading
+    val button: @Composable () -> Unit = {
+        when (state) {
+            ModelRowState.NotInstalled -> Button(
+                onClick = onDownload,
+                enabled = enabled,
+                shape = ButtonShape,
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = downloadLabel },
+            ) { Text(stringResource(R.string.action_download)) }
+            is ModelRowState.Downloading -> TextButton(
+                onClick = onCancel,
+                shape = ButtonShape,
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = cancelLabel },
+            ) { Text(stringResource(R.string.action_cancel)) }
+            ModelRowState.Installed, ModelRowState.InUse -> TextButton(
+                onClick = onDelete,
+                enabled = enabled,
+                shape = ButtonShape,
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = deleteLabel },
+            ) { Text(stringResource(R.string.action_delete)) }
+        }
+    }
+    // Nombre, tamaño y estado se leen juntos. Si cambia el estado (Instalado, En uso…), TalkBack lo anuncia con calma.
+    val info: @Composable () -> Unit = {
         Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -76,7 +101,7 @@ fun ModelRow(
                     modifier = Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                Column(Modifier.weight(1f)) {
+                Column {
                     Text(engineName, style = MaterialTheme.typography.titleMedium)
                     Text(
                         stringResource(R.string.model_size_mb, sizeMb),
@@ -85,30 +110,24 @@ fun ModelRow(
                     )
                 }
             }
-            if (state !is ModelRowState.Downloading) StateLabel(state)
+            if (downloading == null) StateLabel(state)
         }
-        if (state is ModelRowState.Downloading) {
-            DownloadProgress(fraction = state.fraction, modifier = Modifier.padding(top = Spacing.s))
-        }
-        Row(Modifier.fillMaxWidth().padding(top = Spacing.xs), horizontalArrangement = Arrangement.End) {
-            when (state) {
-                ModelRowState.NotInstalled -> Button(
-                    onClick = onDownload,
-                    enabled = enabled,
-                    shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = downloadLabel },
-                ) { Text(stringResource(R.string.action_download)) }
-                is ModelRowState.Downloading -> TextButton(
-                    onClick = onCancel,
-                    shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = cancelLabel },
-                ) { Text(stringResource(R.string.action_cancel)) }
-                ModelRowState.Installed, ModelRowState.InUse -> TextButton(
-                    onClick = onDelete,
-                    enabled = enabled,
-                    shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = deleteLabel },
-                ) { Text(stringResource(R.string.action_delete)) }
+    }
+    Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
+        if (downloading != null) {
+            info()
+            DownloadProgress(fraction = downloading.fraction, modifier = Modifier.padding(top = Spacing.s))
+            Row(Modifier.fillMaxWidth().padding(top = Spacing.xs), horizontalArrangement = Arrangement.End) { button() }
+        } else {
+            // Estado a la izquierda y botón al final de la misma fila; con letra muy grande el botón baja y nada se corta.
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                itemVerticalAlignment = Alignment.Bottom,
+            ) {
+                info()
+                button()
             }
         }
     }

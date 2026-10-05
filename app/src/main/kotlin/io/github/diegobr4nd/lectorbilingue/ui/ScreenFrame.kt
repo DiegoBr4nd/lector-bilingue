@@ -7,7 +7,14 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +36,14 @@ val ScreenMaxWidth = 560.dp
 @Composable
 fun ScreenFrame(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
+        // Arriba y a los lados se respetan las barras; abajo no: el contenido se desliza bajo la barra de gestos
+        // y [BottomInsetSpacer] deja el final libre.
+        Box(
+            Modifier.windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+            ),
+            contentAlignment = Alignment.TopCenter,
+        ) {
             Column(
                 Modifier.widthIn(max = ScreenMaxWidth).fillMaxSize().padding(horizontal = Spacing.xl),
                 content = content,
@@ -48,4 +62,11 @@ fun LoadingLine(text: String, modifier: Modifier = Modifier) {
         LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** Final de una lista que se desliza: deja libre la barra de gestos (o el teclado) y un poco más de aire. */
+@Composable
+fun BottomInsetSpacer() {
+    Spacer(Modifier.height(Spacing.xl))
+    Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.safeDrawing))
 }

@@ -12,6 +12,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -253,5 +256,34 @@ class WelcomeOnDeviceTest {
         rule.onNodeWithText("Intentar de nuevo").assertExists()
         rule.onNodeWithText("Importar desde archivo (.zip)").assertExists()
         rule.onNodeWithText("Más tarde").assertExists()
+    }
+
+    @Test
+    fun deslizar_a_la_izquierda_en_el_paso_1_va_al_2() {
+        setNav(FakeHub())
+        rule.onNodeWithText("Lee en inglés con ayuda").assertExists()
+        rule.onNodeWithText("Lee en inglés con ayuda").performTouchInput { swipeLeft() }
+        rule.onNodeWithText("Todo queda en tu teléfono").assertExists()
+        rule.onNodeWithContentDescription("Paso 2 de 3").assertExists()
+    }
+
+    @Test
+    fun deslizar_a_la_derecha_en_el_paso_2_vuelve_al_1() {
+        setNav(FakeHub())
+        rule.onNodeWithText("Siguiente").performClick()
+        rule.onNodeWithText("Todo queda en tu teléfono").performTouchInput { swipeRight() }
+        rule.onNodeWithText("Lee en inglés con ayuda").assertExists()
+        rule.onNodeWithContentDescription("Paso 1 de 3").assertExists()
+    }
+
+    @Test
+    fun deslizar_a_la_izquierda_en_el_paso_3_no_hace_nada() {
+        setNav(FakeHub())
+        rule.onNodeWithText("Siguiente").performClick()
+        rule.onNodeWithText("Siguiente").performClick()
+        rule.onNodeWithText("Elige tu idioma").performTouchInput { swipeLeft() }
+        rule.onNodeWithText("Elige tu idioma").assertExists()
+        rule.onNodeWithContentDescription("Paso 3 de 3").assertExists()
+        assertFalse(settings.welcomeDone)
     }
 }
