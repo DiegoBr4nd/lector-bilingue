@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.diegobr4nd.lectorbilingue.core.ui.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ButtonShape
@@ -39,6 +41,8 @@ sealed interface ModelRowState {
 /**
  * Fila de un modelo: ícono y nombre, tamaño, estado en texto y un solo botón
  * (Descargar, Cancelar o Borrar). El estado nunca depende solo del color.
+ * Nombre, tamaño y estado se leen juntos; cada botón dice a qué modelo se refiere.
+ * "Cancelar" queda activo aunque [enabled] sea falso: siempre se puede frenar una descarga.
  */
 @Composable
 fun ModelRow(
@@ -52,30 +56,36 @@ fun ModelRow(
     modifier: Modifier = Modifier,
 ) {
     val nameRes = if (kind == EngineKind.QUALITY) R.string.engine_quality else R.string.engine_fast
+    val engineName = stringResource(nameRes)
+    val downloadLabel = stringResource(R.string.action_download_model, engineName)
+    val cancelLabel = stringResource(R.string.action_cancel_download, engineName)
+    val deleteLabel = stringResource(R.string.action_delete_model, engineName)
     val iconRes = if (kind == EngineKind.QUALITY) LectorIcons.WorkspacePremium else LectorIcons.Bolt
     Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(nameRes), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.model_size_mb, sizeMb),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(Modifier.semantics(mergeDescendants = true) {}) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
                 )
+                Column(Modifier.weight(1f)) {
+                    Text(engineName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.model_size_mb, sizeMb),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+            if (state !is ModelRowState.Downloading) StateLabel(state)
         }
-        when (state) {
-            is ModelRowState.Downloading -> DownloadProgress(
-                fraction = state.fraction,
-                modifier = Modifier.padding(top = Spacing.s),
-            )
-            else -> StateLabel(state)
+        if (state is ModelRowState.Downloading) {
+            DownloadProgress(fraction = state.fraction, modifier = Modifier.padding(top = Spacing.s))
         }
         Row(Modifier.fillMaxWidth().padding(top = Spacing.xs), horizontalArrangement = Arrangement.End) {
             when (state) {
@@ -83,18 +93,18 @@ fun ModelRow(
                     onClick = onDownload,
                     enabled = enabled,
                     shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = downloadLabel },
                 ) { Text(stringResource(R.string.action_download)) }
                 is ModelRowState.Downloading -> TextButton(
                     onClick = onCancel,
                     shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = cancelLabel },
                 ) { Text(stringResource(R.string.action_cancel)) }
                 ModelRowState.Installed, ModelRowState.InUse -> TextButton(
                     onClick = onDelete,
                     enabled = enabled,
                     shape = ButtonShape,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = deleteLabel },
                 ) { Text(stringResource(R.string.action_delete)) }
             }
         }

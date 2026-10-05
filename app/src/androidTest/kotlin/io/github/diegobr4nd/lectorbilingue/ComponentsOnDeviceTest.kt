@@ -1,12 +1,21 @@
 package io.github.diegobr4nd.lectorbilingue
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.ConfirmDialog
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.EngineKind
@@ -62,6 +71,71 @@ class ComponentsOnDeviceTest {
         rule.onNodeWithText("Borrar").performClick()
         assertEquals(1, confirmado)
         rule.onNodeWithText("Cancelar").performClick()
+        assertEquals(1, cancelado)
+    }
+
+    @Test
+    fun descarga_sin_total_muestra_barra_indeterminada() {
+        row(ModelRowState.Downloading(null))
+        rule.onNodeWithText("Descargando…").assertExists()
+        rule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate),
+            useUnmergedTree = true,
+        ).assertExists()
+    }
+
+    @Test
+    fun no_instalado_muestra_su_estado() {
+        row(ModelRowState.NotInstalled)
+        rule.onNodeWithText("No instalado").assertExists()
+    }
+
+    @Test
+    fun cada_estado_tiene_una_sola_accion() {
+        val estados = listOf(
+            ModelRowState.NotInstalled,
+            ModelRowState.Installed,
+            ModelRowState.InUse,
+            ModelRowState.Downloading(0.4f),
+        )
+        var estado by mutableStateOf<ModelRowState>(estados[0])
+        rule.setContent {
+            LectorTheme { ModelRow(EngineKind.FAST, 40, estado, {}, {}, {}, enabled = true) }
+        }
+        for (e in estados) {
+            estado = e
+            rule.waitForIdle()
+            rule.onAllNodes(hasClickAction()).assertCountEquals(1)
+        }
+    }
+
+    @Test
+    fun las_acciones_dicen_a_que_modelo_se_refieren() {
+        var estado by mutableStateOf<ModelRowState>(ModelRowState.NotInstalled)
+        rule.setContent {
+            LectorTheme { ModelRow(EngineKind.FAST, 40, estado, {}, {}, {}, enabled = true) }
+        }
+        rule.onNode(hasContentDescription("Descargar modelo Rápido") and hasClickAction()).assertExists()
+        estado = ModelRowState.Downloading(0.1f)
+        rule.onNode(hasContentDescription("Cancelar descarga de Rápido") and hasClickAction()).assertExists()
+        estado = ModelRowState.Installed
+        rule.onNode(hasContentDescription("Borrar modelo Rápido") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun nombre_tamano_y_estado_se_leen_juntos() {
+        row(ModelRowState.Installed)
+        rule.onNode(hasText("Calidad") and hasText("Instalado")).assertExists()
+    }
+
+    @Test
+    fun dialogo_atras_llama_a_onDismiss() {
+        var cancelado = 0
+        rule.setContent {
+            LectorTheme { ConfirmDialog("Borrar modelo", "Texto", "Borrar", {}, { cancelado++ }) }
+        }
+        Espresso.pressBack()
+        rule.waitForIdle()
         assertEquals(1, cancelado)
     }
 }

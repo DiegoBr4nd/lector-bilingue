@@ -28,8 +28,9 @@ fun DownloadProgress(fraction: Float?, modifier: Modifier = Modifier) {
     } else {
         stringResource(R.string.download_progress_unknown)
     }
+    // Lo hablado cambia solo cada 10 %: así TalkBack no se llena de anuncios. El texto visual es exacto.
     val description = if (percent != null) {
-        stringResource(R.string.download_progress_description_percent, percent)
+        stringResource(R.string.download_progress_description_percent, percent / 10 * 10)
     } else {
         stringResource(R.string.download_progress_description_unknown)
     }

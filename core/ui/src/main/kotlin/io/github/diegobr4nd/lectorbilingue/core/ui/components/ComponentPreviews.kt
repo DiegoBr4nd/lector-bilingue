@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import io.github.diegobr4nd.lectorbilingue.core.ui.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 
@@ -63,9 +65,9 @@ private fun PrivacyBadgePreview() = Muestra { PrivacyBadge() }
 @Composable
 private fun ConfirmDialogPreview() = LectorTheme {
     ConfirmDialog(
-        title = "Borrar modelo",
-        body = "Podrás volver a descargarlo cuando quieras.",
-        confirmLabel = "Borrar",
+        title = stringResource(R.string.preview_dialog_title),
+        body = stringResource(R.string.preview_dialog_body),
+        confirmLabel = stringResource(R.string.preview_dialog_confirm),
         onConfirm = {},
         onDismiss = {},
     )
