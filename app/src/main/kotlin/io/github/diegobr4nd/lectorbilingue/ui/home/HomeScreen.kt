@@ -77,7 +77,14 @@ fun HomeScreen(
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     // El modelo de vista sobrevive a Idiomas: se vuelve a leer el motor elegido al entrar.
-    LaunchedEffect(Unit) { viewModel.reloadPreference() }
+    // Solo en una visita nueva: al girar la pantalla no hace falta (y parpadearía la carga). Un modelo nuevo ya lo lee en init.
+    var entered by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!entered) {
+            entered = true
+            viewModel.reloadPreference()
+        }
+    }
     HomeContent(
         loaded = loaded,
         state = state,

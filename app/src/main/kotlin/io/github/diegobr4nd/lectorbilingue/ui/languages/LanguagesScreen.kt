@@ -90,10 +90,9 @@ fun LanguagesScreen(
     // Una vez por visita (no al girar la pantalla): el aviso de borrar o importar no debe desaparecer al girar.
     var entered by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (!entered) {
-            entered = true
-            viewModel.onEnter()
-        }
+        val newVisit = !entered
+        entered = true
+        viewModel.onEnter(newVisit)
     }
 
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->

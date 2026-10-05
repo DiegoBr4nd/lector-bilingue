@@ -37,9 +37,9 @@ class HomeViewModel(private val hub: ModelHubApi, private val settings: AppSetti
     }
 
     /** Vuelve a leer el motor elegido (puede haber cambiado en Idiomas mientras este modelo seguía vivo). */
-    fun reloadPreference() {
+    fun reloadPreference(showLoading: Boolean = true) {
         // Mientras se relee no se dibujan tarjetas con el motor viejo.
-        prefLoaded.value = false
+        if (showLoading) prefLoaded.value = false
         viewModelScope.launch {
             pref.value = withContext(Dispatchers.IO) { settings.enginePreference }
             prefLoaded.value = true

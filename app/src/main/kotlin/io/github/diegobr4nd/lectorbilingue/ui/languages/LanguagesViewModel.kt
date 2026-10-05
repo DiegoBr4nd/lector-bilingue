@@ -49,10 +49,15 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
         combine(hub.pairs, _state) { pairs, s -> LanguagesRules.rows(pairs, hub.totalRamBytes(), s.preference) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Este modelo de vista ya leyó el motor y buscó idiomas al menos una vez. */
+    private var started = false
+
     fun autoLine(): AutoLine = LanguagesRules.autoLine(hub.totalRamBytes())
 
     /** Al abrir la pantalla: lee el motor elegido, borra avisos viejos y busca idiomas nuevos. */
-    fun onEnter() {
+    fun onEnter(newVisit: Boolean) {
+        if (!LanguagesRules.shouldStartVisit(started, newVisit)) return
+        started = true
         viewModelScope.launch {
             val pref = withContext(Dispatchers.IO) { settings.enginePreference }
             _state.update { it.copy(preference = pref, preferenceLoaded = true) }

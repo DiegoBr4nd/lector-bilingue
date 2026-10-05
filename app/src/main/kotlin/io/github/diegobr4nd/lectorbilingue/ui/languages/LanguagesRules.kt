@@ -59,6 +59,12 @@ object LanguagesRules {
         return AutoLine(engine.kind(), HubRules.ramText(ram, locale))
     }
 
+    /**
+     * ¿Al abrir Idiomas hay que leer el motor y buscar idiomas? Sí si este modelo de vista es nuevo (p. ej. tras
+     * cerrar Android la app) o si es una visita nueva; no al girar la pantalla (no debe borrar avisos).
+     */
+    fun shouldStartVisit(viewModelStarted: Boolean, newVisit: Boolean): Boolean = !viewModelStarted || newVisit
+
     /** Borrar siempre pregunta; descargar solo si ese modelo ya está instalado (se reemplazaría). */
     fun confirmFor(action: RowAction, row: UiRow): Confirm? = when (action) {
         RowAction.DELETE -> Confirm(action, row.kind, row.sizeMb)

@@ -12,7 +12,9 @@ import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class LanguagesRulesTest {
     private val gib = 1024L * 1024 * 1024
@@ -109,5 +111,13 @@ class LanguagesRulesTest {
         val line = LanguagesRules.autoLine((3.6 * gib).toLong(), es)
         assertEquals(EngineKind.FAST, line.kind)
         assertEquals("3,6", line.ramGb)
+    }
+
+    @Test
+    fun la_visita_arranca_con_modelo_nuevo_o_visita_nueva_pero_no_al_girar() {
+        assertTrue(LanguagesRules.shouldStartVisit(viewModelStarted = false, newVisit = false)) // tras morir el proceso
+        assertTrue(LanguagesRules.shouldStartVisit(viewModelStarted = true, newVisit = true))
+        assertTrue(LanguagesRules.shouldStartVisit(viewModelStarted = false, newVisit = true))
+        assertFalse(LanguagesRules.shouldStartVisit(viewModelStarted = true, newVisit = false)) // giro de pantalla
     }
 }
