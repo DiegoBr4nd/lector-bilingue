@@ -464,7 +464,7 @@ class ContrastTest {
   - capturas.
 - [ ] **Step 2:** Idiomas en el Pixel:
   - borrar con confirmación (luego volver a descargar el mismo modelo);
-  - volver a descargar con confirmación;
+  - volver a descargar con confirmación *(no alcanzable en la 2d: ver la nota de cierre en §4.3 de la spec; pasa a la Fase 3)*;
   - importar un `.zip` (con permiso de Juan para cada paso que borre o descargue);
   - cambiar el motor, cerrar la app (`am force-stop`), abrir y comprobar que se recordó.
 - [ ] **Step 3:**

@@ -23,7 +23,7 @@ Todo se apoya en un **sistema de diseño** en `:core:ui` que usarán todas las f
 1. La Bienvenida se recorre completa. Se usa el interruptor de debug "Mostrar Bienvenida otra vez" en vez de reinstalar la app, para no borrar los modelos ni los textos privados.
 2. Idiomas funciona de punta a punta:
    - borrar, con confirmación;
-   - descargar, y volver a descargar con confirmación;
+   - descargar, y volver a descargar con confirmación (ver nota en §4.3: en la 2d no hay botón para volver a descargar un modelo instalado);
    - importar `.zip`;
    - cambiar de motor, y la elección se recuerda tras cerrar la app.
 3. Con **TalkBack** se completa la Bienvenida y se inicia una descarga sin mirar la pantalla.
@@ -133,6 +133,7 @@ Es una biblioteca Android que no depende de `:models` ni de los motores.
   - La elección se guarda.
 - **Importar desde archivo (.zip)**.
 - **Borrar** y **volver a descargar** siempre piden confirmación (`ConfirmDialog`).
+  - *Nota de cierre (2026-10-05):* en la 2d una fila instalada solo ofrece **Borrar**, así que el diálogo de volver a descargar existe (reglas y textos) pero no hay botón que lo abra. El botón "Descargar otra vez" (modelo dañado o actualizado) queda para la Fase 3. Hoy se reemplaza un modelo borrándolo (con confirmación) y descargándolo de nuevo.
 - **Errores:** los mensajes fijos de la 2b y la 2c, redactados en lenguaje sencillo y sin detalles internos.
 - **Si el motor elegido falla al cargar:** se **ofrece** usar el otro. Nunca cambia solo.
 
