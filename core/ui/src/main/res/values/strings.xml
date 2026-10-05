@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="engine_quality">Calidad</string>
+    <string name="engine_fast">Rápido</string>
+    <string name="model_size_mb">%1$d MB</string>
+    <string name="model_state_not_installed">No instalado</string>
+    <string name="model_state_installed">Instalado</string>
+    <string name="model_state_in_use">En uso</string>
+    <string name="action_download">Descargar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_delete">Borrar</string>
+    <string name="download_progress_percent">Descargando… %1$d %%</string>
+    <string name="download_progress_unknown">Descargando…</string>
+    <string name="download_progress_description_percent">Descarga en curso, %1$d por ciento</string>
+    <string name="download_progress_description_unknown">Descarga en curso</string>
+    <string name="privacy_badge_text">Traducido en tu teléfono</string>
+</resources>

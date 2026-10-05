@@ -1,0 +1,132 @@
+package io.github.diegobr4nd.lectorbilingue.core.ui.components
+
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import io.github.diegobr4nd.lectorbilingue.core.ui.R
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ButtonShape
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+
+/** Motor de traducción tal como lo ve la persona: Calidad (OPUS) o Rápido (Firefox). */
+enum class EngineKind { QUALITY, FAST }
+
+/** Estado de un modelo en la lista. */
+sealed interface ModelRowState {
+    data object NotInstalled : ModelRowState
+    data object Installed : ModelRowState
+    data object InUse : ModelRowState
+
+    /** [fraction] de 0 a 1, o `null` si aún no se sabe. */
+    data class Downloading(val fraction: Float?) : ModelRowState
+}
+
+/**
+ * Fila de un modelo: ícono y nombre, tamaño, estado en texto y un solo botón
+ * (Descargar, Cancelar o Borrar). El estado nunca depende solo del color.
+ */
+@Composable
+fun ModelRow(
+    kind: EngineKind,
+    sizeMb: Long,
+    state: ModelRowState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val nameRes = if (kind == EngineKind.QUALITY) R.string.engine_quality else R.string.engine_fast
+    val iconRes = if (kind == EngineKind.QUALITY) LectorIcons.WorkspacePremium else LectorIcons.Bolt
+    Column(modifier = modifier.fillMaxWidth().padding(vertical = Spacing.s)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(nameRes), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.model_size_mb, sizeMb),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        when (state) {
+            is ModelRowState.Downloading -> DownloadProgress(
+                fraction = state.fraction,
+                modifier = Modifier.padding(top = Spacing.s),
+            )
+            else -> StateLabel(state)
+        }
+        Row(Modifier.fillMaxWidth().padding(top = Spacing.xs), horizontalArrangement = Arrangement.End) {
+            when (state) {
+                ModelRowState.NotInstalled -> Button(
+                    onClick = onDownload,
+                    enabled = enabled,
+                    shape = ButtonShape,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.action_download)) }
+                is ModelRowState.Downloading -> TextButton(
+                    onClick = onCancel,
+                    shape = ButtonShape,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.action_cancel)) }
+                ModelRowState.Installed, ModelRowState.InUse -> TextButton(
+                    onClick = onDelete,
+                    enabled = enabled,
+                    shape = ButtonShape,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.action_delete)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StateLabel(state: ModelRowState) {
+    @StringRes val textRes = when (state) {
+        ModelRowState.NotInstalled -> R.string.model_state_not_installed
+        ModelRowState.Installed -> R.string.model_state_installed
+        ModelRowState.InUse -> R.string.model_state_in_use
+        is ModelRowState.Downloading -> return
+    }
+    Row(
+        modifier = Modifier.padding(top = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+    ) {
+        // Marca además del texto: el estado no depende del color.
+        if (state != ModelRowState.NotInstalled) {
+            Icon(
+                painter = painterResource(LectorIcons.CheckCircle),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            stringResource(textRes),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
