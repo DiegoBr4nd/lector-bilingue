@@ -1,3 +1,46 @@
 <resources>
     <string name="app_name">Lector bilingüe</string>
+
+    <!-- Bienvenida -->
+    <string name="welcome_step_indicator">Paso %1$d de %2$d</string>
+    <string name="welcome_step1_title">Lee en inglés con ayuda</string>
+    <string name="welcome_step1_body">Abre tus libros y toca un párrafo para ver su traducción al español. Sin cuentas ni anuncios.</string>
+    <string name="welcome_step2_title">Todo queda en tu teléfono</string>
+    <string name="welcome_step2_body">La traducción ocurre aquí, sin internet. Tus libros y lo que lees nunca salen del teléfono. Solo se usa internet para descargar los idiomas.</string>
+    <string name="welcome_step3_title">Elige tu idioma</string>
+    <string name="welcome_next">Siguiente</string>
+    <string name="welcome_pair_en_es">Inglés → español</string>
+    <string name="welcome_pair_es_en">Español → inglés</string>
+    <string name="welcome_pair_other">Idioma %1$s</string>
+    <string name="welcome_option_recommended">Recomendado para tu teléfono: %1$s · %2$d MB</string>
+    <string name="welcome_option_optional">Opcional: %1$s · %2$d MB</string>
+    <string name="welcome_option_installed">Ya instalado: %1$s</string>
+    <string name="welcome_wifi_hint">Descarga grande: mejor con Wi-Fi.</string>
+    <string name="welcome_download">Descargar (%1$d MB)</string>
+    <string name="welcome_download_none">Descargar</string>
+    <string name="welcome_start_reading">Empezar a leer</string>
+    <string name="welcome_import">Importar desde archivo (.zip)</string>
+    <string name="welcome_later">Más tarde</string>
+    <string name="welcome_loading">Buscando idiomas…</string>
+    <string name="welcome_importing">Importando el modelo…</string>
+    <string name="welcome_retry">Intentar de nuevo</string>
+
+    <!-- Mensajes del gestor de modelos, en lenguaje sencillo -->
+    <string name="hub_msg_no_catalog">Aún no hay idiomas para descargar, o no hay conexión. Puedes intentarlo de nuevo o importar un archivo.</string>
+    <string name="hub_msg_no_catalog_import">Para importar un archivo hace falta la lista de idiomas, y todavía no la tenemos. Conéctate a internet e inténtalo de nuevo.</string>
+    <string name="hub_msg_no_model">Ese idioma no está disponible todavía.</string>
+    <string name="hub_msg_download_busy">Hay una descarga en curso. Espera a que termine o cancélala.</string>
+    <string name="hub_msg_cancelled">Descarga cancelada.</string>
+    <string name="hub_msg_network">No hay conexión. Revisa tu internet e inténtalo de nuevo.</string>
+    <string name="hub_msg_policy">La descarga se bloqueó por seguridad.</string>
+    <string name="hub_msg_signature">No pudimos comprobar que el archivo sea de confianza, así que no lo usamos.</string>
+    <string name="hub_msg_integrity">El archivo llegó dañado. Inténtalo de nuevo.</string>
+    <string name="hub_msg_catalog">La lista de idiomas no es válida. Inténtalo más tarde.</string>
+    <string name="hub_msg_files">No se pudo guardar el idioma. Revisa que tengas espacio libre.</string>
+    <string name="hub_msg_invalid_zip">Ese archivo no es un idioma válido.</string>
+    <string name="hub_msg_import_no_match">Ese archivo no corresponde a ningún idioma de la lista.</string>
+    <string name="hub_msg_import_ok">Idioma importado.</string>
+    <string name="hub_msg_download_ok">Idioma descargado e instalado.</string>
+    <string name="hub_msg_delete_ok">Idioma borrado.</string>
+    <string name="hub_msg_unknown">Algo salió mal. Inténtalo de nuevo.</string>
 </resources>

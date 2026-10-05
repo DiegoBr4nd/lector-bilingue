@@ -1,6 +1,11 @@
 package io.github.diegobr4nd.lectorbilingue.ui.nav
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,15 +21,17 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
-import io.github.diegobr4nd.lectorbilingue.data.ModelHub
+import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
+import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
 
 /**
  * Navegación de toda la app (Navigation 3: la pila de pantallas es una lista que manejamos nosotros).
- * Las pantallas son marcadores hasta las Tareas 7 a 9.
+ * Inicio e Idiomas son marcadores hasta las Tareas 8 y 9.
  */
 @Composable
-fun AppNav(settings: AppSettings, hub: ModelHub, onClose: () -> Unit = {}) {
+fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
     val backStack = rememberSaveable(
         saver = listSaver<MutableList<Route>, String>(
             save = { list -> list.map { it.encode() } },
@@ -44,22 +51,33 @@ fun AppNav(settings: AppSettings, hub: ModelHub, onClose: () -> Unit = {}) {
         }
     }
 
+    // Con "quitar animaciones" activado en Android, las pantallas cambian sin animar; si no, con un fundido suave.
+    val reduceMotion = rememberReduceMotion()
+    val fade = if (reduceMotion) {
+        EnterTransition.None togetherWith ExitTransition.None
+    } else {
+        fadeIn() togetherWith fadeOut()
+    }
+
     NavDisplay(
         backStack = backStack,
         onBack = { pop() },
+        transitionSpec = { fade },
+        popTransitionSpec = { fade },
+        predictivePopTransitionSpec = { fade },
         entryProvider = { key ->
             when (key) {
                 is Route.Welcome -> NavEntry(key) {
-                    Placeholder("Welcome ${key.step}") {
-                        Button(onClick = { backStack[backStack.lastIndex] = Route.Welcome(key.step + 1) }) {
-                            Text("Siguiente")
-                        }
-                        Button(onClick = {
+                    WelcomeScreen(
+                        step = key.step,
+                        hub = hub,
+                        onNext = { backStack[backStack.lastIndex] = StartRules.next(key) },
+                        onFinish = {
                             settings.welcomeDone = true
                             backStack.clear()
                             backStack.add(Route.Home)
-                        }) { Text("Terminar") }
-                    }
+                        },
+                    )
                 }
                 Route.Home -> NavEntry(key) {
                     Placeholder("Home") {
