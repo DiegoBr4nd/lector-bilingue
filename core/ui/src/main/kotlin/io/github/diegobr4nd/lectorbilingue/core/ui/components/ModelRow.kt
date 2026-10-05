@@ -45,7 +45,8 @@ sealed interface ModelRowState {
 /**
  * Fila de un modelo: ícono y nombre, tamaño, estado en texto y un solo botón
  * (Descargar, Cancelar o Borrar). El estado nunca depende solo del color.
- * Nombre, tamaño y estado se leen juntos; cada botón dice a qué modelo se refiere.
+ * Nombre, tamaño y estado se leen juntos; cada botón dice a qué modelo se refiere,
+ * con motor y [pairLabel] (el par de idiomas), porque dos direcciones pueden verse a la vez.
  * "Cancelar" queda activo aunque [enabled] sea falso: siempre se puede frenar una descarga.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -53,6 +54,7 @@ sealed interface ModelRowState {
 fun ModelRow(
     kind: EngineKind,
     sizeMb: Long,
+    pairLabel: String,
     state: ModelRowState,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
@@ -62,9 +64,9 @@ fun ModelRow(
 ) {
     val nameRes = if (kind == EngineKind.QUALITY) R.string.engine_quality else R.string.engine_fast
     val engineName = stringResource(nameRes)
-    val downloadLabel = stringResource(R.string.action_download_model, engineName)
-    val cancelLabel = stringResource(R.string.action_cancel_download, engineName)
-    val deleteLabel = stringResource(R.string.action_delete_model, engineName)
+    val downloadLabel = stringResource(R.string.action_download_model, engineName, pairLabel)
+    val cancelLabel = stringResource(R.string.action_cancel_download, engineName, pairLabel)
+    val deleteLabel = stringResource(R.string.action_delete_model, engineName, pairLabel)
     val iconRes = if (kind == EngineKind.QUALITY) LectorIcons.WorkspacePremium else LectorIcons.Bolt
     val downloading = state as? ModelRowState.Downloading
     val button: @Composable () -> Unit = {

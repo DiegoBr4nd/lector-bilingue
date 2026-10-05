@@ -6,18 +6,13 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
@@ -93,22 +88,12 @@ fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
                     LanguagesScreen(hub = hub, settings = settings, onBack = { pop() })
                 }
                 Route.Developer -> NavEntry(key) {
-                    if (developer.available) developer.Screen(onBack = { pop() }) else Placeholder("Developer") {}
+                    // Sin pantalla de desarrollador (release) esta ruta no se alcanza: Routes la descarta.
+                    if (developer.available) developer.Screen(onBack = { pop() })
                 }
             }
         },
     )
     // En Welcome la pila tiene una sola entrada: este manejador (registrado al final, gana) retrocede un paso.
     BackHandler(enabled = StartRules.back(backStack.last()) != null) { pop() }
-}
-
-@Composable
-private fun Placeholder(name: String, actions: @Composable () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(name)
-        actions()
-    }
 }

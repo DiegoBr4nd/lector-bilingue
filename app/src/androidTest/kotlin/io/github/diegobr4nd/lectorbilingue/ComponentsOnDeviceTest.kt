@@ -35,7 +35,7 @@ class ComponentsOnDeviceTest {
 
     private fun row(state: ModelRowState) = rule.setContent {
         LectorTheme {
-            ModelRow(EngineKind.QUALITY, 180, state, {}, {}, {}, enabled = true)
+            ModelRow(EngineKind.QUALITY, 180, "Español → Inglés", state, {}, {}, {}, enabled = true)
         }
     }
 
@@ -100,7 +100,7 @@ class ComponentsOnDeviceTest {
         )
         var estado by mutableStateOf<ModelRowState>(estados[0])
         rule.setContent {
-            LectorTheme { ModelRow(EngineKind.FAST, 40, estado, {}, {}, {}, enabled = true) }
+            LectorTheme { ModelRow(EngineKind.FAST, 40, "Español → Inglés", estado, {}, {}, {}, enabled = true) }
         }
         for (e in estados) {
             estado = e
@@ -113,13 +113,13 @@ class ComponentsOnDeviceTest {
     fun las_acciones_dicen_a_que_modelo_se_refieren() {
         var estado by mutableStateOf<ModelRowState>(ModelRowState.NotInstalled)
         rule.setContent {
-            LectorTheme { ModelRow(EngineKind.FAST, 40, estado, {}, {}, {}, enabled = true) }
+            LectorTheme { ModelRow(EngineKind.FAST, 40, "Español → Inglés", estado, {}, {}, {}, enabled = true) }
         }
-        rule.onNode(hasContentDescription("Descargar modelo Rápido") and hasClickAction()).assertExists()
+        rule.onNode(hasContentDescription("Descargar modelo Rápido, Español → Inglés") and hasClickAction()).assertExists()
         estado = ModelRowState.Downloading(0.1f)
-        rule.onNode(hasContentDescription("Cancelar descarga de Rápido") and hasClickAction()).assertExists()
+        rule.onNode(hasContentDescription("Cancelar descarga de Rápido, Español → Inglés") and hasClickAction()).assertExists()
         estado = ModelRowState.Installed
-        rule.onNode(hasContentDescription("Borrar modelo Rápido") and hasClickAction()).assertExists()
+        rule.onNode(hasContentDescription("Borrar modelo Rápido, Español → Inglés") and hasClickAction()).assertExists()
     }
 
     @Test

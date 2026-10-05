@@ -37,17 +37,17 @@ private fun Muestra(content: @Composable () -> Unit) {
 @LectorPreviews
 @Composable
 private fun ModelRowEstados() = Muestra {
-    ModelRow(EngineKind.QUALITY, 180, ModelRowState.NotInstalled, {}, {}, {}, enabled = true)
-    ModelRow(EngineKind.FAST, 40, ModelRowState.Downloading(0.4f), {}, {}, {}, enabled = true)
-    ModelRow(EngineKind.QUALITY, 180, ModelRowState.Installed, {}, {}, {}, enabled = true)
-    ModelRow(EngineKind.FAST, 40, ModelRowState.InUse, {}, {}, {}, enabled = true)
+    ModelRow(EngineKind.QUALITY, 180, "Español → Inglés", ModelRowState.NotInstalled, {}, {}, {}, enabled = true)
+    ModelRow(EngineKind.FAST, 40, "Español → Inglés", ModelRowState.Downloading(0.4f), {}, {}, {}, enabled = true)
+    ModelRow(EngineKind.QUALITY, 180, "Español → Inglés", ModelRowState.Installed, {}, {}, {}, enabled = true)
+    ModelRow(EngineKind.FAST, 40, "Español → Inglés", ModelRowState.InUse, {}, {}, {}, enabled = true)
 }
 
 @LectorPreviews
 @Composable
 private fun ModelRowDescargaSinTotal() = Muestra {
-    ModelRow(EngineKind.FAST, 40, ModelRowState.Downloading(null), {}, {}, {}, enabled = true)
-    ModelRow(EngineKind.QUALITY, 180, ModelRowState.NotInstalled, {}, {}, {}, enabled = false)
+    ModelRow(EngineKind.FAST, 40, "Español → Inglés", ModelRowState.Downloading(null), {}, {}, {}, enabled = true)
+    ModelRow(EngineKind.QUALITY, 180, "Español → Inglés", ModelRowState.NotInstalled, {}, {}, {}, enabled = false)
 }
 
 @LectorPreviews

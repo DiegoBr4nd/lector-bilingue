@@ -87,6 +87,9 @@ jobs:
       - name: El release no incluye la pantalla de desarrollador
         run: |
           apk=app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk
+          # Control positivo: sin APK o sin resources.arsc, los grep de abajo pasarían en vacío.
+          test -f "$apk" || { echo "::error::No existe el APK release"; exit 1; }
+          unzip -l "$apk" resources.arsc > /dev/null || { echo "::error::El APK release no trae resources.arsc"; exit 1; }
           if unzip -p "$apk" 'classes*.dex' | grep -a -q -e 'ui/enginetest' -e 'ui/developer' -e 'EngineTestScreen'; then
             echo "::error::La versión release incluye código de la pantalla de desarrollador"; exit 1
           fi

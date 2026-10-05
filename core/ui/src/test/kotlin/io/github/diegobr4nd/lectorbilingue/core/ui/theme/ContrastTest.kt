@@ -36,6 +36,8 @@ class ContrastTest {
                 "secondary/fondo" to (s.secondary to s.background),
                 "tertiary/fondo" to (s.tertiary to s.background),
                 "error/surface" to (s.error to s.surface),
+                "primary sobre surfaceContainer" to (s.primary to s.surfaceContainer),
+                "error sobre surfaceContainer" to (s.error to s.surfaceContainer),
             ) + superficies(s).flatMap { (n, c) ->
                 listOf("onSurface sobre $n" to (s.onSurface to c), "onSurfaceVariant sobre $n" to (s.onSurfaceVariant to c))
             }

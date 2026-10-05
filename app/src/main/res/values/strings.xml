@@ -12,11 +12,11 @@
     <string name="welcome_pair_en_es">Inglés → español</string>
     <string name="welcome_pair_es_en">Español → inglés</string>
     <string name="welcome_pair_other">Idioma %1$s</string>
-    <string name="welcome_option_recommended">Recomendado para tu teléfono: %1$s · %2$d MB</string>
-    <string name="welcome_option_optional">Opcional: %1$s · %2$d MB</string>
+    <string name="welcome_option_recommended">Recomendado para tu teléfono: %1$s · %2$d MB</string>
+    <string name="welcome_option_optional">Opcional: %1$s · %2$d MB</string>
     <string name="welcome_option_installed">Ya instalado: %1$s</string>
     <string name="welcome_wifi_hint">Descarga grande: mejor con Wi-Fi.</string>
-    <string name="welcome_download">Descargar (%1$d MB)</string>
+    <string name="welcome_download">Descargar (%1$d MB)</string>
     <string name="welcome_download_none">Descargar</string>
     <string name="welcome_start_reading">Empezar a leer</string>
     <string name="welcome_import">Importar desde archivo (.zip)</string>
@@ -76,9 +76,9 @@
     <string name="languages_working">Un momento…</string>
     <string name="languages_retry">Intentar de nuevo</string>
     <string name="languages_delete_title">¿Borrar %1$s?</string>
-    <string name="languages_delete_body">Modelo %2$s. Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
+    <string name="languages_delete_body">Modelo %2$s. Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
     <string name="languages_delete_confirm">Borrar</string>
     <string name="languages_redownload_title">¿Descargar %1$s otra vez?</string>
-    <string name="languages_redownload_body">Modelo %2$s. Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
+    <string name="languages_redownload_body">Modelo %2$s. Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
     <string name="languages_redownload_confirm">Descargar</string>
 </resources>

@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.res.painterResource
@@ -55,6 +56,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -176,6 +178,8 @@ fun WelcomeContent(
     val swipeNext by rememberUpdatedState(onNext)
     val swipeBack by rememberUpdatedState(onBack)
     val swipeThreshold = with(LocalDensity.current) { SwipeDistance.toPx() }
+    // En idiomas de derecha a izquierda el gesto se invierte: deslizar hacia la derecha avanza.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
             Column(
@@ -196,7 +200,7 @@ fun WelcomeContent(
                                 }
                                 total = 0f
                             },
-                            onHorizontalDrag = { _, delta -> total += delta },
+                            onHorizontalDrag = { _, delta -> total += if (rtl) -delta else delta },
                         )
                     }
                     .padding(horizontal = Spacing.xl, vertical = Spacing.l),
@@ -488,7 +492,7 @@ private fun StepIndicator(step: Int, modifier: Modifier = Modifier) {
                     .clearAndSetSemantics {}
                     .size(width = if (current) 24.dp else 8.dp, height = 8.dp)
                     .background(
-                        if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                         CircleShape,
                     ),
             )

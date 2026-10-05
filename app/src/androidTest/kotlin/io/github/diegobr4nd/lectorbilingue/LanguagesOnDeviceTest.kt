@@ -30,6 +30,7 @@ import io.github.diegobr4nd.lectorbilingue.data.RowStatus
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.ui.home.HomeScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
+import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,11 +104,11 @@ class LanguagesOnDeviceTest {
     fun borrar_abre_el_dialogo_y_cancelar_no_borra() {
         val hub = LangFakeHub(installedOpus())
         showLanguages(hub)
-        rule.onNodeWithContentDescription("Borrar modelo Calidad").assertHeightIsAtLeast(48.dp).performClick()
+        rule.onNodeWithContentDescription("Borrar modelo Calidad, Inglés → español").assertHeightIsAtLeast(48.dp).performClick()
         rule.onNodeWithText(deleteTitle).assertExists()
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         // La flecha lleva un espacio sin corte antes (U+00A0), igual que en el diálogo.
-        val direction = ctx.getString(R.string.pair_direction_en_es).replace(" →", " →")
+        val direction = ctx.getString(R.string.pair_direction_en_es).withNoBreakArrow()
         rule.onNodeWithText(ctx.getString(R.string.languages_delete_body, 227, direction)).assertExists()
         rule.onNode(inDialog("Cancelar")).performClick()
         rule.waitForIdle()
@@ -119,7 +120,7 @@ class LanguagesOnDeviceTest {
     fun borrar_en_el_dialogo_llama_a_delete() {
         val hub = LangFakeHub(installedOpus())
         showLanguages(hub)
-        rule.onNodeWithContentDescription("Borrar modelo Calidad").performClick()
+        rule.onNodeWithContentDescription("Borrar modelo Calidad, Inglés → español").performClick()
         rule.onNode(inDialog("Borrar")).performClick()
         rule.waitUntil(5_000) { hub.deletes.isNotEmpty() }
         assertEquals(listOf(EngineId.OPUS to "en-es"), hub.deletes)

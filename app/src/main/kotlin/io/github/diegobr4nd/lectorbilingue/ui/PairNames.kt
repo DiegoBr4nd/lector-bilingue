@@ -12,6 +12,12 @@ fun pairName(pair: String): String = when (pair) {
     else -> stringResource(R.string.welcome_pair_other, pair)
 }
 
+/**
+ * Reemplaza el espacio antes de la flecha por uno sin corte (U+00A0): la flecha nunca empieza una línea.
+ * Un solo lugar para que pantalla y pruebas coincidan.
+ */
+fun String.withNoBreakArrow(): String = replace(" →", "\u00a0→")
+
 /** Nombre del par dentro de una frase: "inglés → español". */
 @Composable
 fun pairDirection(pair: String): String = when (pair) {

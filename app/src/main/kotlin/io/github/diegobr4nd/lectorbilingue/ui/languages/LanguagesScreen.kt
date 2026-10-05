@@ -73,6 +73,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.pairName
+import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.textRes
 
 /**
@@ -240,9 +241,10 @@ private fun PairCardView(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
+        val pairLabel = pairName(card.pair)
         Column(Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m)) {
             Text(
-                pairName(card.pair),
+                pairLabel,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.semantics { heading() },
             )
@@ -251,6 +253,7 @@ private fun PairCardView(
                 ModelRow(
                     kind = row.kind,
                     sizeMb = row.sizeMb,
+                    pairLabel = pairLabel,
                     state = row.state,
                     onDownload = { onDownload(card.pair, row) },
                     onCancel = { onCancel(row.modelId) },
@@ -265,7 +268,7 @@ private fun PairCardView(
 
 /**
  * Automático / Calidad / Rápido. Elección única: cada opción se anuncia como botón de opción (radio),
- * y la elegida lleva una marca además del color.
+ * y la elegida se distingue por fondo, borde grueso y negrita además del color.
  */
 @Composable
 private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSelect: (EnginePreference) -> Unit) {
@@ -304,7 +307,7 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
                 val widest = options.maxOf { measurer.measure(it.second, boldStyle, maxLines = 1).size.width }
                 widest.toDp() + Spacing.m * 2
             }
-            val sideBySide = optionWidth * options.size + gap * (options.size - 1) <= maxWidth
+            val sideBySide = optionWidth * options.size + gap * (options.size - 1) <= maxWidth + 1.dp
             if (sideBySide) {
                 Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(gap)) {
                     options.forEach { (option, label) ->
@@ -365,7 +368,7 @@ private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit, 
 private fun PendingDialog(pending: PendingAction, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val engineName = stringResource(if (pending.confirm.kind == EngineKind.QUALITY) UiR.string.engine_quality else UiR.string.engine_fast)
     // Espacio sin corte antes de la flecha: nunca empieza una línea.
-    val direction = pairDirection(pending.pair).replace(" →", " →")
+    val direction = pairDirection(pending.pair).withNoBreakArrow()
     when (pending.confirm.action) {
         RowAction.DELETE -> ConfirmDialog(
             title = stringResource(R.string.languages_delete_title, engineName),
@@ -373,6 +376,7 @@ private fun PendingDialog(pending: PendingAction, onConfirm: () -> Unit, onDismi
             confirmLabel = stringResource(R.string.languages_delete_confirm),
             onConfirm = onConfirm,
             onDismiss = onDismiss,
+            destructive = true,
         )
         RowAction.DOWNLOAD -> ConfirmDialog(
             title = stringResource(R.string.languages_redownload_title, engineName),
