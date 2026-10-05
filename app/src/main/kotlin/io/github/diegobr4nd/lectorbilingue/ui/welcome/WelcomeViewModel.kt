@@ -20,6 +20,8 @@ data class WelcomeUiState(
     val refreshing: Boolean = true,
     val importing: Boolean = false,
     val message: ModelMessage? = null,
+    /** La importación salió bien y la pantalla aún no lo atendió (decide ella según el paso en que esté). */
+    val importOk: Boolean = false,
 )
 
 /**
@@ -53,14 +55,26 @@ class WelcomeViewModel(private val hub: ModelHubApi) : ViewModel() {
     /** Encola la descarga de cada modelo elegido. */
     fun download(modelIds: List<String>) = modelIds.forEach(hub::download)
 
-    /** Importa el .zip; si sale bien llama a [onDone]. Si no, deja el mensaje en pantalla. */
-    fun import(uri: Uri, onDone: () -> Unit) {
+    /**
+     * Importa el .zip. Si sale bien, deja [WelcomeUiState.importOk] para que la pantalla actual decida
+     * (el modelo de vista no navega); si no, deja el mensaje en pantalla.
+     */
+    fun import(uri: Uri) {
         if (_state.value.importing) return
         _state.update { it.copy(importing = true, message = null) }
         viewModelScope.launch {
             val result = hub.import(uri)
-            _state.update { it.copy(importing = false, message = if (result == ModelMessage.IMPORT_OK) null else result) }
-            if (result == ModelMessage.IMPORT_OK) onDone()
+            _state.update {
+                if (result == ModelMessage.IMPORT_OK) {
+                    it.copy(importing = false, importOk = true)
+                } else {
+                    it.copy(importing = false, message = result)
+                }
+            }
         }
     }
+
+    /** La pantalla atendió la importación; si no estaba en el paso 3, el aviso de éxito queda para cuando vuelva. */
+    fun ackImport(showSuccess: Boolean) =
+        _state.update { it.copy(importOk = false, message = if (showSuccess) ModelMessage.IMPORT_OK else it.message) }
 }

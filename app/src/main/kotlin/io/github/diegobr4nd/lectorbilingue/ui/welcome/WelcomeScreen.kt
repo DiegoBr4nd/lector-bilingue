@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -67,6 +68,7 @@ import io.github.diegobr4nd.lectorbilingue.data.ModelActions
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
+import io.github.diegobr4nd.lectorbilingue.ui.nav.Route
 import io.github.diegobr4nd.lectorbilingue.ui.textRes
 
 /** Ancho máximo del contenido: en tabletas la Bienvenida no se estira de lado a lado. */
@@ -105,7 +107,17 @@ fun WelcomeScreen(
         pendingIds = null
     }
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.import(uri) { finish() }
+        if (uri != null) viewModel.import(uri)
+    }
+
+    // Solo navega la composición actual, y solo desde el paso 3; en otro paso el aviso espera a que vuelva.
+    val currentStep by rememberUpdatedState(step)
+    LaunchedEffect(state.importOk) {
+        if (state.importOk) {
+            val onLast = currentStep == Route.WELCOME_STEPS
+            viewModel.ackImport(showSuccess = !onLast)
+            if (onLast) finish()
+        }
     }
 
     WelcomeContent(
@@ -352,11 +364,13 @@ private fun LanguageStep(
             Spacer(Modifier.width(Spacing.s))
             Text(stringResource(R.string.welcome_import))
         }
-        TextButton(
-            onClick = onLater,
-            shape = ButtonShape,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) { Text(stringResource(R.string.welcome_later)) }
+        if (loading || step3.options.isEmpty() || step3.canDownload) {
+            TextButton(
+                onClick = onLater,
+                shape = ButtonShape,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.welcome_later)) }
+        }
     }
 }
 
