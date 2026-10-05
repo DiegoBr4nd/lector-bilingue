@@ -96,16 +96,22 @@ class LanguagesOnDeviceTest {
 
     private fun inDialog(text: String) = hasText(text) and hasClickAction() and hasAnyAncestor(isDialog())
 
+    private val deleteTitle: String
+        get() = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.languages_delete_title, "Calidad")
+
     @Test
     fun borrar_abre_el_dialogo_y_cancelar_no_borra() {
         val hub = LangFakeHub(installedOpus())
         showLanguages(hub)
         rule.onNodeWithContentDescription("Borrar modelo Calidad").assertHeightIsAtLeast(48.dp).performClick()
-        rule.onNodeWithText("¿Borrar Calidad?").assertExists()
-        rule.onNodeWithText("Liberarás 227 MB. Para volver a usarlo tendrás que descargarlo otra vez.").assertExists()
+        rule.onNodeWithText(deleteTitle).assertExists()
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        // La flecha lleva un espacio sin corte antes (U+00A0), igual que en el diálogo.
+        val direction = ctx.getString(R.string.pair_direction_en_es).replace(" →", " →")
+        rule.onNodeWithText(ctx.getString(R.string.languages_delete_body, 227, direction)).assertExists()
         rule.onNode(inDialog("Cancelar")).performClick()
         rule.waitForIdle()
-        rule.onNodeWithText("¿Borrar Calidad?").assertDoesNotExist()
+        rule.onNodeWithText(deleteTitle).assertDoesNotExist()
         assertTrue(hub.deletes.isEmpty())
     }
 
@@ -117,7 +123,7 @@ class LanguagesOnDeviceTest {
         rule.onNode(inDialog("Borrar")).performClick()
         rule.waitUntil(5_000) { hub.deletes.isNotEmpty() }
         assertEquals(listOf(EngineId.OPUS to "en-es"), hub.deletes)
-        rule.onNodeWithText("¿Borrar Calidad?").assertDoesNotExist()
+        rule.onNodeWithText(deleteTitle).assertDoesNotExist()
     }
 
     @Test
