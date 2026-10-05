@@ -110,18 +110,19 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
   - `UNSAFE_ARCHIVE` usa el mismo texto que "no es un EPUB válido": no se dan detalles del ataque.
 
 ### 5.2 Lector
-- Pantalla Compose que aloja el `EpubNavigatorFragment` de Readium (con `AndroidFragment`). `MainActivity` pasa a ser `FragmentActivity`.
+- **Actividad propia `ReaderActivity`** (`FragmentActivity`, no exportada) con interfaz Compose que aloja el `EpubNavigatorFragment` de Readium (con `AndroidFragment`). Motivo: Readium exige instalar su `FragmentFactory` **antes** de `super.onCreate()`, con el libro ya abierto; eso no encaja en una ruta de Navigation 3. `MainActivity` no cambia.
+- El libro se abre **en la Biblioteca** (indicador "Abriendo…") y se deja en una caché en memoria (`OpenBooks`). `ReaderActivity` lo toma de ahí. Si la caché está vacía (Android cerró la app en segundo plano), la actividad se cierra y se vuelve a la Biblioteca, sin fallar.
 - **Desplazamiento continuo** (`EpubPreferences(scroll = true)`). Tema y letra quedan con los valores por defecto hasta la 3c.
 - **Barra superior:** ← volver, título del libro y botón "Índice".
-- **Barra inferior:** "Capítulo 3 · 42 %".
+- **Barra inferior:** título del capítulo actual y % leído ("La tormenta · 42 %"). Si el capítulo no tiene título, solo "42 %". Se usa el título y no un número porque muchos EPUB cuentan la portada y el índice como capítulos.
 - Las dos barras se ocultan al deslizar hacia abajo y aparecen al deslizar hacia arriba. Con "reducir movimiento" activado aparecen y desaparecen sin animación.
 - **Índice:** hoja inferior con la tabla de contenidos. El capítulo actual va marcado con ícono y texto, no solo con color. Tocar un capítulo salta a él.
 - **Posición:** se guarda cuando cambia (con un retraso corto para no escribir en cada píxel) y al salir. Al abrir se vuelve al `locator` guardado y se actualiza `lastOpenedAt`.
-- **Estados:** abriendo (indicador breve); dañado o ausente ("No se pudo abrir este libro" con los botones "Volver" y "Quitar de la biblioteca").
+- **Estados:** abriendo (en la fila de la Biblioteca); dañado o ausente → diálogo en la Biblioteca "No se pudo abrir este libro" con "Cerrar" y "Quitar de la biblioteca".
 
 ### 5.3 Navegación
-- Rutas nuevas: `Route.Library` (sustituye a `Route.Home`) y `Route.Reader(bookId)`.
-- `encode`/`decode`: `"library"` y `"reader:<uuid>"`. Un id que no es UUID devuelve `null`.
+- Ruta nueva: `Route.Library` (sustituye a `Route.Home`), `encode` = `"library"`.
+- El Lector no es una ruta: se abre con un `Intent` explícito a `ReaderActivity` con el id del libro. Un id que no es UUID cierra la actividad.
 - Un `"home"` guardado de la versión anterior se decodifica como `Library`.
 
 ## 6. Seguridad y privacidad
@@ -132,11 +133,15 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 - **Nombres:** se rechaza toda entrada con `..`, ruta absoluta, `\` o carácter nulo (**zip slip**). Readium no extrae a disco, pero se valida igual.
 - **Estructura:** debe tener `mimetype` = `application/epub+zip` y `META-INF/container.xml`. Si no, `NOT_EPUB`.
 - **XML:** sin entidades externas ni DTD (**XXE**). Se verifica el analizador que usa Readium y se cubre con una prueba.
-- **DRM:** `META-INF/encryption.xml` con recursos cifrados, o licencia LCP o Adobe → `DRM`. No se incluye `readium-lcp`.
+- **DRM:** `META-INF/license.lcpl` o `META-INF/rights.xml`, o `META-INF/encryption.xml` con algún algoritmo que **no** sea de ofuscación de fuentes → `DRM`. La ofuscación de fuentes (`http://www.idpf.org/2008/embedding` y `http://ns.adobe.com/pdf/enc#RC`) es común en libros sin DRM y se acepta. No se incluye `readium-lcp`.
 
 ### 6.2 WebView del lector
-- **Sin red:** ningún recurso remoto se carga. Imágenes, fuentes y rastreadores externos del libro quedan bloqueados.
-- **Sin JavaScript del libro:** solo corre el de Readium (resultado del spike, §3).
+- **Limpieza del HTML del libro** (`HtmlSanitizer`, con jsoup, al servir cada recurso HTML, XHTML o SVG, antes de que Readium añada sus scripts):
+  - se quitan `<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, `<base>` y `<meta http-equiv="refresh">`;
+  - se quitan los atributos `on…` (`onclick`, `onload`…) y los enlaces `javascript:`;
+  - se inserta una **Content-Security-Policy** (regla que el WebView obedece) que solo permite recursos del propio libro: sin red, sin `connect`, sin `object`.
+- **Sin red:** lo garantizan la CSP y que Readium no navega a direcciones remotas. El spike (§3) y `seguridad` lo comprueban con un servidor de prueba en el PC.
+- **Sin JavaScript del libro:** solo corre el de Readium.
 - **Enlaces externos:** no se abren solos. Diálogo "¿Abrir en el navegador?" con la dirección visible.
 - Sin acceso a archivos ni a `content://` desde el WebView. `setWebContentsDebuggingEnabled` solo en debug.
 
@@ -147,7 +152,8 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 
 ### 6.4 Dependencias nuevas
 - Readium Kotlin Toolkit **3.4.0** (BSD-3-Clause): `readium-shared`, `readium-streamer` y `readium-navigator`.
-- Room y KSP (Apache-2.0). AndroidX Fragment (Apache-2.0).
+- Room y KSP (Apache-2.0). AndroidX Fragment y `fragment-compose` (Apache-2.0). jsoup (MIT), para `HtmlSanitizer`.
+- Readium recibe un `HttpClient` propio que siempre falla (`OfflineHttpClient`): ni el lector ni la importación pueden usar la red.
 - Se fijan las versiones, se añaden los hashes a `verification-metadata.xml` y `seguridad` revisa qué arrastra cada una (nada con red, analítica ni Play Services).
 
 ## 7. Accesibilidad
@@ -160,8 +166,9 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 ## 8. Pruebas
 - **`BookImporter`** (pruebas instrumentadas o Robolectric, según lo que pida Readium): EPUB válido; sin título; sin portada; > 100 MB; no es ZIP; zip slip; bomba ZIP; demasiadas entradas; XXE; DRM. En cada error se comprueba que no queda ningún archivo.
 - **`LibraryDb`:** Room en memoria; insertar, ordenar, borrar, guardar posición.
-- **Reglas de pantalla:** aviso de idiomas, texto por cada `reason` y formato "Capítulo N · P %".
-- **Rutas:** `encode`/`decode` de `Library` y `Reader`, UUID inválido → `null`, `"home"` → `Library`.
+- **Reglas de pantalla:** aviso de idiomas, texto por cada `reason`, etiqueta "capítulo · P %" y cuándo se ven las barras.
+- **`HtmlSanitizer`:** pruebas en la JVM con HTML malicioso.
+- **Rutas:** `encode`/`decode` de `Library`, `"home"` → `Library`; id de libro inválido en `ReaderActivity` → se cierra.
 - **EPUBs de prueba** generados por nosotros en `src/test` (o `src/androidTest`), sin contenido con derechos de autor.
 - **Evidencia antes de decir "listo":** `./gradlew assembleFdroidDebug`, `./gradlew test`, `./gradlew lint` y CI del PR en verde.
 
@@ -169,8 +176,8 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 | Riesgo | Plan |
 |---|---|
 | Readium no deja insertar texto bajo un párrafo o detectar el toque | El spike (§3) lo descubre el primer día. Si falla, se replantea la decisión 2 con Juan |
-| Readium no permite bloquear el JavaScript del libro | Quitar `<script>` y atributos `on*` del HTML al servirlo |
-| `EpubNavigatorFragment` dentro de Compose da problemas de ciclo de vida | `AndroidFragment` de `fragment-compose`. Si falla, una pantalla con `FragmentContainerView` |
+| La CSP o la limpieza del HTML rompen los scripts de Readium | El spike (§3) lo prueba con la limpieza activa; si falla, se ajusta la CSP (nunca se quita la limpieza) |
+| `EpubNavigatorFragment` dentro de Compose da problemas de ciclo de vida | `ReaderActivity` propia con `AndroidFragment`. Si falla, `FragmentContainerView` en un `AndroidView` |
 | Readium arrastra dependencias no deseadas | Revisión de `seguridad` del árbol de dependencias antes de añadirlo |
 | Tamaño del APK | Medir antes y después y anotarlo en el PR |
 
