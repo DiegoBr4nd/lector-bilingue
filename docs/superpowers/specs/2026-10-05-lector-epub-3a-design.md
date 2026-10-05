@@ -186,3 +186,31 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 2. Aprobar las capturas de Biblioteca y Lector.
 3. Hacer la prueba de la puerta (§1) en el Pixel con un EPUB real suyo.
 4. Aprobar la fusión del PR.
+
+## 11. Resultado del spike
+
+Rama local `spike/readium-3b` (borrada), Readium 3.4.0, Pixel 7 (Android 17), EPUB inventado de 3 capítulos. En el log solo hubo largos, booleanos y números.
+
+| # | Pregunta | Resultado | Evidencia |
+|---|---|---|---|
+| P1 | Tocar un párrafo y leer su texto | ✅ | `InputListener.onTap` + `elementFromPoint(point / density)` devuelve el párrafo correcto: largos 155, 69, 198 y 19 en párrafos distintos, también con la página desplazada |
+| P2 | Insertar un bloque bajo el párrafo sin salto | ✅ | `top` del párrafo tocado igual antes, justo después y 800 ms después (249,6 → 249,6; con scrollY 349: 402,75 → 402,75 y −57,2 → −57,2); `scrollY` no cambia; capturas: el bloque aparece debajo y el párrafo no se mueve |
+| P3 | Solo corre el JavaScript de Readium | ✅ (con cambio de CSP) | Con `HtmlSanitizer`: `JS_DEL_LIBRO_EJECUTADO` ausente, el `onclick` no cambia el título, `window.readium` existe y P1/P2 funcionan. Sin sanitizador el script del libro **sí** corre. Con la CSP del plan, Readium se rompía (ver abajo) |
+| P4 | Red | ✅ | Servidor espía (cuenta cada conexión TCP) por `adb reverse`: 0 conexiones en 12 s, con y sin `HtmlSanitizer`; control desde el teléfono sí llega. Readium solo ya bloquea: su `shouldInterceptRequest` atiende **todas** las peticiones del WebView desde el libro |
+| P5 | Localizador durante el desplazamiento | ❌ (parcial) | `progression` sube al bajar y baja al subir, pero `currentLocator` se emite ~180 ms **después de soltar** (antirrebote de 100 ms en Readium), no durante. `totalProgression` solo cambia por "posición" (aquí, por capítulo: 0,333 → 0,667). `InputListener.onDrag` sí llega durante el gesto (Start/Move/End, `offset.y` < 0 al bajar) |
+
+**Decisión:** P1 y P2 pasan, se sigue con la decisión 2 (WebView de Readium).
+- **Tarea 5 (CSP):** Readium carga sus scripts y CSS desde `https://readium_assets`, otro origen que el libro (`https://readium_package`). Con `script-src 'self'` Readium no arranca (`window.readium` indefinido). Chromium **rechaza** `https://readium_assets` en la CSP ("invalid source": el `_` no es válido en un host). La CSP que funcionó permite el esquema `https:` en `default-src`, `script-src`, `style-src`, `img-src` y `font-src` (con `connect-src 'none'` y el resto igual). Es seguro porque Readium intercepta toda petición y nunca sale a la red (P4). Revisa `seguridad`.
+- **Tarea 9 (barras):** usar `InputListener.onDrag` (signo de `offset.y`) para ocultar o mostrar; el `currentLocator` sirve para el % y para guardar la posición, no para el gesto.
+
+**APIs de Readium 3.4.0 que difieren del plan:**
+- `PublicationOpener(onCreatePublication = …)` del **constructor nunca se llama** (en `open()` el parámetro homónimo lo tapa y se llama dos veces). Pasar el `onCreatePublication` a `opener.open(asset, allowUserInteraction = false, onCreatePublication = { … })`. Se aplica dos veces: el sanitizador debe ser idempotente o evitar insertar dos `<meta>` CSP.
+- `getOrElse` de `Try` es una extensión: `import org.readium.r2.shared.util.getOrElse`.
+- `File.toUrl()` no existe sin argumentos (`toUrl(isDirectory: Boolean)`); más simple: `assetRetriever.retrieve(file: File)`, que devuelve `Try<Asset, AssetRetriever.RetrieveError>`.
+- Iguales al plan: `HttpError.IO(cause: Error)` (también `HttpError.IO(exception)` y `HttpError.Unreachable`), `TransformingContainer(container) { url, resource -> }`, `TransformingResource(resource) { bytes -> Try<ByteArray, ReadError> }`, `DefaultPublicationParser(context, httpClient, assetRetriever, pdfFactory = null)`, `AssetRetriever(contentResolver, httpClient)`, `InputListener.onTap(TapEvent)` (`point` en píxeles de la vista; `TapEvent.targetElement` es experimental y llegó `null`), `EpubNavigatorFragment.evaluateJavascript(script): String?` (suspend; solo el recurso visible), `EpubNavigatorFactory(pub).createFragmentFactory(initialLocator, initialPreferences = EpubPreferences(scroll = true))` y `AndroidFragment<EpubNavigatorFragment>` de `fragment-compose` 1.9.1.
+- `Publication.container` lleva `@InternalReadiumApi`.
+
+**Para la Tarea 2 (dependencias):**
+- `readium-streamer` y `readium-navigator` **exigen core library desugaring** en `:app` (`isCoreLibraryDesugaringEnabled = true` + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")`); sin él falla `checkFdroidDebugAarMetadata`.
+- El navegador arrastra `media3` (exoplayer, session) y con él `guava`, además de `timber`, `com.mcxiaoke.koi:core`, `appcompat`, `constraintlayout`, `browser`, `kotlinx-serialization` y `kotlinx-datetime`. Revisa `seguridad`. APK debug del spike: 29,4 MB.
+- El modo continuo pasa de un capítulo al siguiente al deslizar (se llegó del capítulo 2 al 3).
