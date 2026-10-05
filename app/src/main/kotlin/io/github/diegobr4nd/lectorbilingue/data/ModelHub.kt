@@ -109,8 +109,11 @@ class ModelHub(
         scope.launch {
             // Recuperación del arranque (barata tras la primera vez): limpia restos de instalaciones cortadas.
             runCatching { Models.recover(app) }
-            reload()
-            _loaded.value = true
+            try {
+                reload()
+            } finally {
+                _loaded.value = true
+            }
             resumeActiveDownloads()
         }
     }
