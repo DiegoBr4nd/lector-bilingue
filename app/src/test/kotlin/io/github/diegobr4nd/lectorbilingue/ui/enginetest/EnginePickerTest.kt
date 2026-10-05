@@ -39,18 +39,6 @@ class EnginePickerTest {
     @Test fun `error en automatico sin otro motor instalado no ofrece nada`() =
         assertNull(EnginePicker.fallbackOffer(EngineSwitch.AUTO, EngineId.OPUS, setOf(EngineId.OPUS)))
 
-    @Test fun `la RAM redondea 7,6 GiB a 8 GB`() {
-        assertEquals(8L, EnginePicker.ramGb((7.6 * gib).toLong()))
-        assertEquals(4L, EnginePicker.ramGb((3.9 * gib).toLong()))
-    }
-
-    @Test fun `el texto de RAM lleva decimal cerca del umbral de 4 GB`() {
-        val es = java.util.Locale.forLanguageTag("es")
-        assertEquals("3,6", EnginePicker.ramText((3.6 * gib).toLong(), es))
-        assertEquals("7", EnginePicker.ramText((7.4 * gib).toLong(), es))
-        assertEquals("8", EnginePicker.ramText((7.6 * gib).toLong(), es))
-    }
-
     @Test fun `automatico con un motor ausente pide el preferido por RAM`() {
         assertEquals(
             EnginePlan.Download(EngineId.OPUS),

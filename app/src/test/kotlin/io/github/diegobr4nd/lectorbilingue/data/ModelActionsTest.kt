@@ -1,4 +1,4 @@
-package io.github.diegobr4nd.lectorbilingue.ui.enginetest
+package io.github.diegobr4nd.lectorbilingue.data
 
 import io.github.diegobr4nd.lectorbilingue.models.Catalog
 import io.github.diegobr4nd.lectorbilingue.models.CatalogException

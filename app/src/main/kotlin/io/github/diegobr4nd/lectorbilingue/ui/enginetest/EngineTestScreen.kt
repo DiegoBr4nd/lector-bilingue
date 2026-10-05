@@ -13,6 +13,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
 import androidx.compose.ui.platform.LocalContext

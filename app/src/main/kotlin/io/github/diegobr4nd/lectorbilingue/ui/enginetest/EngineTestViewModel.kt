@@ -11,6 +11,8 @@ import io.github.diegobr4nd.lectorbilingue.benchmark.BenchText
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkResult
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkRunner
 import io.github.diegobr4nd.lectorbilingue.core.text.SentenceSplitter
+import io.github.diegobr4nd.lectorbilingue.data.ModelActions
+import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair

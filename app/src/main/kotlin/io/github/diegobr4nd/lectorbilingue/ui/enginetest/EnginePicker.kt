@@ -1,13 +1,11 @@
 package io.github.diegobr4nd.lectorbilingue.ui.enginetest
 
+import io.github.diegobr4nd.lectorbilingue.data.HubRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineChoice
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineSelector
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.engine.api.Reason
-import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToLong
 
 /** Interruptor de prueba: Automático deja decidir a [EngineSelector]; los otros fuerzan un motor. */
 enum class EngineSwitch(val forced: EngineId?) {
@@ -35,8 +33,6 @@ sealed interface EnginePlan {
 
 /** Lógica pura (sin Android) de la pantalla de prueba: se prueba en la JVM. */
 object EnginePicker {
-    private const val GIB = 1024.0 * 1024 * 1024
-
     fun plan(switch: EngineSwitch, installed: Set<EngineId>, totalRamBytes: Long): EnginePlan =
         when (val c = EngineSelector.choose(installed, totalRamBytes, switch.forced)) {
             is EngineChoice.Use -> EnginePlan.Load(c.engine, c.reason)
@@ -50,16 +46,6 @@ object EnginePicker {
     fun fallbackOffer(switch: EngineSwitch, failed: EngineId, installed: Set<EngineId>): EngineId? =
         if (switch == EngineSwitch.AUTO) installed.firstOrNull { it != failed } else null
 
-    /** RAM total en GB redondeados (7,6 GiB se muestra como 8). */
-    fun ramGb(totalRamBytes: Long): Long = (totalRamBytes / GIB).roundToLong()
-
-    /**
-     * Texto de la RAM para la pantalla: GB enteros, salvo a ±0,5 GB del umbral de 4 GiB, donde lleva un decimal
-     * (así "3,6" nunca se lee como "4" junto a "Firefox por RAM").
-     */
-    fun ramText(totalRamBytes: Long, locale: Locale = Locale.getDefault()): String {
-        val gib = totalRamBytes / GIB
-        val threshold = EngineSelector.OPUS_MIN_RAM_BYTES / GIB
-        return if (abs(gib - threshold) <= 0.5) String.format(locale, "%.1f", gib) else ramGb(totalRamBytes).toString()
-    }
+    /** Texto de la RAM para la pantalla; la regla vive en [HubRules.ramText] (la comparten las pantallas nuevas). */
+    fun ramText(totalRamBytes: Long): String = HubRules.ramText(totalRamBytes)
 }
