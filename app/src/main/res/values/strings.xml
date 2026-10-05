@@ -43,4 +43,40 @@
     <string name="hub_msg_download_ok">Idioma descargado e instalado.</string>
     <string name="hub_msg_delete_ok">Idioma borrado.</string>
     <string name="hub_msg_unknown">Algo salió mal. Inténtalo de nuevo.</string>
+
+    <!-- Nombres de pares dentro de una frase -->
+    <string name="pair_direction_en_es">inglés → español</string>
+    <string name="pair_direction_es_en">español → inglés</string>
+
+    <!-- Inicio -->
+    <string name="home_title">Hola</string>
+    <string name="home_menu">Más opciones</string>
+    <string name="home_menu_languages">Idiomas</string>
+    <string name="home_menu_developer">Desarrollador</string>
+    <string name="home_loading">Cargando…</string>
+    <string name="home_ready">Listo para traducir · %1$s</string>
+    <string name="home_cancel_download">Cancelar descarga de %1$s</string>
+    <string name="home_no_languages_title">Aún no tienes idiomas</string>
+    <string name="home_no_languages_body">Descarga uno para poder traducir tus libros.</string>
+    <string name="home_download_languages">Descargar idiomas</string>
+    <string name="home_languages">Idiomas</string>
+    <string name="home_library_title">Tu biblioteca llega pronto</string>
+    <string name="home_library_body">Aquí verás tus libros en la próxima versión.</string>
+
+    <!-- Idiomas -->
+    <string name="languages_title">Idiomas</string>
+    <string name="languages_back">Volver</string>
+    <string name="languages_searching">Buscando…</string>
+    <string name="languages_engine_title">Motor</string>
+    <string name="languages_engine_auto">Automático</string>
+    <string name="languages_engine_auto_line">Automático elige %1$s en tu teléfono (%2$s GB).</string>
+    <string name="languages_import">Importar desde archivo (.zip)</string>
+    <string name="languages_working">Un momento…</string>
+    <string name="languages_retry">Intentar de nuevo</string>
+    <string name="languages_delete_title">¿Borrar %1$s (%2$s)?</string>
+    <string name="languages_delete_body">Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
+    <string name="languages_delete_confirm">Borrar</string>
+    <string name="languages_redownload_title">¿Descargar %1$s (%2$s) otra vez?</string>
+    <string name="languages_redownload_body">Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
+    <string name="languages_redownload_confirm">Descargar</string>
 </resources>

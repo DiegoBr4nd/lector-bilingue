@@ -132,7 +132,7 @@ class WelcomeOnDeviceTest {
         rule.onNodeWithText("Más tarde").performClick()
         rule.waitForIdle()
         assertTrue(settings.welcomeDone)
-        rule.onNodeWithText("Home").assertExists()
+        rule.onNodeWithText("Hola").assertExists()
     }
 
     @Test

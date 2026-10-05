@@ -69,6 +69,7 @@ import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.ui.nav.Route
+import io.github.diegobr4nd.lectorbilingue.ui.pairName
 import io.github.diegobr4nd.lectorbilingue.ui.textRes
 
 /** Ancho máximo del contenido: en tabletas la Bienvenida no se estira de lado a lado. */
@@ -383,13 +384,6 @@ private fun Loading(text: String) {
         LinearProgressIndicator(Modifier.fillMaxWidth())
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
-
-@Composable
-private fun pairName(pair: String): String = when (pair) {
-    "en-es" -> stringResource(R.string.welcome_pair_en_es)
-    "es-en" -> stringResource(R.string.welcome_pair_es_en)
-    else -> stringResource(R.string.welcome_pair_other, pair)
 }
 
 @Composable

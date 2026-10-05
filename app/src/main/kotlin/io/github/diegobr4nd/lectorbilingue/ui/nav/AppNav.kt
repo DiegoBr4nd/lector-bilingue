@@ -24,11 +24,12 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.home.HomeScreen
+import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
 
 /**
  * Navegación de toda la app (Navigation 3: la pila de pantallas es una lista que manejamos nosotros).
- * Inicio e Idiomas son marcadores hasta las Tareas 8 y 9.
  */
 @Composable
 fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
@@ -80,14 +81,16 @@ fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
                     )
                 }
                 Route.Home -> NavEntry(key) {
-                    Placeholder("Home") {
-                        Button(onClick = { backStack.add(Route.Languages) }) { Text("Idiomas") }
-                        if (developer.available) {
-                            Button(onClick = { backStack.add(Route.Developer) }) { Text("Desarrollador") }
-                        }
-                    }
+                    HomeScreen(
+                        hub = hub,
+                        settings = settings,
+                        onLanguages = { backStack.add(Route.Languages) },
+                        onDeveloper = if (developer.available) ({ backStack.add(Route.Developer) }) else null,
+                    )
                 }
-                Route.Languages -> NavEntry(key) { Placeholder("Languages") {} }
+                Route.Languages -> NavEntry(key) {
+                    LanguagesScreen(hub = hub, settings = settings, onBack = { pop() })
+                }
                 Route.Developer -> NavEntry(key) {
                     if (developer.available) developer.Screen(onBack = { pop() }) else Placeholder("Developer") {}
                 }
