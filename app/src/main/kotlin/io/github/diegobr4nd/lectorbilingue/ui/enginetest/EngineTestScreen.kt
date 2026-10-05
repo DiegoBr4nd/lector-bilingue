@@ -54,7 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.benchmark.BenchmarkResult
-import io.github.diegobr4nd.lectorbilingue.ui.theme.LectorBilingueTheme
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
 
 /** Conecta el ViewModel con la pantalla sin estado. */
 @Composable
@@ -564,7 +564,7 @@ private fun BenchmarkCard(result: BenchmarkResult, source: BenchSource?) {
 @Preview(showBackground = true)
 @Composable
 private fun EngineTestContentPreview() {
-    LectorBilingueTheme {
+    LectorTheme {
         EngineTestContent(
             state = EngineTestUiState(
                 modelStatus = ModelStatus.READY,
@@ -584,7 +584,7 @@ private fun EngineTestContentPreview() {
 @Preview(showBackground = true)
 @Composable
 private fun EngineTestMissingPreview() {
-    LectorBilingueTheme {
+    LectorTheme {
         EngineTestContent(
             state = EngineTestUiState(
                 modelStatus = ModelStatus.MISSING,
@@ -602,7 +602,7 @@ private fun EngineTestMissingPreview() {
 @Preview(showBackground = true)
 @Composable
 private fun EngineTestErrorPreview() {
-    LectorBilingueTheme {
+    LectorTheme {
         EngineTestContent(
             state = EngineTestUiState(
                 modelStatus = ModelStatus.ERROR,
