@@ -1,0 +1,181 @@
+# Spec · Fase 3a · Biblioteca y lector EPUB (abrir y leer)
+
+- **Fecha:** 2026-10-05
+- **Rama:** `feat/lector-epub`
+- **Estado:** diseño aprobado por Juan en conversación (partes 1 a 4). Falta que revise esta spec.
+- **Fase 3 partida en:** **3a abrir y leer** → 3b tocar y traducir (caché Room, pretraducción, hilo único del motor) → 3c modos de traducción y ajustes de lectura. Cada subfase tiene su spec, su plan y su PR.
+- **Agentes:**
+  - `estructura`: módulo `:books`, Room, ViewModels y navegación.
+  - `diseno`: Biblioteca y Lector, Previews, accesibilidad y auditoría material-3.
+  - `infraestructura`: Readium, KSP, `verification-metadata.xml` y CI.
+  - `seguridad`: dependencias nuevas, WebView, importación de EPUB y EPUBs maliciosos.
+
+## 1. Objetivo
+
+Abrir un EPUB real en el Pixel y leerlo **sin conexión**, con el diseño original del libro. Todavía sin traducir: eso es la 3b.
+
+**Puerta 3a** (con evidencia en el Pixel 7):
+1. Añadir un EPUB real → aparece en la Biblioteca con portada, título y autor.
+2. Abrirlo y deslizar → desplazamiento continuo. Las barras se ocultan al bajar y aparecen al subir.
+3. Índice → saltar a un capítulo funciona.
+4. Cerrar la app y volver a abrir el libro → sigue en la misma posición.
+5. Borrar el libro → desaparece de la Biblioteca y el archivo original sigue en el teléfono.
+6. En modo avión todo funciona igual.
+7. Con TalkBack se puede añadir y abrir un libro sin mirar. Con letra del sistema al 200 % no se corta nada.
+8. Capturas de Biblioteca y Lector aprobadas por Juan (4 temas, teléfono y tableta, letra grande).
+9. CI en verde. Revisiones de `seguridad` y `diseno` sin hallazgos altos abiertos. PR **en borrador** hasta cerrar la puerta.
+
+### Fuera de alcance
+- Tocar y traducir, caché de traducciones y pretraducción: 3b.
+- Modos Intercalado y Solo traducción, tema de página, fuente, tamaño de letra y márgenes: 3c.
+- Modo páginas (deslizar a los lados): quizá en la 3c como ajuste.
+- Marcadores, buscar texto, ordenar, colecciones o estantes: más adelante, si hacen falta.
+- PDF y DOCX: Fase 5.
+- Diseño de tableta a dos columnas: sigue pendiente; aquí solo se comprueba que nada se rompe en tableta.
+
+## 2. Decisiones tomadas (con Juan)
+
+| # | Decisión | Elegido | Por qué |
+|---|---|---|---|
+| 1 | División de la Fase 3 | 3a / 3b / 3c | Un PR por subfase, cada una con su prueba en el Pixel |
+| 2 | Cómo se muestra el libro | WebView de Readium | Juan quiere que los libros se vean como en cualquier lector (imágenes, tablas, estilos) |
+| 3 | Biblioteca | Mínima: portada, título, autor, % leído, añadir y borrar | Lo justo para la puerta |
+| 4 | Dónde se guarda el libro | Copia privada dentro de la app | Sigue abriendo aunque se borre el original; se valida una sola vez |
+| 5 | Pantalla de inicio | La Biblioteca reemplaza al Inicio | El estado de idiomas pasa a un aviso y al menú ⋮ |
+| 6 | Avance por el libro | Desplazamiento continuo | En la 3b la traducción se inserta debajo del párrafo sin reacomodar páginas |
+| 7 | Controles del lector | Básicos: volver, título, Índice, % leído, recordar posición | Lo necesario para leer 10 minutos |
+| 8 | Barras del lector | Se ocultan al deslizar hacia abajo y aparecen al deslizar hacia arriba | Tocar el texto queda libre para traducir en la 3b |
+| 9 | Organización del código | Módulo nuevo `:books` + Room desde ya | En la 3b la tabla de traducciones se suma a la misma base, sin migrar desde JSON |
+| 10 | Respaldos de Android | Libros y Biblioteca **fuera** del respaldo | Restaurar la lista sin los EPUB dejaría libros que no abren; los libros no caben en el tope de 25 MB del respaldo en la nube |
+
+## 3. Primera tarea: spike de la 3b (desechable)
+
+Antes de construir la 3a, un experimento rápido confirma que el WebView de Readium permite lo que necesita la 3b:
+1. Detectar qué párrafo tocó el usuario y obtener su texto.
+2. Insertar un bloque de texto debajo de ese párrafo, en desplazamiento continuo, sin que el texto "salte".
+3. Ejecutar solo el JavaScript de Readium y no el del libro (o, si no se puede, quitar los `<script>` del libro antes de mostrarlo).
+
+El resultado se anota al final de esta spec, en una sección nueva "11. Resultado del spike", y el código se borra. Si (1) o (2) fallan, se para y se replantea con Juan la decisión 2 antes de seguir.
+
+## 4. Módulo `:books` (sin pantallas)
+
+### 4.1 `BookImporter`
+Recibe el `Uri` que entrega el selector del sistema (*Storage Access Framework*, sin permisos de almacenamiento).
+1. Copia el archivo a `files/books/tmp/<uuid>.epub` contando bytes. Si pasa de **100 MB**, se corta y falla.
+2. Valida el archivo (§6.1).
+3. Abre la publicación con Readium y lee título, autor y portada. Sin título, se usa el nombre del archivo sin extensión.
+4. Guarda la portada reducida en `files/books/<id>.cover.png` (si existe).
+5. Mueve el EPUB a `files/books/<id>.epub` y crea la fila en `books`.
+6. Si algo falla en cualquier paso, borra lo temporal y lo parcial (`finally`). Al arrancar la app se borra lo que quede en `files/books/tmp/`.
+
+Resultado: `ImportResult.Ok(bookId)` o `ImportResult.Error(reason)`, con `reason` ∈ {`NOT_EPUB`, `TOO_BIG`, `UNSAFE_ARCHIVE`, `DRM`, `DAMAGED`, `NO_SPACE`}.
+
+### 4.2 `LibraryDb` (Room)
+Tabla `books`:
+
+| Campo | Tipo | Nota |
+|---|---|---|
+| `id` | String (UUID) | Clave |
+| `title` | String | |
+| `author` | String? | |
+| `coverPath` | String? | Relativa a `files/books/` |
+| `addedAt` | Long | Milisegundos |
+| `lastOpenedAt` | Long? | Para ordenar |
+| `progress` | Float | 0..1, `totalProgression` de Readium |
+| `locator` | String? | *Locator* de Readium en JSON: la posición exacta |
+
+- Orden de la Biblioteca: `lastOpenedAt` descendente y después `addedAt` descendente.
+- La base se llama `lector.db` y empieza en la versión 1. La 3b añade la tabla de traducciones con una migración a la versión 2.
+- `BookRepository` expone `Flow<List<Book>>`, `import`, `delete` (borra la fila, el EPUB y la portada) y `savePosition`.
+
+### 4.3 `BookOpener`
+Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`) y devuelve la `Publication` o un error (`DAMAGED`, `MISSING`).
+
+## 5. Pantallas (en `:app`)
+
+### 5.1 Biblioteca (reemplaza a Inicio)
+- **Barra superior:** "Biblioteca" y menú ⋮ (Idiomas, y Desarrollador solo en debug).
+- **Aviso de idiomas**, solo si hace falta: falta un modelo ("Falta el modelo inglés→español · Descargar") o hay una descarga en curso ("Descargando… 45 %"). Al tocarlo se abre Idiomas. Reutiliza las reglas de `HomeRules` y también cubre el pendiente "aviso cuando falló la última descarga".
+- **Lista de libros:** portada (o recuadro con la inicial), título, autor y barra de % leído con su texto ("42 %").
+- **Mantener presionado** un libro abre "Borrar libro", con `ConfirmDialog`. Borra la copia y la posición, nunca el original.
+- **Botón flotante** "＋ Añadir libro" abre el selector del sistema (`OpenDocument` con `application/epub+zip`).
+- **Vacía:** ilustración sencilla, el texto "Añade tu primer libro EPUB" y un botón grande "Añadir libro".
+- **Importando:** fila provisional con "Añadiendo…".
+- **Errores** (snackbar con mensaje humano, uno por `reason`):
+  - "Este archivo no es un EPUB válido"
+  - "El libro es demasiado grande (máx. 100 MB)"
+  - "Este libro tiene protección DRM y no se puede abrir"
+  - "El archivo parece dañado"
+  - "No hay espacio suficiente en el teléfono"
+  - `UNSAFE_ARCHIVE` usa el mismo texto que "no es un EPUB válido": no se dan detalles del ataque.
+
+### 5.2 Lector
+- Pantalla Compose que aloja el `EpubNavigatorFragment` de Readium (con `AndroidFragment`). `MainActivity` pasa a ser `FragmentActivity`.
+- **Desplazamiento continuo** (`EpubPreferences(scroll = true)`). Tema y letra quedan con los valores por defecto hasta la 3c.
+- **Barra superior:** ← volver, título del libro y botón "Índice".
+- **Barra inferior:** "Capítulo 3 · 42 %".
+- Las dos barras se ocultan al deslizar hacia abajo y aparecen al deslizar hacia arriba. Con "reducir movimiento" activado aparecen y desaparecen sin animación.
+- **Índice:** hoja inferior con la tabla de contenidos. El capítulo actual va marcado con ícono y texto, no solo con color. Tocar un capítulo salta a él.
+- **Posición:** se guarda cuando cambia (con un retraso corto para no escribir en cada píxel) y al salir. Al abrir se vuelve al `locator` guardado y se actualiza `lastOpenedAt`.
+- **Estados:** abriendo (indicador breve); dañado o ausente ("No se pudo abrir este libro" con los botones "Volver" y "Quitar de la biblioteca").
+
+### 5.3 Navegación
+- Rutas nuevas: `Route.Library` (sustituye a `Route.Home`) y `Route.Reader(bookId)`.
+- `encode`/`decode`: `"library"` y `"reader:<uuid>"`. Un id que no es UUID devuelve `null`.
+- Un `"home"` guardado de la versión anterior se decodifica como `Library`.
+
+## 6. Seguridad y privacidad
+
+### 6.1 Validación al importar
+- **Tamaño:** archivo ≤ 100 MB. Suma de tamaños descomprimidos declarados ≤ 500 MB, y al leer se cuentan los bytes reales con el mismo tope (defensa contra **bomba ZIP**).
+- **Cantidad:** ≤ 10 000 entradas en el ZIP.
+- **Nombres:** se rechaza toda entrada con `..`, ruta absoluta, `\` o carácter nulo (**zip slip**). Readium no extrae a disco, pero se valida igual.
+- **Estructura:** debe tener `mimetype` = `application/epub+zip` y `META-INF/container.xml`. Si no, `NOT_EPUB`.
+- **XML:** sin entidades externas ni DTD (**XXE**). Se verifica el analizador que usa Readium y se cubre con una prueba.
+- **DRM:** `META-INF/encryption.xml` con recursos cifrados, o licencia LCP o Adobe → `DRM`. No se incluye `readium-lcp`.
+
+### 6.2 WebView del lector
+- **Sin red:** ningún recurso remoto se carga. Imágenes, fuentes y rastreadores externos del libro quedan bloqueados.
+- **Sin JavaScript del libro:** solo corre el de Readium (resultado del spike, §3).
+- **Enlaces externos:** no se abren solos. Diálogo "¿Abrir en el navegador?" con la dirección visible.
+- Sin acceso a archivos ni a `content://` desde el WebView. `setWebContentsDebuggingEnabled` solo en debug.
+
+### 6.3 Privacidad y respaldos
+- Nunca se registra el texto, el título ni el autor del libro. En los registros solo van el id y el `reason`.
+- `dataExtractionRules` y `fullBackupContent` excluyen `files/books/` y `lector.db`.
+- `docs/agentes/03-seguridad.md` §4 se corrige: "respaldar ajustes; **no** la biblioteca, los libros, la caché ni los modelos".
+
+### 6.4 Dependencias nuevas
+- Readium Kotlin Toolkit **3.4.0** (BSD-3-Clause): `readium-shared`, `readium-streamer` y `readium-navigator`.
+- Room y KSP (Apache-2.0). AndroidX Fragment (Apache-2.0).
+- Se fijan las versiones, se añaden los hashes a `verification-metadata.xml` y `seguridad` revisa qué arrastra cada una (nada con red, analítica ni Play Services).
+
+## 7. Accesibilidad
+- Áreas táctiles de 48 dp como mínimo. Contraste AA en los 4 temas de la interfaz.
+- `contentDescription` en español en portadas ("Portada de <título>"), FAB, menú e Índice.
+- El % leído se anuncia como texto. El capítulo actual se marca sin depender del color.
+- Borrar también se ofrece en las acciones de TalkBack (`customActions`), no solo con mantener presionado.
+- Letra del sistema al 200 %: los títulos largos se cortan con "…" y nunca tapan los botones.
+
+## 8. Pruebas
+- **`BookImporter`** (pruebas instrumentadas o Robolectric, según lo que pida Readium): EPUB válido; sin título; sin portada; > 100 MB; no es ZIP; zip slip; bomba ZIP; demasiadas entradas; XXE; DRM. En cada error se comprueba que no queda ningún archivo.
+- **`LibraryDb`:** Room en memoria; insertar, ordenar, borrar, guardar posición.
+- **Reglas de pantalla:** aviso de idiomas, texto por cada `reason` y formato "Capítulo N · P %".
+- **Rutas:** `encode`/`decode` de `Library` y `Reader`, UUID inválido → `null`, `"home"` → `Library`.
+- **EPUBs de prueba** generados por nosotros en `src/test` (o `src/androidTest`), sin contenido con derechos de autor.
+- **Evidencia antes de decir "listo":** `./gradlew assembleFdroidDebug`, `./gradlew test`, `./gradlew lint` y CI del PR en verde.
+
+## 9. Riesgos
+| Riesgo | Plan |
+|---|---|
+| Readium no deja insertar texto bajo un párrafo o detectar el toque | El spike (§3) lo descubre el primer día. Si falla, se replantea la decisión 2 con Juan |
+| Readium no permite bloquear el JavaScript del libro | Quitar `<script>` y atributos `on*` del HTML al servirlo |
+| `EpubNavigatorFragment` dentro de Compose da problemas de ciclo de vida | `AndroidFragment` de `fragment-compose`. Si falla, una pantalla con `FragmentContainerView` |
+| Readium arrastra dependencias no deseadas | Revisión de `seguridad` del árbol de dependencias antes de añadirlo |
+| Tamaño del APK | Medir antes y después y anotarlo en el PR |
+
+## 10. Lo que hace Juan
+1. Revisar y aprobar esta spec, y después el plan.
+2. Aprobar las capturas de Biblioteca y Lector.
+3. Hacer la prueba de la puerta (§1) en el Pixel con un EPUB real suyo.
+4. Aprobar la fusión del PR.
