@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -296,9 +299,10 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
             // se reparten el ancho; si no, se apilan, cada una a todo el ancho.
             val gap = Spacing.s
             val optionWidth = with(LocalDensity.current) {
-                // Peor caso: la opción más ancha lleva además la marca de elegida.
-                val widest = options.maxOf { measurer.measure(it.second, labelStyle, maxLines = 1).size.width }
-                widest.toDp() + Spacing.l * 2 + 18.dp + Spacing.s
+                // Peor caso: la opción más ancha en negrita (la elegida va en negrita).
+                val boldStyle = labelStyle.copy(fontWeight = FontWeight.Bold)
+                val widest = options.maxOf { measurer.measure(it.second, boldStyle, maxLines = 1).size.width }
+                widest.toDp() + Spacing.m * 2
             }
             val sideBySide = optionWidth * options.size + gap * (options.size - 1) <= maxWidth
             if (sideBySide) {
@@ -321,6 +325,8 @@ private fun EngineSelector(selected: EnginePreference, autoLine: AutoLine, onSel
                 stringResource(R.string.languages_engine_auto_line, engineName, autoLine.ramGb),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -339,16 +345,18 @@ private fun EngineOption(label: String, selected: Boolean, onClick: () -> Unit, 
         // Elección única: se anuncia como botón de opción; el ripple queda recortado a la forma del botón.
         modifier = modifier.heightIn(min = 48.dp).semantics { role = Role.RadioButton },
     ) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = Spacing.l),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.s, Alignment.CenterHorizontally),
+        // Elegida: fondo relleno, borde más grueso y letra en negrita (no depende solo del color).
+        // TalkBack dice "seleccionado" por el rol de botón de opción y el estado de la superficie.
+        Box(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = Spacing.m),
+            contentAlignment = Alignment.Center,
         ) {
-            // Marca además del color: la opción elegida nunca depende solo del tono.
-            if (selected) {
-                Icon(painterResource(LectorIcons.CheckCircle), contentDescription = null, Modifier.size(18.dp))
-            }
-            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.Bold else null,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
