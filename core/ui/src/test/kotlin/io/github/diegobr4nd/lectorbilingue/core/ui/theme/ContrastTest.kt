@@ -27,12 +27,34 @@ class ContrastTest {
                 "onSecondaryContainer" to (s.onSecondaryContainer to s.secondaryContainer),
                 "onError" to (s.onError to s.error),
                 "error/fondo" to (s.error to s.background),
-            )
+                "onSecondary" to (s.onSecondary to s.secondary),
+                "onTertiary" to (s.onTertiary to s.tertiary),
+                "onTertiaryContainer" to (s.onTertiaryContainer to s.tertiaryContainer),
+                "onErrorContainer" to (s.onErrorContainer to s.errorContainer),
+                "inverseOnSurface" to (s.inverseOnSurface to s.inverseSurface),
+                "inversePrimary" to (s.inversePrimary to s.inverseSurface),
+                "secondary/fondo" to (s.secondary to s.background),
+                "tertiary/fondo" to (s.tertiary to s.background),
+                "error/surface" to (s.error to s.surface),
+            ) + superficies(s).flatMap { (n, c) ->
+                listOf("onSurface sobre $n" to (s.onSurface to c), "onSurfaceVariant sobre $n" to (s.onSurfaceVariant to c))
+            }
             for ((label, p) in pares) {
                 assertTrue(Contrast.ratio(p.first.argbLong(), p.second.argbLong()) >= 4.5, "$name $label")
             }
             // Bordes e íconos: elementos gráficos, mínimo 3:1.
-            assertTrue(Contrast.ratio(s.outline.argbLong(), s.surface.argbLong()) >= 3.0, "$name outline")
+            for ((n, c) in superficies(s) + listOf("background" to s.background, "surface" to s.surface)) {
+                assertTrue(Contrast.ratio(s.outline.argbLong(), c.argbLong()) >= 3.0, "$name outline sobre $n")
+            }
         }
     }
+
+    private fun superficies(s: androidx.compose.material3.ColorScheme) = listOf(
+        "surfaceVariant" to s.surfaceVariant,
+        "surfaceContainerLowest" to s.surfaceContainerLowest,
+        "surfaceContainerLow" to s.surfaceContainerLow,
+        "surfaceContainer" to s.surfaceContainer,
+        "surfaceContainerHigh" to s.surfaceContainerHigh,
+        "surfaceContainerHighest" to s.surfaceContainerHighest,
+    )
 }
