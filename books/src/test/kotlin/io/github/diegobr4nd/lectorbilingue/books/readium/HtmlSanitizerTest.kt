@@ -1,5 +1,7 @@
 package io.github.diegobr4nd.lectorbilingue.books.readium
 
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,7 +55,7 @@ class HtmlSanitizerTest {
     }
 
     @Test fun `SVG sin script ni on`() {
-        val out = HtmlSanitizer.sanitize("""<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect onload="y()"/></svg>""", isSvg = true)
+        val out = HtmlSanitizer.sanitize("""<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect onload="y()"/></svg>""", HtmlSanitizer.Kind.SVG)
         assertFalse(out.contains("script", true)); assertFalse(out.contains("onload", true))
     }
 
@@ -75,5 +77,118 @@ class HtmlSanitizerTest {
             xhtml("<p>a</p>", head = """<title>t</title><meta http-equiv="content-security-policy" content="default-src *"/>"""),
         )
         assertEquals(1, cspCount(out)); assertFalse(out.contains("default-src *")); assertTrue(out.contains(HtmlSanitizer.CSP))
+    }
+
+    // --- Ronda 1 de revisión: desvíos del sanitizador ---
+
+    /** Vuelve a leer el resultado como lo haría el navegador y dice si queda algún atributo on*. */
+    private fun hasOnAttribute(out: String, html: Boolean): Boolean {
+        val parser = if (html) Parser.htmlParser() else Parser.xmlParser()
+        return Jsoup.parse(out, "", parser).allElements.any { el ->
+            el.attributes().asList().any { it.key.substringAfterLast(':').lowercase().startsWith("on") }
+        }
+    }
+
+    @Test fun `quita script con prefijo de espacio de nombres`() {
+        val out = HtmlSanitizer.sanitize(
+            """<html xmlns="http://www.w3.org/1999/xhtml" xmlns:h="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body><h:script>alert(1)</h:script><s:script xmlns:s="http://www.w3.org/2000/svg">alert(2)</s:script><h:iframe src="x"/><h:object data="x"/><h:embed src="x"/><h:base href="https://x/"/><h:meta http-equiv="refresh" content="0;url=https://x"/><p>a</p></body></html>""",
+        )
+        // "<h:object" y no "object": la CSP contiene "object-src".
+        for (t in listOf("script>", "alert(", "<h:iframe", "<h:object", "<h:embed", "<h:base", "refresh")) assertFalse(out.contains(t, true), t)
+        assertEquals(1, cspCount(out)); assertTrue(out.contains("<p>a</p>"))
+    }
+
+    @Test fun `raiz h-html con prefijo recibe la CSP`() {
+        val out = HtmlSanitizer.sanitize(
+            """<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>t</h:title></h:head><h:body><h:script>alert(1)</h:script><h:p>a</h:p></h:body></h:html>""",
+        )
+        assertFalse(out.contains("alert(")); assertEquals(1, cspCount(out))
+        assertTrue(out.contains("<h:meta"), out)
+    }
+
+    @Test fun `documento sin html no se sirve tal cual`() {
+        val out = HtmlSanitizer.sanitize("""<foo xmlns:h="http://www.w3.org/1999/xhtml"><h:p onclick="x()">a</h:p><h:img src="i.png"/></foo>""")
+        assertEquals(1, cspCount(out)); assertFalse(out.contains("<foo")); assertFalse(out.contains("onclick"))
+    }
+
+    @Test fun `quita javascript en cualquier atributo y prefijo`() {
+        val out = HtmlSanitizer.sanitize(
+            xhtml("""<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xlink"><a x:href="javascript:alert(1)"><text>a</text></a><a q:href=" vbscript:x" xmlns:q="http://www.w3.org/1999/xlink"><text>b</text></a></svg><a href="data:text/html,&lt;script&gt;x&lt;/script&gt;">c</a><p h:onclick="x()" xmlns:h="http://www.w3.org/1999/xhtml">d</p><img src="data:image/png;base64,AAAA"/>"""),
+        )
+        for (t in listOf("javascript", "vbscript", "data:text/html", "onclick")) assertFalse(out.contains(t, true), t)
+        assertTrue(out.contains("data:image/png;base64,AAAA"))
+    }
+
+    @Test fun `comentario dentro de title no revive en modo HTML`() {
+        val payload = """<html><head><title><!--</title><img src="x" onerror="alert(1)">--></title></head><body/></html>"""
+        val asHtml = HtmlSanitizer.sanitize(payload, HtmlSanitizer.Kind.HTML)
+        assertFalse(hasOnAttribute(asHtml, html = true), asHtml); assertFalse(asHtml.contains("onerror"))
+        assertEquals(1, cspCount(asHtml))
+        val asXml = HtmlSanitizer.sanitize(payload, HtmlSanitizer.Kind.XHTML)
+        assertFalse(hasOnAttribute(asXml, html = true), asXml); assertFalse(hasOnAttribute(asXml, html = false), asXml)
+    }
+
+    @Test fun `CDATA en style queda como texto y no revive como HTML`() {
+        val out = HtmlSanitizer.sanitize(xhtml("<p>a</p>", head = """<title>t</title><style><![CDATA[p{color:red}</style><img src=x onerror=alert(1)>]]></style>"""))
+        assertFalse(out.contains("<![CDATA[")); assertFalse(hasOnAttribute(out, html = true), out); assertTrue(out.contains("p{color:red}"))
+    }
+
+    @Test fun `noscript svg y math se quitan en modo HTML`() {
+        val out = HtmlSanitizer.sanitize(
+            """<html><body><noscript><p title="</noscript><img src=x onerror=alert(1)>"></p></noscript><math><mtext><table><mglyph><style><img src=x onerror=alert(2)></style></mglyph></table></mtext></math><svg><p>z</p></svg><p>ok</p></body></html>""",
+            HtmlSanitizer.Kind.HTML,
+        )
+        assertFalse(hasOnAttribute(out, html = true), out); assertFalse(out.contains("onerror")); assertTrue(out.contains("<p>ok</p>"))
+        assertFalse(out.contains("<noscript")); assertFalse(out.contains("<math")); assertFalse(out.contains("<svg"))
+    }
+
+    @Test fun `quita xml-stylesheet y otras instrucciones de proceso`() {
+        val out = HtmlSanitizer.sanitize(
+            """<?xml version="1.0" encoding="UTF-8"?><?xml-stylesheet type="text/xsl" href="x.xsl"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body><?php echo 1 ?><p>a</p></body></html>""",
+        )
+        assertFalse(out.contains("xml-stylesheet")); assertFalse(out.contains("x.xsl")); assertFalse(out.contains("php"))
+        assertTrue(out.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"), out)
+    }
+
+    @Test fun `quita DOCTYPE con entidades internas`() {
+        val out = HtmlSanitizer.sanitize(
+            """<?xml version="1.0"?><!DOCTYPE html [<!ENTITY x "<script>alert(1)</script>">]><html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body><p>&x;</p></body></html>""",
+        )
+        assertFalse(out.contains("<!ENTITY")); assertFalse(out.contains("<!DOCTYPE")); assertFalse(out.contains("<script", true))
+    }
+
+    @Test fun `quita animaciones SVG que cambian href`() {
+        val out = HtmlSanitizer.sanitize(
+            """<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a><set attributeName="href" to="javascript:alert(1)"/><animate attributeName="xlink:href" values="x;javascript:alert(2)"/><animateMotion attributeName=" HREF " values="x"/><animateTransform attributeName="transform" type="rotate" from="0" to="90"/><text>a</text></a></svg>""",
+            HtmlSanitizer.Kind.SVG,
+        )
+        assertFalse(out.contains("<set")); assertFalse(out.contains("<animate ")); assertFalse(out.contains("animateMotion"))
+        assertTrue(out.contains("animateTransform")); assertFalse(out.contains("javascript"))
+    }
+
+    @Test fun `lee ISO-8859-1 por la declaracion XML y sale en UTF-8`() {
+        val input = """<?xml version="1.0" encoding="ISO-8859-1"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body><p>Canción</p></body></html>""".toByteArray(Charsets.ISO_8859_1)
+        val out = HtmlSanitizer.sanitize(input, HtmlSanitizer.Kind.XHTML).toString(Charsets.UTF_8)
+        assertTrue(out.contains("<p>Canción</p>"), out); assertTrue(out.contains("encoding=\"UTF-8\"")); assertFalse(out.contains("ISO-8859-1", true))
+    }
+
+    @Test fun `lee ISO-8859-1 por meta charset en modo HTML y sale en UTF-8`() {
+        val input = """<html><head><meta charset="iso-8859-1"><title>t</title></head><body><p>Canción</p></body></html>""".toByteArray(Charsets.ISO_8859_1)
+        val out = HtmlSanitizer.sanitize(input, HtmlSanitizer.Kind.HTML).toString(Charsets.UTF_8)
+        assertTrue(out.contains("<p>Canción</p>"), out); assertTrue(out.contains("charset=\"UTF-8\"")); assertFalse(out.contains("iso-8859-1", true))
+    }
+
+    @Test fun `quita el BOM UTF-8`() {
+        val input = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + xhtml("<p>Canción</p>").toByteArray(Charsets.UTF_8)
+        val out = HtmlSanitizer.sanitize(input, HtmlSanitizer.Kind.XHTML).toString(Charsets.UTF_8)
+        assertTrue(out.startsWith("<?xml"), out); assertTrue(out.contains("Canción"))
+    }
+
+    @Test fun `idempotente en los tres modos`() {
+        val xml = xhtml("<p>Canción</p>", head = "<title>t</title><style><![CDATA[a{}]]></style>")
+        for (kind in HtmlSanitizer.Kind.values()) {
+            val once = HtmlSanitizer.sanitize(xml.toByteArray(), kind)
+            assertTrue(once.contentEquals(HtmlSanitizer.sanitize(once, kind)), kind.name)
+        }
     }
 }
