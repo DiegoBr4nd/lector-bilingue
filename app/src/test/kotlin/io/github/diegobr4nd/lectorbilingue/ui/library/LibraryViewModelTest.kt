@@ -41,6 +41,7 @@ class LibraryViewModelTest {
     private val dao = FakeBookDao()
     private val events = mutableListOf<LibraryEvent>()
     private val notice = MutableStateFlow<LanguageNotice?>(null)
+    private val closedIds = mutableListOf<String>()
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
@@ -52,7 +53,7 @@ class LibraryViewModelTest {
     private suspend fun TestScope.viewModel(
         opener: suspend (String) -> Boolean = { true },
         readMetadata: suspend (java.io.File) -> MetadataRead = { MetadataRead.Ok(BookMetadata("T", null, null)) },
-        close: (String) -> Unit = {},
+        close: (String) -> Unit = { closedIds += it },
     ): LibraryViewModel {
         val files = BookFiles(tmp.root)
         val importer = BookImporter(files, dao, readMetadata = readMetadata, saveCover = { _, _ -> })
@@ -118,6 +119,7 @@ class LibraryViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf<LibraryEvent>(LibraryEvent.Open(id)), events)
         assertNotNull(dao.get(id)!!.lastOpenedAt)
+        assertTrue(closedIds.isEmpty()) // Abierto con éxito: no se suelta.
         assertNull(vm.state.value.openingId)
     }
 

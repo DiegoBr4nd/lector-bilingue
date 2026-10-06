@@ -40,7 +40,7 @@ class LibraryViewModel(
     private val opener: suspend (String) -> Boolean,
     notice: Flow<LanguageNotice?>,
     /** Suelta un libro que el [opener] dejó abierto en memoria (p. ej. `OpenBooks.close`). */
-    private val close: (String) -> Unit = {},
+    private val close: (String) -> Unit,
 ) : ViewModel() {
     private val importing = MutableStateFlow(false)
     private val opening = MutableStateFlow<String?>(null)

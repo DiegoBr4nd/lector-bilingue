@@ -13,6 +13,7 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
 
 /**
@@ -25,6 +26,9 @@ import org.readium.r2.shared.util.AbsoluteUrl
 class ReaderActivity : FragmentActivity() {
     /** Enlace externo que el libro pidió abrir; la pantalla pregunta antes. Solo http, https y mailto. */
     private val externalLink = MutableStateFlow<String?>(null)
+
+    /** El libro que muestra ESTE Lector (id y objeto): al terminar suelta solo este, no uno reabierto después. */
+    private var shown: Pair<String, Publication>? = null
 
     @OptIn(ExperimentalReadiumApi::class)
     private val linkListener = object : EpubNavigatorFragment.Listener {
@@ -46,6 +50,7 @@ class ReaderActivity : FragmentActivity() {
             return
         }
         val id = decision.id
+        shown = id to publication
         // La posición guardada la leyó la Biblioteca (Room no se lee en el hilo principal).
         supportFragmentManager.fragmentFactory = EpubNavigatorFactory(publication).createFragmentFactory(
             initialLocator = app.openBooks.initialLocator(id),
@@ -69,8 +74,9 @@ class ReaderActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        // Al salir de verdad (no al girar la pantalla) se suelta el libro de la memoria.
-        if (isFinishing) intent.getStringExtra(EXTRA_BOOK_ID)?.let { (application as LectorApp).openBooks.close(it) }
+        // Al salir de verdad (no al girar la pantalla) se suelta el libro de la memoria. Solo si sigue siendo el mismo
+        // objeto: si la persona ya reabrió el libro, onDestroy puede llegar tarde y no debe cerrar el del Lector nuevo.
+        if (isFinishing) shown?.let { (id, pub) -> (application as LectorApp).openBooks.close(id, pub) }
         super.onDestroy()
     }
 

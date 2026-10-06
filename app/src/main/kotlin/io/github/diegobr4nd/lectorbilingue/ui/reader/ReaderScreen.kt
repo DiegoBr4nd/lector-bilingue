@@ -96,6 +96,8 @@ fun ReaderScreen(
     val toc = remember(publication) { ReaderRules.flattenToc(publication.tableOfContents.map { it.toSource() }) }
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
+    // Al pausar (antes de onStop): si la persona vuelve y reabre enseguida, la Biblioteca ya lee la última posición.
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.flush() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.flush() }
 
     // Posición (para la etiqueta y para guardar) y gesto (para las barras), solo mientras exista el navegador.
@@ -161,7 +163,7 @@ fun ReaderScreen(
             onConfirm = {
                 onExternalDone()
                 try {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                    context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE))
                 } catch (_: ActivityNotFoundException) {
                     // Sin navegador ni app de correo: no pasa nada.
                 }
