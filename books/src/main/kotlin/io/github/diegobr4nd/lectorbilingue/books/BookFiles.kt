@@ -33,6 +33,6 @@ class BookFiles(root: File) {
             return id
         }
 
-        fun isValidId(id: String): Boolean = runCatching { UUID.fromString(id).toString() == id.lowercase() }.getOrDefault(false)
+        fun isValidId(id: String): Boolean = runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false)
     }
 }

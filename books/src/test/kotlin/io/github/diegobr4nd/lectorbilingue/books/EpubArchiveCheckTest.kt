@@ -95,4 +95,9 @@ ${algorithms.joinToString("\n") { "<enc:EncryptedData><enc:EncryptionMethod Algo
             },
         ),
     )
+
+    @Test fun `encryption xml enorme es DRM`() {
+        val big = String(encryption("http://www.w3.org/2001/04/xmlenc#aes128-cbc")).replace("<enc:EncryptedData>", " ".repeat(1_150_000) + "<enc:EncryptedData>")
+        assertEquals(ImportError.DRM, EpubArchiveCheck.check(TestEpub.build(tmp.root) { entry("META-INF/encryption.xml", big.toByteArray()) }))
+    }
 }

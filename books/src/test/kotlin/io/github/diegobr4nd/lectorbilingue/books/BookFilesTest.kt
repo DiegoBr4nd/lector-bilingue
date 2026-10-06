@@ -22,6 +22,7 @@ class BookFilesTest {
     @Test fun `id que no es UUID se rechaza`() {
         val f = BookFiles(tmp.root)
         assertFailsWith<IllegalArgumentException> { f.epub("../../x") }
+        assertFailsWith<IllegalArgumentException> { f.epub("123E4567-E89B-12D3-A456-426614174000") }
     }
 
     @Test fun `cleanTmp borra restos`() {

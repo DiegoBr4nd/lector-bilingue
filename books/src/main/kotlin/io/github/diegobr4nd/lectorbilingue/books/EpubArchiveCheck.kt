@@ -46,16 +46,34 @@ object EpubArchiveCheck {
         }
 
         val mimetype = zip.getEntry("mimetype") ?: return ImportError.NOT_EPUB
-        val mimeText = zip.getInputStream(mimetype).use { it.readNBytes(64) }.toString(Charsets.US_ASCII).trim()
+        val mimeText = zip.getInputStream(mimetype).use { readUpTo(it, 64) }.toString(Charsets.US_ASCII).trim()
         if (mimeText != MIMETYPE) return ImportError.NOT_EPUB
         if (zip.getEntry("META-INF/container.xml") == null) return ImportError.NOT_EPUB
 
         if (zip.getEntry("META-INF/license.lcpl") != null || zip.getEntry("META-INF/rights.xml") != null) return ImportError.DRM
         zip.getEntry("META-INF/encryption.xml")?.let { enc ->
-            val text = zip.getInputStream(enc).use { it.readNBytes(ENCRYPTION_MAX_BYTES.toInt()) }.toString(Charsets.UTF_8)
+            // Si es enorme no se revisa un pedazo: se trata como DRM.
+            if (enc.size > ENCRYPTION_MAX_BYTES) return ImportError.DRM
+            val bytes = zip.getInputStream(enc).use { readUpTo(it, ENCRYPTION_MAX_BYTES.toInt() + 1) }
+            if (bytes.size > ENCRYPTION_MAX_BYTES) return ImportError.DRM
+            val text = bytes.toString(Charsets.UTF_8)
             if (ALGORITHM.findAll(text).any { it.groupValues[1].trim() !in FONT_OBFUSCATION }) return ImportError.DRM
         }
         return null
+    }
+
+    /** Lee hasta [max] bytes. Sustituye a readNBytes, que en Android solo existe desde la API 33. */
+    private fun readUpTo(input: java.io.InputStream, max: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8 * 1024)
+        var left = max
+        while (left > 0) {
+            val n = input.read(buf, 0, minOf(buf.size, left))
+            if (n < 0) break
+            out.write(buf, 0, n)
+            left -= n
+        }
+        return out.toByteArray()
     }
 
     internal fun isSafeName(name: String): Boolean {
