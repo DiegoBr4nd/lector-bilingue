@@ -46,7 +46,12 @@ class BookImporterTest {
 
     @Test fun `sin titulo ni nombre usa Libro sin titulo`() = runTest {
         importer(MetadataRead.Ok(BookMetadata(null, null, null))).import(source(TestEpub.build(tmp.root)), null)
-        assertEquals(BookImporter.UNTITLED, dao.get(id)!!.title)
+        assertEquals("", dao.get(id)!!.title)
+    }
+
+    @Test fun `la extension epub se quita sin importar mayusculas`() = runTest {
+        importer(MetadataRead.Ok(BookMetadata(null, null, null))).import(source(TestEpub.build(tmp.root)), "Mi Libro.Epub")
+        assertEquals("Mi Libro", dao.get(id)!!.title)
     }
 
     @Test fun `demasiado grande corta la copia`() = runTest {

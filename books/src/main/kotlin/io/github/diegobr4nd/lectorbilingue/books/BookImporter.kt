@@ -92,12 +92,15 @@ class BookImporter(
 
     private fun titleFor(meta: String?, fileName: String?): String =
         meta?.trim()?.takeIf { it.isNotEmpty() }
-            ?: fileName?.substringAfterLast('/')?.removeSuffix(".epub")?.removeSuffix(".EPUB")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: fileName?.substringAfterLast('/')?.let { if (it.endsWith(".epub", ignoreCase = true)) it.dropLast(5) else it }?.trim()?.takeIf { it.isNotEmpty() }
             ?: UNTITLED
 
     companion object {
-        /** La interfaz lo muestra con su propio texto traducible; en la base queda esta marca. */
-        const val UNTITLED = "\u0000untitled"
+        /**
+         * Título vacío = "sin título": la interfaz muestra su propio texto traducible ("Libro sin título")
+         * cuando el título está en blanco. No se usa un carácter NUL: SQLite podría truncarlo.
+         */
+        const val UNTITLED = ""
         private const val MIN_FREE_BYTES = 5L * 1024 * 1024
     }
 }
