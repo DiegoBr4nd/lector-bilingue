@@ -83,6 +83,17 @@
     <string name="library_notice_missing">Falta %1$s para %2$s · Descargar</string>
     <string name="library_notice_none">Aún no tienes idiomas · Descargar</string>
 
+    <!-- Lector -->
+    <string name="reader_back">Volver</string>
+    <string name="reader_toc">Índice</string>
+    <string name="reader_toc_empty">Este libro no trae índice</string>
+    <string name="reader_current_chapter">Capítulo actual</string>
+    <string name="reader_position">%1$s · %2$d %%</string>
+    <string name="reader_position_pct">%1$d %%</string>
+    <string name="reader_external_title">¿Abrir en el navegador?</string>
+    <string name="reader_external_body">Este enlace sale del libro: %1$s</string>
+    <string name="reader_external_open">Abrir</string>
+
     <!-- Idiomas -->
     <string name="languages_title">Idiomas</string>
     <string name="languages_back">Volver</string>

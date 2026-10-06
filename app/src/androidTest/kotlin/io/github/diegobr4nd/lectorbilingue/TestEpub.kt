@@ -16,7 +16,7 @@ class TestEpub private constructor() {
     private val replaced = mutableMapOf<String, ByteArray>()
 
     fun withoutMimetype() { mimetype = false }
-    /** Cambia el contenido de un archivo base (p. ej. "OEBPS/content.opf" u "OEBPS/c1.xhtml") sin duplicar la entrada. */
+    /** Cambia el contenido de un archivo base ("OEBPS/content.opf", "OEBPS/nav.xhtml" u "OEBPS/c1.xhtml") sin duplicar la entrada. */
     fun replace(name: String, bytes: ByteArray) { replaced[name] = bytes }
     fun withoutContainer() { container = false }
     fun entry(name: String, bytes: ByteArray, stored: Boolean = false) { extra += Triple(name, bytes, stored) }
@@ -47,7 +47,7 @@ class TestEpub private constructor() {
             zip.putDeflated("OEBPS/content.opf", replaced["OEBPS/content.opf"] ?: opf().toByteArray())
             zip.putDeflated(
                 "OEBPS/nav.xhtml",
-                """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Índice</title></head><body><nav epub:type="toc"><ol><li><a href="c1.xhtml">Capítulo uno</a></li></ol></nav></body></html>""".toByteArray(),
+                replaced["OEBPS/nav.xhtml"] ?: """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Índice</title></head><body><nav epub:type="toc"><ol><li><a href="c1.xhtml">Capítulo uno</a></li></ol></nav></body></html>""".toByteArray(),
             )
             zip.putDeflated(
                 "OEBPS/c1.xhtml",

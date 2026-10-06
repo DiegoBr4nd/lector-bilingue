@@ -40,6 +40,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Lector: solo lo abre la Biblioteca (no exportada). -->
+        <activity
+            android:name=".ui.reader.ReaderActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LectorBilingue" />
+
         <!-- EmojiCompat descarga fuentes de un proveedor que en muchos teléfonos es Google Play Services; no lo queremos (regla 4 de CLAUDE.md). -->
         <provider
             android:name="androidx.startup.InitializationProvider"
