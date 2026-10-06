@@ -19,7 +19,6 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
-import io.github.diegobr4nd.lectorbilingue.ui.home.HomeScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
 
@@ -31,7 +30,7 @@ fun AppNav(
     settings: AppSettings,
     hub: ModelHubApi,
     onClose: () -> Unit = {},
-    // "Ranura" (slot): un hueco que llena quien llama. La Tarea 8 la usa para la Biblioteca.
+    // "Ranura" (slot): un hueco que llena quien llama (MainActivity pone la Biblioteca; las pruebas, lo que necesiten).
     library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) -> Unit = { _, _ -> },
 ) {
     val backStack = rememberSaveable(
@@ -83,12 +82,7 @@ fun AppNav(
                     )
                 }
                 Route.Library -> NavEntry(key) {
-                    HomeScreen(
-                        hub = hub,
-                        settings = settings,
-                        onLanguages = { backStack.add(Route.Languages) },
-                        onDeveloper = if (developer.available) ({ backStack.add(Route.Developer) }) else null,
-                    )
+                    library({ backStack.add(Route.Languages) }, if (developer.available) ({ backStack.add(Route.Developer) }) else null)
                 }
                 Route.Languages -> NavEntry(key) {
                     LanguagesScreen(hub = hub, settings = settings, onBack = { pop() })

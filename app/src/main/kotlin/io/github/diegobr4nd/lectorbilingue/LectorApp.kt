@@ -39,8 +39,9 @@ class LectorApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Restos de una importación cortada: fuera del hilo principal.
-        Thread { bookFiles.cleanTmp() }.start()
+        // Restos de una importación cortada: fuera del hilo principal. Si falla, se reintenta en el próximo
+        // arranque; no se registra nada (ni rutas ni nombres).
+        Thread({ runCatching { bookFiles.cleanTmp() } }, "limpiar-tmp-libros").start()
     }
 
     /** Portada reducida a 480 px de alto como máximo: suficiente para la lista y liviana. */
