@@ -5,7 +5,8 @@ import io.github.diegobr4nd.lectorbilingue.books.BookFiles
 /** Texto de la barra inferior: título del capítulo (si tiene) y % leído (si Readium ya lo sabe). */
 data class PositionLabel(val chapter: String?, val percent: Int?)
 
-data class TocEntry(val title: String, val depth: Int, val href: String)
+/** Una línea del Índice. [title] null = el capítulo no tiene título (la pantalla pone "Sección sin título"). */
+data class TocEntry(val title: String?, val depth: Int, val href: String)
 data class TocEntrySource(val title: String?, val href: String, val children: List<TocEntrySource>)
 
 /** Reglas puras del Lector (sin Android): se prueban en la JVM. */
@@ -37,9 +38,12 @@ object ReaderRules {
         totalProgression?.takeIf { !it.isNaN() }?.let { (it.coerceIn(0.0, 1.0) * 100).toInt() },
     )
 
-    /** Índice en una lista con sangría. Un capítulo sin título muestra su archivo para no quedar en blanco. */
+    /**
+     * Índice en una lista con sangría. Un capítulo sin título queda con título null: la pantalla muestra un texto
+     * propio, nunca el nombre del archivo ("OEBPS/Text/chap03.xhtml" es un tecnicismo).
+     */
     fun flattenToc(links: List<TocEntrySource>, depth: Int = 0): List<TocEntry> = links.flatMap { l ->
-        listOf(TocEntry(l.title?.trim()?.takeIf { it.isNotEmpty() } ?: l.href, depth, l.href)) + flattenToc(l.children, depth + 1)
+        listOf(TocEntry(l.title?.trim()?.takeIf { it.isNotEmpty() }, depth, l.href)) + flattenToc(l.children, depth + 1)
     }
 
     /** Entrada del índice del capítulo que se está leyendo: la primera con el mismo archivo (sin `#fragmento`). */

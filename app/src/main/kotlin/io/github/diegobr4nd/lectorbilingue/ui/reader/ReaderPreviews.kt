@@ -44,7 +44,7 @@ private val sampleToc = listOf(
     TocEntry("La tormenta", 1, "c1.xhtml"),
     TocEntry("El faro que no se apagaba nunca, ni siquiera en las noches más largas del invierno", 1, "c2.xhtml"),
     TocEntry("Segunda parte: el regreso", 0, "p2.xhtml"),
-    TocEntry("c3.xhtml", 1, "c3.xhtml"),
+    TocEntry(null, 1, "c3.xhtml"),
 )
 
 /** Barras sobre una página simulada (la página de Readium usa su propio fondo blanco hasta la 3c). */

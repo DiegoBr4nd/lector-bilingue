@@ -70,6 +70,7 @@ fun TocContent(entries: List<TocEntry>, currentIndex: Int?, onSelect: (TocEntry)
         // Abre mostrando el capítulo actual (con uno de contexto arriba).
         val state = rememberLazyListState(initialFirstVisibleItemIndex = ((currentIndex ?: 0) - 1).coerceAtLeast(0))
         val currentLabel = stringResource(R.string.reader_current_chapter)
+        val untitled = stringResource(R.string.reader_toc_untitled)
         LazyColumn(state = state, contentPadding = PaddingValues(bottom = Spacing.xl)) {
             itemsIndexed(entries) { index, entry ->
                 val current = index == currentIndex
@@ -90,7 +91,7 @@ fun TocContent(entries: List<TocEntry>, currentIndex: Int?, onSelect: (TocEntry)
                     horizontalArrangement = Arrangement.spacedBy(Spacing.m),
                 ) {
                     Text(
-                        entry.title,
+                        entry.title ?: untitled,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = if (current) FontWeight.Bold else null,
                         color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,

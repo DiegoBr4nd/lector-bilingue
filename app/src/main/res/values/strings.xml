@@ -87,6 +87,8 @@
     <string name="reader_back">Volver</string>
     <string name="reader_toc">Índice</string>
     <string name="reader_toc_empty">Este libro no trae índice</string>
+    <!-- Entrada del Índice cuyo capítulo no trae título (en vez del nombre del archivo). -->
+    <string name="reader_toc_untitled">Sección sin título</string>
     <string name="reader_current_chapter">Capítulo actual</string>
     <string name="reader_position">%1$s · %2$d %%</string>
     <string name="reader_position_pct">%1$d %%</string>

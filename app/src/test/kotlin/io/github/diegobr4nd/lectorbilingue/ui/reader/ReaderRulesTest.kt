@@ -47,13 +47,14 @@ class ReaderRulesTest {
         assertEquals(PositionLabel(null, null), ReaderRules.label(null, Double.NaN))
     }
 
+    // Sin título: null (la pantalla muestra "Sección sin título"), nunca el nombre del archivo.
     @Test fun `indice aplanado con profundidad`() {
         val toc = listOf(
             TocEntrySource("Parte 1", "p1.xhtml", listOf(TocEntrySource("Cap 1", "c1.xhtml", emptyList()), TocEntrySource(null, "c2.xhtml", emptyList()))),
             TocEntrySource("  ", "p2.xhtml", emptyList()),
         )
         assertEquals(
-            listOf(TocEntry("Parte 1", 0, "p1.xhtml"), TocEntry("Cap 1", 1, "c1.xhtml"), TocEntry("c2.xhtml", 1, "c2.xhtml"), TocEntry("p2.xhtml", 0, "p2.xhtml")),
+            listOf(TocEntry("Parte 1", 0, "p1.xhtml"), TocEntry("Cap 1", 1, "c1.xhtml"), TocEntry(null, 1, "c2.xhtml"), TocEntry(null, 0, "p2.xhtml")),
             ReaderRules.flattenToc(toc),
         )
     }
