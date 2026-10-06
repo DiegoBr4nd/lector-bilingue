@@ -59,5 +59,10 @@
             tools:node="merge"
             tools:replace="android:foregroundServiceType"
             tools:ignore="MissingClass" />
+        <!-- Readium trae media3 y este: una actividad exportada para Bluetooth (reproductores de audio). Esta app no reproduce audio; se quita para no exponer un componente inútil (regla de superficie mínima). -->
+        <activity
+            android:name="androidx.media3.session.BluetoothValidationActivity"
+            tools:node="remove"
+            tools:ignore="MissingClass" />
     </application>
 </manifest>
