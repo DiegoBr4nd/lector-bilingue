@@ -193,10 +193,12 @@ fun LibraryScreen(
 
 /**
  * Abre el EPUB guardado y lo deja en [LectorApp.openBooks] con la posición guardada. false si no abrió.
- * La posición se relee siempre: si el libro ya estaba abierto, su posición inicial puede ser vieja.
+ * Siempre un objeto nuevo, nunca el que ya estaba en memoria: un Lector anterior que aún está terminando cierra
+ * "su" objeto al final, y si fuera el mismo cerraría el del Lector nuevo. `put` cierra el anterior.
+ * La posición también se relee siempre.
  */
 private suspend fun openBook(app: LectorApp, id: String): Boolean = try {
-    val pub = app.openBooks.get(id) ?: app.readium.open(app.books.epubFile(id)).getOrNull()
+    val pub = app.readium.open(app.books.epubFile(id)).getOrNull()
     if (pub == null) {
         false
     } else {

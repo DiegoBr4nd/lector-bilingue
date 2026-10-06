@@ -24,6 +24,24 @@ class OpenBooksTest {
         assertEquals(listOf("A"), closed)
     }
 
+    /**
+     * El caso de la Biblioteca: el Lector A muestra pubA y está terminando; la persona reabre el libro y la
+     * Biblioteca abre SIEMPRE un objeto nuevo (pubB). El onDestroy tardío de A no cierra pubB.
+     */
+    @Test fun `reabrir mientras el Lector anterior termina no le cierra el libro al nuevo`() {
+        val pubA = FakeBook("A")
+        store.put(id, pubA, null) // Lector A.
+        val readerA = id to pubA
+        val pubB = FakeBook("B")
+        store.put(id, pubB, null) // Reapertura: objeto nuevo.
+        store.close(readerA.first, readerA.second) // onDestroy de A.
+        assertSame(pubB, store.get(id))
+        assertEquals(listOf("A"), closed)
+        store.close(id, pubB) // Al final, el Lector B suelta el suyo.
+        assertNull(store.get(id))
+        assertEquals(listOf("A", "B"), closed)
+    }
+
     @Test fun `cerrar con el libro actual lo cierra y lo quita`() {
         val a = FakeBook("A")
         store.put(id, a, null)

@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -28,6 +30,7 @@ data class ReaderPosition(val json: String, val totalProgression: Double?, val c
 class ReaderViewModel(private val bookId: String, private val repo: BookRepository) : ViewModel() {
     private val position = MutableStateFlow<ReaderPosition?>(null)
     private var lastSaved: ReaderPosition? = null
+    private val saving = Mutex() // Un guardado a la vez y en orden (al pausar y al parar se guarda dos veces).
     @Volatile private var atEnd = false
     @Volatile private var touchExploration = false
 
@@ -68,8 +71,8 @@ class ReaderViewModel(private val bookId: String, private val repo: BookReposito
         viewModelScope.launch { withContext(NonCancellable) { save(p) } }
     }
 
-    private suspend fun save(p: ReaderPosition) {
-        if (p == lastSaved) return
+    private suspend fun save(p: ReaderPosition) = saving.withLock {
+        if (p == lastSaved) return@withLock
         repo.savePosition(bookId, p.json, (p.totalProgression?.takeIf { !it.isNaN() } ?: 0.0).toFloat())
         lastSaved = p
     }
