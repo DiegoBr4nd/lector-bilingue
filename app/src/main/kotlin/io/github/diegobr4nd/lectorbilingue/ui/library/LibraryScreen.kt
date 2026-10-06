@@ -128,7 +128,14 @@ fun LibraryScreen(
     LaunchedEffect(Unit) { app.settings.loadEnginePreference() } // Primera lectura fuera del hilo principal.
     val vm: LibraryViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { LibraryViewModel(app.books, opener = { id -> openBook(app, id) }, languageNotices(app.hub, app.settings)) }
+            initializer {
+                LibraryViewModel(
+                    app.books,
+                    opener = { id -> openBook(app, id) },
+                    languageNotices(app.hub, app.settings),
+                    close = app.openBooks::close,
+                )
+            }
         },
     )
     val state by vm.state.collectAsStateWithLifecycle()
@@ -291,7 +298,7 @@ fun LibraryContent(
                             book = book,
                             opening = state.openingId == book.id,
                             onOpen = { onOpen(book.id) },
-                            onDelete = { deletingId = book.id },
+                            onDelete = { deletingId = book.id }.takeIf { state.openingId != book.id },
                             modifier = Modifier.animatedItem(this, reduceMotion),
                         )
                     }
@@ -302,7 +309,8 @@ fun LibraryContent(
 
     deletingId?.let { id ->
         val book = state.books.firstOrNull { it.id == id }
-        if (book == null) {
+        // Un libro que se está abriendo no se borra (el Lector lo recibiría ya borrado).
+        if (book == null || state.openingId == id) {
             deletingId = null
         } else {
             ConfirmDialog(
@@ -487,7 +495,7 @@ private fun displayTitle(book: Book): String =
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookRow(book: Book, opening: Boolean, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
+private fun BookRow(book: Book, opening: Boolean, onOpen: () -> Unit, onDelete: (() -> Unit)?, modifier: Modifier = Modifier) {
     val title = displayTitle(book)
     val deleteLabel = stringResource(R.string.library_delete)
     val openingLabel = stringResource(R.string.library_opening)
@@ -496,9 +504,9 @@ private fun BookRow(book: Book, opening: Boolean, onOpen: () -> Unit, onDelete: 
         modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
-            .combinedClickable(onClick = onOpen, onLongClick = onDelete, onLongClickLabel = deleteLabel)
+            .combinedClickable(onClick = onOpen, onLongClick = onDelete, onLongClickLabel = deleteLabel.takeIf { onDelete != null })
             .semantics {
-                customActions = listOf(CustomAccessibilityAction(deleteLabel) { onDelete(); true })
+                if (onDelete != null) customActions = listOf(CustomAccessibilityAction(deleteLabel) { onDelete(); true })
                 if (opening) stateDescription = openingLabel
             }
             .padding(horizontal = Spacing.l, vertical = Spacing.s),

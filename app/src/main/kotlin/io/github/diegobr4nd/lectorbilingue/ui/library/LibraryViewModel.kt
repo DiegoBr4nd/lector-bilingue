@@ -39,6 +39,8 @@ class LibraryViewModel(
     private val repo: BookRepository,
     private val opener: suspend (String) -> Boolean,
     notice: Flow<LanguageNotice?>,
+    /** Suelta un libro que el [opener] dejó abierto en memoria (p. ej. `OpenBooks.close`). */
+    private val close: (String) -> Unit = {},
 ) : ViewModel() {
     private val importing = MutableStateFlow(false)
     private val opening = MutableStateFlow<String?>(null)
@@ -61,13 +63,20 @@ class LibraryViewModel(
         }
     }
 
-    /** Abre el libro (fuera de la pantalla) y avisa. Un segundo toque mientras abre se ignora. */
+    /**
+     * Abre el libro (fuera de la pantalla) y avisa. Un segundo toque mientras abre se ignora.
+     * Si lo borraron mientras se abría, se suelta y no se abre el Lector.
+     */
     fun open(id: String) {
         if (opening.value != null) return
         opening.value = id
         viewModelScope.launch {
             try {
                 if (opener(id)) {
+                    if (repo.get(id) == null) {
+                        close(id)
+                        return@launch
+                    }
                     repo.markOpened(id)
                     eventChannel.send(LibraryEvent.Open(id))
                 } else {

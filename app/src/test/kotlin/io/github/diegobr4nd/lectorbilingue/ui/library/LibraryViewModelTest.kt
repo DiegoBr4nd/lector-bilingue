@@ -52,11 +52,12 @@ class LibraryViewModelTest {
     private suspend fun TestScope.viewModel(
         opener: suspend (String) -> Boolean = { true },
         readMetadata: suspend (java.io.File) -> MetadataRead = { MetadataRead.Ok(BookMetadata("T", null, null)) },
+        close: (String) -> Unit = {},
     ): LibraryViewModel {
         val files = BookFiles(tmp.root)
         val importer = BookImporter(files, dao, readMetadata = readMetadata, saveCover = { _, _ -> })
         dao.insert(BookEntity(id, "T", null, null, 1, null, 0f, null))
-        return LibraryViewModel(BookRepository(dao, files, importer), opener, notice).also { vm ->
+        return LibraryViewModel(BookRepository(dao, files, importer), opener, notice, close).also { vm ->
             backgroundScope.launch(dispatcher) { vm.events.toList(events) }
             backgroundScope.launch(dispatcher) { vm.state.collect {} }
         }
@@ -117,6 +118,22 @@ class LibraryViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf<LibraryEvent>(LibraryEvent.Open(id)), events)
         assertNotNull(dao.get(id)!!.lastOpenedAt)
+        assertNull(vm.state.value.openingId)
+    }
+
+    @Test fun `si lo borraron mientras abria no se abre y se cierra`() = runTest(dispatcher) {
+        val closed = mutableListOf<String>()
+        val vm = viewModel(
+            opener = { bookId ->
+                dao.delete(bookId) // Borrado mientras Readium abría el archivo.
+                true
+            },
+            close = { closed += it },
+        )
+        vm.open(id)
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+        assertEquals(listOf(id), closed)
         assertNull(vm.state.value.openingId)
     }
 
