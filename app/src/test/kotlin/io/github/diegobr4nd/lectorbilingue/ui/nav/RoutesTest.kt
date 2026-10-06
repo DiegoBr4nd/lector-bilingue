@@ -6,11 +6,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class RoutesTest {
-    private val routes = listOf(Route.Welcome(1), Route.Welcome(2), Route.Welcome(3), Route.Home, Route.Languages)
+    private val routes = listOf(Route.Welcome(1), Route.Welcome(2), Route.Welcome(3), Route.Library, Route.Languages)
 
     @Test fun `cada ruta se guarda y se recupera igual`() {
         for (r in routes) assertEquals(r, decodeRoute(r.encode()))
     }
+
+    @Test fun `el Inicio guardado de la version anterior abre la Biblioteca`() = assertEquals(Route.Library, decodeRoute("home"))
 
     @Test fun `Desarrollador solo existe si la version lo trae`() {
         val expected = if (DeveloperEntries.current.available) Route.Developer else null
@@ -41,6 +43,6 @@ class RoutesTest {
         assertEquals(Route.Welcome(2), StartRules.next(Route.Welcome(1)))
         assertEquals(Route.Welcome(3), StartRules.next(Route.Welcome(2)))
         assertEquals(Route.Welcome(3), StartRules.next(Route.Welcome(3)))
-        assertEquals(Route.Home, StartRules.next(Route.Home))
+        assertEquals(Route.Library, StartRules.next(Route.Library))
     }
 }

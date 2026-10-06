@@ -27,7 +27,13 @@ import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
  * Navegación de toda la app (Navigation 3: la pila de pantallas es una lista que manejamos nosotros).
  */
 @Composable
-fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
+fun AppNav(
+    settings: AppSettings,
+    hub: ModelHubApi,
+    onClose: () -> Unit = {},
+    // "Ranura" (slot): un hueco que llena quien llama. La Tarea 8 la usa para la Biblioteca.
+    library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) -> Unit = { _, _ -> },
+) {
     val backStack = rememberSaveable(
         saver = listSaver<MutableList<Route>, String>(
             save = { list -> list.map { it.encode() } },
@@ -72,11 +78,11 @@ fun AppNav(settings: AppSettings, hub: ModelHubApi, onClose: () -> Unit = {}) {
                         onFinish = {
                             settings.welcomeDone = true
                             backStack.clear()
-                            backStack.add(Route.Home)
+                            backStack.add(Route.Library)
                         },
                     )
                 }
-                Route.Home -> NavEntry(key) {
+                Route.Library -> NavEntry(key) {
                     HomeScreen(
                         hub = hub,
                         settings = settings,

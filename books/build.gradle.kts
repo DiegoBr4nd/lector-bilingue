@@ -15,7 +15,8 @@ room { schemaDirectory("$projectDir/schemas") }
 dependencies {
     api(libs.readium.shared)
     api(libs.readium.streamer)
-    implementation(libs.androidx.room.runtime)
+    // api: LectorDatabase (público) hereda de RoomDatabase y :app lo necesita en su classpath para compilar.
+    api(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.jsoup)

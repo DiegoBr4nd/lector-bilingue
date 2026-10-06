@@ -1,4 +1,4 @@
-package io.github.diegobr4nd.lectorbilingue.ui.home
+package io.github.diegobr4nd.lectorbilingue.ui.library
 
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.EngineKind
 import io.github.diegobr4nd.lectorbilingue.data.EnginePreference

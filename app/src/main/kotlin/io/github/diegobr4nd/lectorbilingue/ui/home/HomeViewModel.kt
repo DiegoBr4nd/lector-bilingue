@@ -1,5 +1,7 @@
 package io.github.diegobr4nd.lectorbilingue.ui.home
 
+import io.github.diegobr4nd.lectorbilingue.ui.library.HomeState
+import io.github.diegobr4nd.lectorbilingue.ui.library.HomeRules
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
