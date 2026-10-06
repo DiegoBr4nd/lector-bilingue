@@ -81,6 +81,16 @@ object HtmlSanitizer {
     /** Animaciones SVG que podrían convertir un enlace en `javascript:` aunque el valor inicial sea inocente. */
     private val ANIMATIONS = setOf("set", "animate", "animatemotion", "animatetransform")
 
+    /**
+     * Únicos valores de `rel` que puede llevar un `<link>`. Los demás se quitan (fallar cerrado): las pistas de red
+     * (`preconnect`, `dns-prefetch`, `prefetch`, `prerender`, `preload`, `modulepreload`…) no siempre pasan por
+     * Readium ni por la CSP, y avisarían a un servidor de que el libro se abrió.
+     */
+    private val LINK_REL_ALLOWED = setOf("stylesheet", "alternate")
+
+    /** Atributos que piden a la red o crean documentos, sea cual sea el elemento: `<a ping>`, `srcdoc`, `attributionsrc`. */
+    private val REMOVE_ATTRIBUTES = setOf("ping", "srcdoc", "attributionsrc")
+
     fun sanitize(markup: String, kind: Kind = Kind.XHTML): String =
         clean(Jsoup.parse(markup, "", parserFor(kind)), kind)
 
@@ -140,12 +150,21 @@ object HtmlSanitizer {
             (kind == Kind.HTML && name in REMOVE_IN_HTML) ||
             // Todos los <meta http-equiv> (refresh, CSP del libro, content-type…) y <meta charset>: se pone lo nuestro.
             (name == "meta" && el.attributes().asList().any { localName(it.key) == "http-equiv" || localName(it.key) == "charset" }) ||
-            (name in ANIMATIONS && el.attributes().asList().any { localName(it.key) == "attributename" && localName(it.value) == "href" })
+            (name in ANIMATIONS && el.attributes().asList().any { localName(it.key) == "attributename" && localName(it.value) == "href" }) ||
+            (name == "link" && hasForbiddenRel(el))
     }
+
+    /** true si algún token de `rel` (separados por espacios, sin distinguir mayúsculas, con o sin prefijo) no está permitido. */
+    private fun hasForbiddenRel(link: Element): Boolean =
+        link.attributes().asList()
+            .filter { localName(it.key) == "rel" }
+            .flatMap { it.value.lowercase().split(' ', '\t', '\n', '\r', '\u000C') }
+            .any { it.isNotEmpty() && it !in LINK_REL_ALLOWED }
 
     private fun cleanAttributes(el: Element) {
         val toRemove = el.attributes().asList().filter { attr ->
-            localName(attr.key).startsWith("on") || attr.key.lowercase() == "xml:base" || isDangerousUrl(attr.value)
+            localName(attr.key).startsWith("on") || localName(attr.key) in REMOVE_ATTRIBUTES ||
+                attr.key.lowercase() == "xml:base" || isDangerousUrl(attr.value)
         }
         for (attr in toRemove) el.removeAttr(attr.key)
     }

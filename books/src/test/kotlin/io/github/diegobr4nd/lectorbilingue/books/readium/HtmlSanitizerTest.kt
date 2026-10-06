@@ -191,4 +191,34 @@ class HtmlSanitizerTest {
             assertTrue(once.contentEquals(HtmlSanitizer.sanitize(once, kind)), kind.name)
         }
     }
+    @Test fun `quita link con pistas de red en cualquier mayuscula y prefijo`() {
+        val head = """<title>t</title>
+            <link rel="preconnect" href="https://espia.example"/>
+            <link rel="DNS-Prefetch" href="https://espia.example"/>
+            <link rel="prefetch" href="https://espia.example/a"/>
+            <link rel="prerender" href="https://espia.example/b"/>
+            <link rel="preload" href="https://espia.example/c" as="image"/>
+            <link rel="modulepreload" href="https://espia.example/d.js"/>
+            <link rel="stylesheet  preconnect" href="https://espia.example/e.css"/>
+            <link rel="stylesheet" href="estilo.css"/>"""
+        for (kind in listOf(HtmlSanitizer.Kind.XHTML, HtmlSanitizer.Kind.HTML)) {
+            val out = HtmlSanitizer.sanitize(xhtml("<p>a</p>", head), kind)
+            assertFalse(out.contains("espia.example"), "$kind: $out")
+            assertTrue(out.contains("estilo.css"), "$kind: $out")
+        }
+        // Con prefijo solo tiene sentido en XML (en modo HTML el prefijo no existe).
+        val prefixed = HtmlSanitizer.sanitize(
+            xhtml("<p>a</p>", """<title>t</title><h:link xmlns:h="http://www.w3.org/1999/xhtml" h:rel="prefetch" href="https://espia.example/f"/>"""),
+        )
+        assertFalse(prefixed.contains("espia.example"), prefixed)
+    }
+
+    @Test fun `quita ping srcdoc y attributionsrc`() {
+        val out = HtmlSanitizer.sanitize(
+            xhtml("""<a href="c2.xhtml" ping="https://espia.example/p" PING="https://espia.example/q">a</a>""" +
+                """<img src="i.png" attributionsrc="https://espia.example/r"/><p h:srcdoc="x" xmlns:h="http://www.w3.org/1999/xhtml">b</p>"""),
+        )
+        assertFalse(out.contains("ping", true)); assertFalse(out.contains("espia.example")); assertFalse(out.contains("srcdoc", true))
+        assertTrue(out.contains("href=\"c2.xhtml\"")); assertTrue(out.contains("src=\"i.png\""))
+    }
 }
