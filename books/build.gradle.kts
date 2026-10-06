@@ -13,7 +13,6 @@ android {
 room { schemaDirectory("$projectDir/schemas") }
 
 dependencies {
-
     api(libs.readium.shared)
     api(libs.readium.streamer)
     implementation(libs.androidx.room.runtime)
