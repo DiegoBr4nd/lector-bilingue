@@ -101,7 +101,12 @@ class ReadiumBooks(context: Context) {
             val mediaType = manifest.linkWithHref(url)?.mediaType?.toString() ?: mediaTypeFromExtension(url)
             when (val kind = ResourceSanitizing.kindFor(mediaType)) {
                 null -> resource
-                else -> TransformingResource(resource) { bytes -> ResourceSanitizing.sanitizeSafely(bytes, kind) }
+                // Un charset que no es UTF-8 en el Content-Type cambiaría cómo el WebView lee nuestra salida: no se sirve.
+                else -> if (ResourceSanitizing.hasForeignCharset(mediaType)) {
+                    TransformingResource(resource) { ResourceSanitizing.refused() }
+                } else {
+                    TransformingResource(resource) { bytes -> ResourceSanitizing.sanitizeSafely(bytes, kind) }
+                }
             }
         }
 

@@ -47,6 +47,27 @@ internal object ResourceSanitizing {
     }
 
     /**
+     * true si el tipo servido trae un parámetro `charset` que no es UTF-8 (o viene vacío).
+     *
+     * Readium (`WebViewServer.serveResource`) usa el tipo COMPLETO del manifiesto como Content-Type, y su
+     * `charset` manda sobre nuestra declaración XML o `<meta charset>`. Un libro podría hacer que el WebView
+     * lea nuestros bytes UTF-8 saneados como, p. ej., ISO-2022-JP y "fabrique" etiquetas que no estaban.
+     * Por eso esos recursos no se sirven (fallar cerrado).
+     */
+    fun hasForeignCharset(mediaType: String?): Boolean {
+        val params = mediaType?.split(';')?.drop(1) ?: return false
+        return params.any { param ->
+            val key = param.substringBefore('=', missingDelimiterValue = "").trim().lowercase()
+            if (key != "charset") return@any false
+            val value = param.substringAfter('=').trim().trim('"', '\'').trim().lowercase()
+            value != "utf-8" && value != "utf8"
+        }
+    }
+
+    /** Error de lectura para un recurso que no se puede servir con seguridad. Sin texto del libro. */
+    fun refused(): Try<ByteArray, ReadError> = Try.failure(ReadError.Decoding("recurso con un charset no admitido"))
+
+    /**
      * Sanea sin dejar escapar nunca los bytes originales: si el sanitizador falla (excepción, pila agotada,
      * sin memoria), la lectura del recurso devuelve un error y Readium muestra su página de error.
      * El mensaje del error no lleva texto del libro (CLAUDE.md, regla 5).

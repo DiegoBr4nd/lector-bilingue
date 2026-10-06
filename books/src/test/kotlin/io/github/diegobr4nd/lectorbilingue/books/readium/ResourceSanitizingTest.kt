@@ -45,6 +45,22 @@ class ResourceSanitizingTest {
         assertTrue(ok.isSuccess); assertFalse(ok.getOrNull()!!.toString(Charsets.UTF_8).contains("<script"))
     }
 
+    // Ronda 2: el charset del tipo del manifiesto llega como Content-Type y manda sobre nuestra salida UTF-8.
+    @Test fun `charset del tipo servido distinto de UTF-8 se rechaza`() {
+        for (mt in listOf(
+            "application/xhtml+xml; charset=iso-2022-jp", "text/html;charset=\"ISO-8859-1\"", "text/html; CHARSET = Shift_JIS",
+            "application/xhtml+xml; charset=", "text/html; foo=bar; charset='utf-16'",
+        )) {
+            assertTrue(ResourceSanitizing.hasForeignCharset(mt), mt)
+        }
+        for (mt in listOf(
+            null, "", "application/xhtml+xml", "text/html; charset=utf-8", "text/html;charset=\"UTF-8\"", "text/html; charset= UTF8 ",
+            "application/xhtml+xml; profile=x",
+        )) {
+            assertFalse(ResourceSanitizing.hasForeignCharset(mt), mt.toString())
+        }
+    }
+
     @Test fun `tamano de muestreo de la portada`() {
         assertEquals(1, ResourceSanitizing.coverSampleSize(800, 1200, 2000))
         assertEquals(1, ResourceSanitizing.coverSampleSize(2000, 2000, 2000))

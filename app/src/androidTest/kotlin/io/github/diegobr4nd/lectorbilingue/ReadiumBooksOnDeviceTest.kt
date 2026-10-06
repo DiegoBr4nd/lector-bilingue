@@ -103,6 +103,29 @@ class ReadiumBooksOnDeviceTest {
         } finally { pub.close() }
     }
 
+    // Ronda 2: el charset del tipo del manifiesto llega al WebView como Content-Type; si no es UTF-8, no se sirve.
+    @Test fun charsetAjenoEnElManifiestoNoSeSirve() = runBlocking {
+        val f = TestEpub.build(dir, "charset.epub") {
+            replace(
+                "OEBPS/content.opf",
+                opfCon(
+                    items = """<item id="c1" href="c1.xhtml" media-type="application/xhtml+xml; charset=iso-2022-jp"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml; charset=&quot;UTF-8&quot;"/>""",
+                    spine = """<itemref idref="c1"/><itemref idref="c2"/>""",
+                ),
+            )
+            replace("OEBPS/c1.xhtml", conScript); entry("OEBPS/c2.xhtml", conScript)
+        }
+        val pub: Publication = books.open(f).getOrNull()!!
+        try {
+            // Condición previa: Readium conserva el parámetro, así que acabaría en el Content-Type.
+            val tipo = pub.linkWithHref(Url("OEBPS/c1.xhtml")!!)!!.mediaType.toString()
+            assertTrue(tipo.contains("iso-2022-jp", ignoreCase = true), tipo)
+            assertTrue(pub.get(Url("OEBPS/c1.xhtml")!!)!!.read().isFailure)
+            val c2 = pub.get(Url("OEBPS/c2.xhtml")!!)!!.read().getOrNull()!!.toString(Charsets.UTF_8)
+            assertFalse(c2.contains("<script", true)); assertEquals(1, Regex("Content-Security-Policy").findAll(c2).count())
+        } finally { pub.close() }
+    }
+
     private fun png(width: Int, height: Int): ByteArray {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         return ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
