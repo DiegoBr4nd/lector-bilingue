@@ -125,4 +125,43 @@ class ResourceSanitizingTest {
     @Test fun `el tope real es de 8 MB`() {
         assertEquals(8L * 1024 * 1024, ResourceSanitizing.MAX_MARKUP_BYTES)
     }
+
+    // ---------- Billion laughs en el OPF y el NCX (seguridad, bajo) ----------
+    // Un capítulo puede enlazar al OPF o al NCX y Readium los sirve al WebView: pasan por el mismo saneado.
+    // (Readium también los lee al importar con el analizador XML de Android; eso solo se puede probar en el
+    // teléfono: MaliciousEpubOnDeviceTest, x5 y x6.)
+
+    /** Entidades encadenadas: lol9 = 10^9 veces "lol" (unos 3 GB si alguien las expandiera). */
+    private val lol = (1..9).joinToString("") { i -> """<!ENTITY lol$i "${"&lol${i - 1};".repeat(10)}">""" }
+
+    private val opfLaughs = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE package [ <!ENTITY lol0 "lol"> $lol ]>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">urn:uuid:1</dc:identifier>
+<dc:title>&lol9;</dc:title><dc:language>es</dc:language></metadata>
+<manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine>
+</package>"""
+
+    private val ncxLaughs = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx [ <!ENTITY lol0 "lol"> $lol ]>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>&lol9;</text></docTitle>
+<navMap><navPoint id="n1" playOrder="1"><navLabel><text>&lol9;</text></navLabel><content src="c1.xhtml"/></navPoint></navMap>
+</ncx>"""
+
+    private fun assertLaughsDefused(xml: String, mediaType: String) = runTest {
+        val kind = ResourceSanitizing.kindFor(mediaType)!!
+        val start = System.nanoTime()
+        val out = ResourceSanitizing.sanitizing(SpyResource(xml.toByteArray()), kind).read()
+        val ms = (System.nanoTime() - start) / 1_000_000
+        assertTrue(ms < 10_000, "$mediaType tardó $ms ms")
+        // Vale un error limpio o una página sin el contenido expandido.
+        val html = out.getOrNull()?.toString(Charsets.UTF_8) ?: return@runTest
+        assertFalse(html.contains("<!DOCTYPE", ignoreCase = true), mediaType); assertFalse(html.contains("<!ENTITY"), mediaType)
+        assertFalse(Regex("(lol){342,}").containsMatchIn(html), "$mediaType: tramo de lol de más de 1 KB")
+        assertTrue(html.length < 10_000, "$mediaType: ${html.length} caracteres")
+    }
+
+    @Test fun `billion laughs en el OPF servido no se expande`() = assertLaughsDefused(opfLaughs, "application/oebps-package+xml")
+
+    @Test fun `billion laughs en el NCX servido no se expande`() = assertLaughsDefused(ncxLaughs, "application/x-dtbncx+xml")
 }

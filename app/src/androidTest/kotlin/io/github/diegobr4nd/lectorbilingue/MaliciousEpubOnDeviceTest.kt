@@ -23,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.Url
@@ -235,6 +236,59 @@ class MaliciousEpubOnDeviceTest {
         assertFalse(html.contains("<!DOCTYPE", ignoreCase = true)); assertFalse(html.contains("SECRETO_XXE"))
         assertFalse(Regex("(lol){342,}").containsMatchIn(html), "tramo de lol de más de 1 KB")
         reader(id) { s -> assertTrue(js(s, "document.body.innerText.length")!!.toInt() < 1000) }
+    }
+
+    // Seguridad (bajo, ronda 3): billion laughs en el OPF y en el NCX, que Readium lee al importar y al abrir con el
+    // analizador XML de Android. Vale un error limpio o importar sin el contenido expandido, en menos de 10 s.
+    // El mismo OPF y NCX, servidos al WebView, se prueban en la JVM (ResourceSanitizingTest).
+
+    @Test fun x5BillionLaughsEnElOpfTerminaRapido() = runBlocking<Unit> {
+        val opfLaughs = opf(listOf(Triple("c1", "c1.xhtml", "application/xhtml+xml")), title = "&lol9;").replace(
+            """<?xml version="1.0" encoding="UTF-8"?>""",
+            """<?xml version="1.0" encoding="UTF-8"?>""" + "\n" + """<!DOCTYPE package [ <!ENTITY lol0 "lol"> $LOL ]>""",
+        )
+        val f = write("03f.epub", listOf("OEBPS/content.opf" to opfLaughs.toByteArray(), "OEBPS/nav.xhtml" to NAV.toByteArray(), "OEBPS/c1.xhtml" to xhtml("<p>x</p>").toByteArray()))
+        val start = System.currentTimeMillis()
+        val r = importChecked(f)
+        assertTrue(System.currentTimeMillis() - start < 10_000, "tardó demasiado")
+        when (r) {
+            is ImportResult.Error -> assertTrue(r.reason == ImportError.DAMAGED || r.reason == ImportError.NOT_EPUB, "$r")
+            is ImportResult.Ok -> {
+                created += r.bookId
+                val book = app.books.get(r.bookId)!!
+                assertTrue(book.title.length < 1000, "título de ${book.title.length} caracteres")
+                assertFalse(Regex("(lol){342,}").containsMatchIn(book.title), "título con lol expandido")
+            }
+        }
+    }
+
+    @Test fun x6BillionLaughsEnElNcxTerminaRapido() = runBlocking<Unit> {
+        val ncx = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ncx [ <!ENTITY lol0 "lol"> $LOL ]>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>&lol9;</text></docTitle>
+<navMap><navPoint id="n1" playOrder="1"><navLabel><text>&lol9;</text></navLabel><content src="c1.xhtml"/></navPoint></navMap>
+</ncx>"""
+        val files = basic("<p>x</p>", itemsExtra = listOf(Triple("ncx", "toc.ncx", "application/x-dtbncx+xml")), filesExtra = listOf("OEBPS/toc.ncx" to ncx))
+            .map { (n, d) -> if (n == "OEBPS/content.opf") n to d.toString(Charsets.UTF_8).replace("<spine>", """<spine toc="ncx">""").toByteArray() else n to d }
+        val start = System.currentTimeMillis()
+        val r = importChecked(write("03g.epub", files))
+        assertTrue(System.currentTimeMillis() - start < 10_000, "tardó demasiado al importar")
+        if (r is ImportResult.Error) {
+            assertTrue(r.reason == ImportError.DAMAGED || r.reason == ImportError.NOT_EPUB, "$r")
+            return@runBlocking
+        }
+        r as ImportResult.Ok
+        created += r.bookId
+        val openStart = System.currentTimeMillis()
+        val pub = open(r.bookId)
+        assertTrue(System.currentTimeMillis() - openStart < 10_000, "tardó demasiado al abrir")
+        // Readium lee el NCX como índice de respaldo: ningún título del índice trae el lol expandido.
+        fun titles(links: List<Link>): List<String> = links.flatMap { listOfNotNull(it.title) + titles(it.children) }
+        for (t in titles(pub.tableOfContents)) {
+            assertTrue(t.length < 1000, "título del índice de ${t.length} caracteres")
+            assertFalse(Regex("(lol){342,}").containsMatchIn(t), "índice con lol expandido")
+        }
+        assertFalse(Regex("(lol){342,}").containsMatchIn(served(pub, "OEBPS/toc.ncx").orEmpty()), "NCX servido con lol expandido")
     }
 
     @Test fun x4CharsetAjenoNoSeSirve() = runBlocking<Unit> {
