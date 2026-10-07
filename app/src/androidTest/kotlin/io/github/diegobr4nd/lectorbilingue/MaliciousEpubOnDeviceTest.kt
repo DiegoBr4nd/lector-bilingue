@@ -163,6 +163,25 @@ class MaliciousEpubOnDeviceTest {
         assertImportFails(f, ImportError.UNSAFE_ARCHIVE, maxMillis = 10_000)
     }
 
+    // Seguridad (bajo, ronda 3): el peor caso para jsoup justo debajo del tope de 8 MB (una etiqueta cada 8 bytes)
+    // se sanea en el teléfono sin quedarse sin memoria; por encima del tope se sirve el aviso.
+    @Test fun i9CapituloDeEtiquetasDiminutasNoAgotaLaMemoria() = runBlocking<Unit> {
+        val MAX_MARKUP = 8 * 1024 * 1024 // ResourceSanitizing.MAX_MARKUP_BYTES (interno de :books)
+        val OVERSIZE = "Este capítulo es demasiado grande para mostrarlo."
+        fun tiny(name: String, bytes: Int): File {
+            val (head, tail) = xhtml("@@").split("@@")
+            val body = "<p>a</p>".repeat((bytes - head.length - tail.length) / 8)
+            return write(name, basic(null, c1Raw = head + body + tail))
+        }
+        val under = importOk(tiny("14a.epub", MAX_MARKUP - 1024))
+        val start = System.nanoTime()
+        val html = served(open(under), "OEBPS/c1.xhtml")!!
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 30_000, "sanear tardó más de 30 s")
+        assertTrue(html.length > 1_000_000 && !html.contains(OVERSIZE))
+        val over = importOk(tiny("14b.epub", MAX_MARKUP + 1024 * 1024))
+        assertTrue(served(open(over), "OEBPS/c1.xhtml")!!.contains(OVERSIZE))
+    }
+
     // ---------- XML: XXE y entidades (X) ----------
 
     @Test fun x1XxeNoLeeArchivosDelTelefono() = runBlocking<Unit> {
