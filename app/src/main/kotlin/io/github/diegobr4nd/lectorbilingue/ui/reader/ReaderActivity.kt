@@ -75,10 +75,13 @@ class ReaderActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        val finishing = isFinishing
+        // Primero se destruyen el fragmento de Readium y su WebView: así ninguna petición tardía de la página lee del
+        // ZIP ya cerrado.
+        super.onDestroy()
         // Al salir de verdad (no al girar la pantalla) se suelta el libro de la memoria. Solo si sigue siendo el mismo
         // objeto: si la persona ya reabrió el libro, onDestroy puede llegar tarde y no debe cerrar el del Lector nuevo.
-        if (isFinishing) shown?.let { (id, pub) -> (application as LectorApp).openBooks.close(id, pub) }
-        super.onDestroy()
+        if (finishing) shown?.let { (id, pub) -> (application as LectorApp).openBooks.close(id, pub) }
     }
 
     companion object {
