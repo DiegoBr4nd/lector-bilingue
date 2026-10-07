@@ -2,12 +2,23 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -15,7 +26,9 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,6 +45,7 @@ import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -96,7 +110,6 @@ class LibraryOnDeviceTest {
         show(sample, onOpen = { opened = it })
         rule.onNodeWithText("42 % leído", substring = true).assertExists()
         rule.onNodeWithText("Libro sin título").assertExists() // Título vacío: texto propio.
-        rule.onNodeWithContentDescription("Portada de Libro de muestra").assertExists()
         rule.onNodeWithText("Libro de muestra").performClick()
         rule.runOnIdle { assertEquals(id, opened) }
     }
@@ -108,6 +121,63 @@ class LibraryOnDeviceTest {
         rule.onNodeWithText("Aún no tienes idiomas · Descargar").assertHeightIsAtLeast(48.dp).performClick()
         rule.onNodeWithContentDescription("Más opciones").assertHeightIsAtLeast(48.dp)
         rule.runOnIdle { assertEquals(1, languages) }
+    }
+
+    @Test
+    fun laFilaSeLeeUnaSolaVezSinLaInicialYDiceQueAbre() {
+        show(sample)
+        // Lo que TalkBack lee de la fila: título, autora y %; sin "Portada de…" (repetía el título) ni la inicial suelta.
+        val row = rule.onNodeWithText("Libro de muestra").fetchSemanticsNode().config
+        assertEquals(listOf("Libro de muestra", "Autora Inventada", "42 % leído"), row[SemanticsProperties.Text].map { it.text })
+        assertFalse(row.contains(SemanticsProperties.ContentDescription), "la fila no debe llevar descripción extra")
+        assertEquals("abrir el libro", row[SemanticsActions.OnClick].label)
+        val untitled = rule.onNodeWithText("Libro sin título").fetchSemanticsNode().config
+        assertEquals(listOf("Libro sin título", "0 % leído"), untitled[SemanticsProperties.Text].map { it.text })
+    }
+
+    @Test
+    fun elAvisoDiceQueAbreIdiomas() {
+        show(sample.copy(notice = LanguageNotice.NoLanguages))
+        val notice = rule.onNodeWithText("Aún no tienes idiomas · Descargar").fetchSemanticsNode().config
+        assertEquals("abrir Idiomas", notice[SemanticsActions.OnClick].label)
+    }
+
+    @Test
+    fun laBarraSuperiorEsDelColorDelFondo() {
+        var background = ComposeColor.Unspecified
+        rule.setContent {
+            LectorTheme {
+                background = MaterialTheme.colorScheme.background
+                LibraryContent(
+                    state = sample, onAdd = {}, onOpen = {}, onDelete = {},
+                    onLanguages = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                )
+            }
+        }
+        // Un punto de la barra entre el título y el menú, a la altura del título.
+        val title = rule.onNodeWithText("Biblioteca").fetchSemanticsNode().boundsInRoot
+        val image = rule.onRoot().captureToImage().asAndroidBitmap()
+        val bar = image.getPixel((image.width * 0.6f).toInt(), title.center.y.toInt())
+        assertEquals(background.toArgb(), bar, "la barra se ve como una franja de otro tono")
+    }
+
+    @Test
+    fun vaciaConLetraGrandeAnadirSeVeSinDesplazar() {
+        // Teléfono pequeño (360 × 640 dp) con la letra al 200 % y el aviso de idiomas arriba.
+        rule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                LectorTheme {
+                    Box(Modifier.size(360.dp, 640.dp)) {
+                        LibraryContent(
+                            state = LibraryUiState(loaded = true, notice = LanguageNotice.NoLanguages), onAdd = {}, onOpen = {},
+                            onDelete = {}, onLanguages = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithText("Añadir libro").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
     }
 
     @Test

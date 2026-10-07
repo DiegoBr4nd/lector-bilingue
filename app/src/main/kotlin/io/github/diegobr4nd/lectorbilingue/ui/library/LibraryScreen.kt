@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,7 +75,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -252,6 +252,8 @@ fun LibraryContent(
                     )
                 },
                 actions = { OverflowMenu(onLanguages, onDeveloper) },
+                // En reposo, del color del fondo: sin franja de otro tono. Al desplazar la lista sí cambia (se nota el borde).
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 scrollBehavior = scroll,
             )
         },
@@ -394,8 +396,9 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
         is LanguageNotice.Failed -> LectorIcons.Error
         LanguageNotice.NoLanguages -> LectorIcons.Translate
     }
+    val openLabel = stringResource(R.string.library_notice_action)
+    // Card sin onClick: el clic va en el modificador para poder decirle a TalkBack qué hace ("abrir Idiomas").
     Card(
-        onClick = onLanguages,
         colors = if (failed) {
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -411,7 +414,9 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.l, vertical = Spacing.s)
-            .heightIn(min = 48.dp),
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClickLabel = openLabel, onClick = onLanguages),
     ) {
         Row(
             Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m),
@@ -424,38 +429,56 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
     }
 }
 
-/** Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande. */
+/**
+ * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande.
+ * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, antes de la explicación:
+ * así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba.
+ */
 @Composable
 private fun EmptyLibrary(onAdd: () -> Unit) {
+    val largeText = LocalDensity.current.fontScale >= LargeFontScale
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = Spacing.xl, vertical = Spacing.xxl),
+        Modifier.fillMaxWidth().padding(horizontal = Spacing.xl, vertical = if (largeText) Spacing.l else Spacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.l),
     ) {
-        Icon(
-            painterResource(LectorIcons.LibraryBooks),
-            contentDescription = null, // Decorativo: el título dice lo mismo.
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
+        if (!largeText) {
+            Icon(
+                painterResource(LectorIcons.LibraryBooks),
+                contentDescription = null, // Decorativo: el título dice lo mismo.
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
         Text(
             stringResource(R.string.library_empty_title),
             style = MaterialTheme.typography.headlineSmall.copy(fontFamily = ReadingFontFamily),
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
+        if (largeText) AddBookButton(onAdd)
         Text(
             stringResource(R.string.library_empty_body),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(Spacing.s))
-        Button(onClick = onAdd, shape = ButtonShape, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Icon(painterResource(LectorIcons.Add), contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.size(Spacing.s))
-            Text(stringResource(R.string.library_add))
+        if (!largeText) {
+            Spacer(Modifier.height(Spacing.s))
+            AddBookButton(onAdd)
         }
+    }
+}
+
+/** Desde esta escala de letra la Biblioteca vacía se compacta (ver [EmptyLibrary]). */
+private const val LargeFontScale = 1.5f
+
+@Composable
+private fun AddBookButton(onAdd: () -> Unit) {
+    Button(onClick = onAdd, shape = ButtonShape, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Icon(painterResource(LectorIcons.Add), contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.size(Spacing.s))
+        Text(stringResource(R.string.library_add))
     }
 }
 
@@ -501,12 +524,18 @@ private fun BookRow(book: Book, opening: Boolean, onOpen: () -> Unit, onDelete: 
     val title = displayTitle(book)
     val deleteLabel = stringResource(R.string.library_delete)
     val openingLabel = stringResource(R.string.library_opening)
+    val openLabel = stringResource(R.string.library_open_action)
     val percent = LibraryRules.percent(book.progress)
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = 88.dp)
-            .combinedClickable(onClick = onOpen, onLongClick = onDelete, onLongClickLabel = deleteLabel.takeIf { onDelete != null })
+            .combinedClickable(
+                onClick = onOpen,
+                onClickLabel = openLabel,
+                onLongClick = onDelete,
+                onLongClickLabel = deleteLabel.takeIf { onDelete != null },
+            )
             .semantics {
                 if (onDelete != null) customActions = listOf(CustomAccessibilityAction(deleteLabel) { onDelete(); true })
                 if (opening) stateDescription = openingLabel
@@ -544,10 +573,12 @@ private fun BookRow(book: Book, opening: Boolean, onOpen: () -> Unit, onDelete: 
     }
 }
 
-/** Portada del libro, o un recuadro con la inicial si no tiene o no se puede leer. */
+/**
+ * Portada del libro, o un recuadro con la inicial si no tiene o no se puede leer.
+ * Decorativa para TalkBack: el título ya está al lado; "Portada de…" lo repetía y la inicial suelta no dice nada.
+ */
 @Composable
 private fun Cover(file: File?, title: String) {
-    val description = stringResource(R.string.library_cover, title)
     val targetPx = with(LocalDensity.current) { CoverHeight.roundToPx() }
     val image by produceState<ImageBitmap?>(null, file, targetPx) {
         value = file?.let { withContext(Dispatchers.IO) { decodeCover(it, targetPx) } }
@@ -556,7 +587,7 @@ private fun Cover(file: File?, title: String) {
     if (bitmap != null) {
         Image(
             bitmap = bitmap,
-            contentDescription = description,
+            contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(CoverWidth, CoverHeight).clip(CoverShape),
         )
@@ -565,7 +596,7 @@ private fun Cover(file: File?, title: String) {
             shape = CoverShape,
             color = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.size(CoverWidth, CoverHeight).semantics { contentDescription = description },
+            modifier = Modifier.size(CoverWidth, CoverHeight).clearAndSetSemantics {},
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(LibraryRules.initial(title), style = MaterialTheme.typography.titleLarge, maxLines = 1)

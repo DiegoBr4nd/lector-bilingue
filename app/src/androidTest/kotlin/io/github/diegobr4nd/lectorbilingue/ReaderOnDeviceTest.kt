@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -88,6 +89,8 @@ class ReaderOnDeviceTest {
             rule.onNode(hasText("Capítulo uno") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Capítulo actual"))
                 .assertExists()
             screenshot("indice")
+            // TalkBack dice "doble toque para ir al capítulo", no solo "para activar".
+            assertEquals("ir al capítulo", rule.onNodeWithText("Capítulo tres").fetchSemanticsNode().config[SemanticsActions.OnClick].label)
             rule.onNodeWithText("Capítulo tres").assertHeightIsAtLeast(48.dp).performClick()
             waitForText("Capítulo tres")
             waitFor("posición del capítulo 3 guardada") {

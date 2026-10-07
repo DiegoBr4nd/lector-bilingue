@@ -71,6 +71,7 @@ fun TocContent(entries: List<TocEntry>, currentIndex: Int?, onSelect: (TocEntry)
         val state = rememberLazyListState(initialFirstVisibleItemIndex = ((currentIndex ?: 0) - 1).coerceAtLeast(0))
         val currentLabel = stringResource(R.string.reader_current_chapter)
         val untitled = stringResource(R.string.reader_toc_untitled)
+        val selectLabel = stringResource(R.string.reader_toc_action)
         LazyColumn(state = state, contentPadding = PaddingValues(bottom = Spacing.xl)) {
             itemsIndexed(entries) { index, entry ->
                 val current = index == currentIndex
@@ -78,7 +79,7 @@ fun TocContent(entries: List<TocEntry>, currentIndex: Int?, onSelect: (TocEntry)
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
-                        .clickable(role = Role.Button) { onSelect(entry) }
+                        .clickable(role = Role.Button, onClickLabel = selectLabel) { onSelect(entry) }
                         .semantics {
                             if (current) {
                                 selected = true
