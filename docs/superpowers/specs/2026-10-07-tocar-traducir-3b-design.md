@@ -70,7 +70,7 @@ Habla con la página con scripts propios vía `EpubNavigatorFragment.evaluateJav
 ### 5.2 `TranslationService` (`app`, `data/`; uno para toda la app)
 - `suspend fun translate(request): Result` con prioridad: **toque** antes que **pretraducción**.
 - Primero el caché; si falta, a la fila. La pretraducción de un recurso se cancela al cambiar de recurso (capítulo).
-- Un **solo hilo** dedicado (`Executors.newSingleThreadExecutor().asCoroutineDispatcher()`): nunca dos traducciones a la vez; quita el `synchronized` de `FirefoxEngine` en `Dispatchers.Default` (pendiente de la 2c).
+- Un **solo hilo** dedicado (`Executors.newSingleThreadExecutor().asCoroutineDispatcher()`): nunca dos traducciones a la vez; los motores se crean con ese mismo hilo como despachador, así su `synchronized` ya no bloquea un hilo de `Dispatchers.Default` (pendiente de la 2c) y queda como protección barata.
 - Carga el motor con el primer pedido (`EngineSelector` con los motores instalados del par). Lo descarga al salir del Lector o tras **2 min** sin pedidos. Nunca cambia de motor en silencio.
 - Antes de cargar mira la memoria libre (`ActivityManager.MemoryInfo`); si no alcanza, error claro.
 - Parte en oraciones con `SentenceSplitter`, traduce y vuelve a unir con espacio. Párrafos de más de ~4000 caracteres: por tandas de oraciones.
