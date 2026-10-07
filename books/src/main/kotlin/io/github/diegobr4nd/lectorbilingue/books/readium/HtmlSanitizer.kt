@@ -19,8 +19,8 @@ import java.io.ByteArrayInputStream
  * Limpia el HTML de un libro antes de mostrarlo: el libro no puede ejecutar código ni usar la red.
  * Corre ANTES de que Readium añada sus propios scripts, así que no los toca.
  *
- * Es la ÚNICA barrera contra el JavaScript del libro: la CSP tiene que permitir `https:` y
- * `'unsafe-inline'` para que Readium funcione (ver [CSP]). Por eso:
+ * Es la barrera PRINCIPAL contra el JavaScript del libro. La [CSP] es la segunda: no deja correr scripts en línea,
+ * pero tiene que permitir `https:` para que Readium funcione, así que no frena un `<script src>`. Por eso:
  * - compara etiquetas y atributos por su nombre LOCAL (sin prefijo `h:`, `svg:`…), porque el navegador
  *   decide por espacio de nombres y no por el prefijo;
  * - lee el documento con el MISMO analizador que usará el navegador ([Kind]), para que un comentario o un
@@ -55,10 +55,19 @@ object HtmlSanitizer {
      *   recurso del libro: nada llega a la red (spike, P4: 0 conexiones, con y sin sanitizador).
      * - Además, los scripts del libro ya se quitan aquí; `connect-src 'none'` y `form-action 'none'`
      *   cierran fetch/XHR/WebSocket y formularios, y `base-uri 'none'` impide cambiar la base.
+     *
+     * Por qué `script-src` NO lleva `'unsafe-inline'` (seguridad M3, segunda barrera):
+     * - Readium solo inyecta `<script src>` y su JS no usa `eval` ni manejadores `on…`; lo que manda desde Kotlin
+     *   va por `evaluateJavascript`, que la CSP no frena. Comprobado en el Pixel 7 (MaliciousEpubOnDeviceTest).
+     * - Así, si algún día un `<script>` en línea, un `on…` o un `javascript:` se saltara el saneado, el WebView
+     *   no lo ejecuta.
+     * - `frame-src`, `worker-src` y `manifest-src` en `'none'`: los `<iframe>` ya se quitan y el modo continuo no
+     *   usa marcos dentro del capítulo.
      */
-    const val CSP = "default-src 'self' https: data: blob:; script-src 'self' https: 'unsafe-inline'; " +
+    const val CSP = "default-src 'self' https: data: blob:; script-src 'self' https:; " +
         "style-src 'self' https: 'unsafe-inline' data:; img-src 'self' https: data: blob:; font-src 'self' https: data:; " +
-        "media-src 'self' data: blob:; connect-src 'none'; object-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'"
+        "media-src 'self' data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; " +
+        "manifest-src 'none'; form-action 'none'; base-uri 'none'"
 
     private const val XHTML_NS = "http://www.w3.org/1999/xhtml"
 

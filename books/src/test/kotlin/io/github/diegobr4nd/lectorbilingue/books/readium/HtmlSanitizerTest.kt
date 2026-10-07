@@ -49,6 +49,16 @@ class HtmlSanitizerTest {
         assertEquals(1, cspCount(out))
     }
 
+    // Segunda barrera (seguridad M3): si un script en línea se colara, la CSP lo frena; sin marcos ni workers.
+    @Test fun `la CSP no permite scripts en linea ni marcos ni workers`() {
+        val directives = HtmlSanitizer.CSP.split(';').map { it.trim() }.associate { d -> d.substringBefore(' ') to d.substringAfter(' ') }
+        assertFalse(directives.getValue("script-src").contains("'unsafe-inline'"))
+        assertFalse(directives.getValue("script-src").contains("'unsafe-eval'"))
+        assertEquals("'none'", directives["frame-src"])
+        assertEquals("'none'", directives["worker-src"])
+        assertEquals("'none'", directives["manifest-src"])
+    }
+
     @Test fun `crea head si no hay`() {
         val out = HtmlSanitizer.sanitize("""<html xmlns="http://www.w3.org/1999/xhtml"><body><p>a</p></body></html>""")
         assertTrue(out.contains("Content-Security-Policy"))
