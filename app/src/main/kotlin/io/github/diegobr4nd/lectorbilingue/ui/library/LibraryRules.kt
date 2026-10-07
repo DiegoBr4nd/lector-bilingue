@@ -39,5 +39,8 @@ object LibraryRules {
 
     fun percent(progress: Float): Int = if (progress.isNaN()) 0 else (progress.coerceIn(0f, 1f) * 100).toInt()
 
+    /** Título para mostrar (Biblioteca y Lector). null si está vacío: la pantalla pone "Libro sin título". */
+    fun title(stored: String?): String? = stored?.takeIf { it.isNotBlank() }
+
     fun initial(title: String): String = title.trim().firstOrNull()?.uppercase() ?: "?"
 }

@@ -72,4 +72,10 @@ class LibraryRulesTest {
         assertEquals("E", LibraryRules.initial("el principito")); assertEquals("Á", LibraryRules.initial("  ábaco"))
         assertEquals("?", LibraryRules.initial("")); assertEquals("1", LibraryRules.initial("1984"))
     }
+
+    // La Biblioteca y el Lector muestran el mismo título: el guardado; vacío o en blanco = "Libro sin título".
+    @Test fun `titulo para mostrar`() {
+        assertEquals("Mi libro", LibraryRules.title("Mi libro"))
+        assertNull(LibraryRules.title("")); assertNull(LibraryRules.title("   ")); assertNull(LibraryRules.title(null))
+    }
 }

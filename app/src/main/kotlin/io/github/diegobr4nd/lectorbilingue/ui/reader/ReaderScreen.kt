@@ -59,6 +59,7 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.ConfirmDialog
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
 import kotlinx.coroutines.flow.StateFlow
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -79,6 +80,8 @@ fun ReaderScreen(
     app: LectorApp,
     bookId: String,
     publication: Publication,
+    /** El título guardado en la Biblioteca (no el del OPF): así las dos pantallas muestran el mismo. */
+    title: String?,
     externalLink: StateFlow<String?>,
     onExternalDone: () -> Unit,
     onBack: () -> Unit,
@@ -131,7 +134,7 @@ fun ReaderScreen(
             exit = if (reduceMotion) ExitTransition.None else slideOutVertically { -it } + fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            ReaderTopBar(title = publication.metadata.title, onBack = onBack, onToc = { tocOpen = true })
+            ReaderTopBar(title = title, onBack = onBack, onToc = { tocOpen = true })
         }
         AnimatedVisibility(
             visible = barsVisible && positionText(label) != null,
@@ -180,7 +183,7 @@ fun ReaderTopBar(title: String?, onBack: () -> Unit, onToc: () -> Unit, modifier
     TopAppBar(
         title = {
             Text(
-                title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.library_untitled),
+                LibraryRules.title(title) ?: stringResource(R.string.library_untitled),
                 style = MaterialTheme.typography.titleMedium.copy(fontFamily = ReadingFontFamily),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

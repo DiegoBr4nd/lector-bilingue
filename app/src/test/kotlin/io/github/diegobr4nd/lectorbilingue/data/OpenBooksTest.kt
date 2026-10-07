@@ -66,4 +66,14 @@ class OpenBooksTest {
         store.close(id) // Sin nada abierto: no pasa nada.
         assertEquals(listOf("A"), closed)
     }
+
+    // El Lector muestra el título guardado (el mismo que la Biblioteca), no el del OPF.
+    @Test fun `guarda el titulo junto al libro y lo cambia al reabrir`() {
+        store.put(id, FakeBook("A"), null, "Mi libro")
+        assertEquals("Mi libro", store.title(id))
+        store.put(id, FakeBook("B"), null, "Otro")
+        assertEquals("Otro", store.title(id))
+        store.close(id)
+        assertNull(store.title(id))
+    }
 }

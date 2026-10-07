@@ -5,7 +5,7 @@ import org.readium.r2.shared.publication.Publication
 
 /**
  * Libros abiertos que la Biblioteca le pasa al Lector (ReaderActivity necesita el libro ya abierto antes de crearse),
- * con la posición guardada. Vive en memoria: si Android cierra la app, se vacía y el Lector vuelve a la Biblioteca.
+ * con la posición y el título guardados. Vive en memoria: si Android cierra la app, se vacía y el Lector vuelve a la Biblioteca.
  */
 class OpenBooks : OpenStore<Publication>({ it.close() })
 
@@ -14,17 +14,20 @@ class OpenBooks : OpenStore<Publication>({ it.close() })
  * [release] cierra un libro que ya nadie va a usar.
  */
 open class OpenStore<P : Any>(private val release: (P) -> Unit) {
-    private class Entry<P>(val pub: P, val initial: Locator?)
+    private class Entry<P>(val pub: P, val initial: Locator?, val title: String?)
     private val open = mutableMapOf<String, Entry<P>>()
 
-    @Synchronized fun put(id: String, pub: P, initial: Locator?) {
+    /** [title] es el título guardado en la Biblioteca: el Lector muestra ese, no el del libro, para que coincidan. */
+    @Synchronized fun put(id: String, pub: P, initial: Locator?, title: String? = null) {
         open.remove(id)?.takeIf { it.pub !== pub }?.let { release(it.pub) }
-        open[id] = Entry(pub, initial)
+        open[id] = Entry(pub, initial, title)
     }
 
     @Synchronized fun get(id: String): P? = open[id]?.pub
 
     @Synchronized fun initialLocator(id: String): Locator? = open[id]?.initial
+
+    @Synchronized fun title(id: String): String? = open[id]?.title
 
     /** Cierra lo que haya abierto con ese id (p. ej. al borrar el libro). */
     @Synchronized fun close(id: String) { open.remove(id)?.let { release(it.pub) } }

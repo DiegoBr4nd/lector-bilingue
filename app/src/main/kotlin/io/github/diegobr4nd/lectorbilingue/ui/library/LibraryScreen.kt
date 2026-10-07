@@ -205,8 +205,9 @@ private suspend fun openBook(app: LectorApp, id: String): Boolean = try {
         false
     } else {
         // Posición guardada; un JSON dañado empieza desde el principio en vez de fallar.
-        val initial = app.books.get(id)?.locator?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
-        app.openBooks.put(id, pub, initial)
+        val book = app.books.get(id)
+        val initial = book?.locator?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
+        app.openBooks.put(id, pub, initial, book?.title)
         true
     }
 } catch (e: CancellationException) {
@@ -513,8 +514,7 @@ private val CoverHeight = 76.dp
 private val CoverShape = RoundedCornerShape(4.dp)
 
 @Composable
-private fun displayTitle(book: Book): String =
-    if (book.title.isBlank()) stringResource(R.string.library_untitled) else book.title
+private fun displayTitle(book: Book): String = LibraryRules.title(book.title) ?: stringResource(R.string.library_untitled)
 
 /**
  * Un libro: portada, título, autor y cuánto se leyó. Tocar abre; mantener presionado (o la acción de TalkBack)

@@ -65,6 +65,7 @@ class ReaderActivity : FragmentActivity() {
                     app = app,
                     bookId = id,
                     publication = publication,
+                    title = app.openBooks.title(id),
                     externalLink = externalLink,
                     onExternalDone = { externalLink.value = null },
                     onBack = { finish() },
