@@ -1,6 +1,7 @@
 package io.github.diegobr4nd.lectorbilingue.ui.reader
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +21,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -35,6 +38,7 @@ import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+import kotlinx.coroutines.flow.first
 
 /** Índice en una hoja inferior. Tocar un capítulo salta a él y cierra la hoja. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +73,16 @@ fun TocContent(entries: List<TocEntry>, currentIndex: Int?, onSelect: (TocEntry)
         }
         // Abre mostrando el capítulo actual (con uno de contexto arriba).
         val state = rememberLazyListState(initialFirstVisibleItemIndex = ((currentIndex ?: 0) - 1).coerceAtLeast(0))
+        // Cerca del final la lista no puede bajar tanto y retrocede para no dejar hueco: la primera entrada queda
+        // cortada bajo el título. Se sube lo justo para verla entera si el capítulo actual sigue viéndose completo.
+        LaunchedEffect(state) {
+            val layout = snapshotFlow { state.layoutInfo }.first { it.visibleItemsInfo.isNotEmpty() }
+            val cut = state.firstVisibleItemScrollOffset
+            if (cut == 0) return@LaunchedEffect
+            val current = layout.visibleItemsInfo.firstOrNull { it.index == currentIndex }
+            val end = layout.viewportEndOffset - layout.afterContentPadding
+            if (current == null || current.offset + current.size + cut <= end) state.scrollBy(-cut.toFloat())
+        }
         val currentLabel = stringResource(R.string.reader_current_chapter)
         val untitled = stringResource(R.string.reader_toc_untitled)
         val selectLabel = stringResource(R.string.reader_toc_action)
