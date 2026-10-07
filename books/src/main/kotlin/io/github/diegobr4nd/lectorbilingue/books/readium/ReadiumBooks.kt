@@ -105,7 +105,8 @@ class ReadiumBooks(context: Context) {
                 else -> if (ResourceSanitizing.hasForeignCharset(mediaType)) {
                     TransformingResource(resource) { ResourceSanitizing.refused() }
                 } else {
-                    TransformingResource(resource) { bytes -> ResourceSanitizing.sanitizeSafely(bytes, kind) }
+                    // Con tope de tamaño: un capítulo de más de 8 MB no se lee entero ni pasa por jsoup.
+                    ResourceSanitizing.sanitizing(resource, kind)
                 }
             }
         }

@@ -1,6 +1,11 @@
 package io.github.diegobr4nd.lectorbilingue.books.readium
 
 import io.github.diegobr4nd.lectorbilingue.books.readium.HtmlSanitizer.Kind
+import kotlinx.coroutines.test.runTest
+import org.readium.r2.shared.util.AbsoluteUrl
+import org.readium.r2.shared.util.Try
+import org.readium.r2.shared.util.data.ReadError
+import org.readium.r2.shared.util.resource.Resource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -68,5 +73,56 @@ class ResourceSanitizingTest {
         assertEquals(16, ResourceSanitizing.coverSampleSize(30000, 30000, 2000))
         assertEquals(8192, ResourceSanitizing.coverSampleSize(1, 10_000_000, 2000))
         assertNull(ResourceSanitizing.coverSampleSize(0, 10, 2000)); assertNull(ResourceSanitizing.coverSampleSize(-1, 10, 2000))
+    }
+
+    // ---------- Tope de marcado: un capítulo enorme de etiquetas diminutas no llega a jsoup ----------
+
+    /** Recurso de prueba que cuenta cuántos bytes entrega y si alguien pidió leerlo entero (sin rango). */
+    private class SpyResource(private val bytes: ByteArray) : Resource {
+        var served = 0L
+        var readWithoutRange = false
+        override val sourceUrl: AbsoluteUrl? = null
+        override suspend fun properties(): Try<Resource.Properties, ReadError> = Try.success(Resource.Properties())
+        override suspend fun length(): Try<Long, ReadError> = Try.success(bytes.size.toLong())
+        override suspend fun read(range: LongRange?): Try<ByteArray, ReadError> {
+            if (range == null) readWithoutRange = true
+            val r = range ?: 0L until bytes.size
+            val first = r.first.coerceIn(0L, bytes.size.toLong()).toInt()
+            val end = (r.last + 1).coerceIn(first.toLong(), bytes.size.toLong()).toInt()
+            return Try.success(bytes.copyOfRange(first, end).also { served += it.size })
+        }
+        override fun close() = Unit
+    }
+
+    private fun chapter(paragraphs: Int) =
+        ("""<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>""" +
+            "<p>a</p>".repeat(paragraphs) + "<script>x()</script></body></html>").toByteArray()
+
+    @Test fun `capitulo por encima del tope sirve una pagina de aviso sin leerlo entero`() = runTest {
+        val spy = SpyResource(chapter(10_000)) // unos 80 KB
+        val out = ResourceSanitizing.sanitizing(spy, Kind.XHTML, maxBytes = 1024).read().getOrNull()!!.toString(Charsets.UTF_8)
+        assertTrue(out.contains(ResourceSanitizing.OVERSIZE_MESSAGE)); assertTrue(out.contains(HtmlSanitizer.CSP))
+        assertFalse(out.contains("<p>a</p>")); assertFalse(out.contains("<script", ignoreCase = true))
+        assertFalse(spy.readWithoutRange, "pidió el recurso entero")
+        assertTrue(spy.served <= 1025, "leyó ${spy.served} bytes")
+    }
+
+    @Test fun `pagina de aviso en modo HTML y SVG`() = runTest {
+        val html = ResourceSanitizing.sanitizing(SpyResource(chapter(10_000)), Kind.HTML, maxBytes = 1024).read().getOrNull()!!.toString(Charsets.UTF_8)
+        assertTrue(html.contains(ResourceSanitizing.OVERSIZE_MESSAGE)); assertTrue(html.contains(HtmlSanitizer.CSP)); assertFalse(html.contains("<p>a</p>"))
+        val svg = ResourceSanitizing.sanitizing(SpyResource(chapter(10_000)), Kind.SVG, maxBytes = 1024).read().getOrNull()!!.toString(Charsets.UTF_8)
+        assertTrue(svg.contains("<svg")); assertFalse(svg.contains("<p>a</p>"))
+    }
+
+    @Test fun `capitulo por debajo del tope se sanea normal`() = runTest {
+        val bytes = chapter(10)
+        val spy = SpyResource(bytes)
+        val out = ResourceSanitizing.sanitizing(spy, Kind.XHTML, maxBytes = bytes.size.toLong()).read().getOrNull()!!.toString(Charsets.UTF_8)
+        assertTrue(out.contains("<p>a</p>")); assertTrue(out.contains(HtmlSanitizer.CSP))
+        assertFalse(out.contains("<script", ignoreCase = true)); assertFalse(out.contains(ResourceSanitizing.OVERSIZE_MESSAGE))
+    }
+
+    @Test fun `el tope real es de 8 MB`() {
+        assertEquals(8L * 1024 * 1024, ResourceSanitizing.MAX_MARKUP_BYTES)
     }
 }

@@ -3,6 +3,8 @@ package io.github.diegobr4nd.lectorbilingue.books.readium
 import io.github.diegobr4nd.lectorbilingue.books.readium.HtmlSanitizer.Kind
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.ReadError
+import org.readium.r2.shared.util.resource.Resource
+import org.readium.r2.shared.util.resource.TransformingResource
 
 /**
  * Qué recursos del libro se sanean y cómo. Lógica pura (sin Android) para probarla en la JVM.
@@ -16,6 +18,23 @@ internal object ResourceSanitizing {
 
     /** Si el archivo de la portada pesa más que esto, no se intenta decodificar. */
     const val MAX_COVER_BYTES = 20L * 1024 * 1024
+
+    /**
+     * Tope de bytes REALES de un recurso que se sanea (HTML, XHTML, SVG, XML). Por encima no se lee con jsoup:
+     * se sirve una página de aviso ([OVERSIZE_MESSAGE]).
+     *
+     * Por qué 8 MB (seguridad, ronda 3):
+     * - jsoup arma un árbol con un objeto por etiqueta. Un capítulo hecho solo de `<p>a</p>` tiene una etiqueta
+     *   cada 8 bytes: con 8 MB son unos 2 millones de nodos y pide unos 170-190 MB de memoria (medido en la JVM
+     *   del escritorio); con 32 MB (el tope del ZIP) no cabe y la app se queda sin memoria.
+     * - Los capítulos reales pesan mucho menos de 1 MB: Calibre parte los archivos a partir de unos 260 KB y los
+     *   lectores antiguos de Adobe no abrían archivos de más de 300 KB. Un libro entero en un solo archivo
+     *   (p. ej. una novela muy larga) ronda los 3-4 MB y además es prosa, con pocas etiquetas por byte.
+     */
+    const val MAX_MARKUP_BYTES = 8L * 1024 * 1024
+
+    /** Lo que se muestra en lugar de un capítulo por encima de [MAX_MARKUP_BYTES]. Sin texto del libro. */
+    const val OVERSIZE_MESSAGE = "Este capítulo es demasiado grande para mostrarlo."
 
     /**
      * Tipos que el navegador muestra sin ejecutar nada: imágenes (menos SVG o XML), fuentes, audio, vídeo y CSS.
@@ -61,6 +80,36 @@ internal object ResourceSanitizing {
             if (key != "charset") return@any false
             val value = param.substringAfter('=').trim().trim('"', '\'').trim().lowercase()
             value != "utf-8" && value != "utf8"
+        }
+    }
+
+    /**
+     * El recurso saneado que se sirve al WebView. Nunca lee más de [maxBytes] + 1 bytes del original: pide
+     * ese rango y no el recurso entero, así que un capítulo enorme no llega a memoria para decidir.
+     * Si el original pasa del tope, se sirve la página de aviso (con la misma CSP) en vez de sanearlo.
+     */
+    fun sanitizing(resource: Resource, kind: Kind, maxBytes: Long = MAX_MARKUP_BYTES): Resource =
+        TransformingResource(BoundedRead(resource, maxBytes)) { bytes ->
+            if (bytes.size > maxBytes) sanitizeSafely(oversizePage(kind), kind) else sanitizeSafely(bytes, kind)
+        }
+
+    /** Página mínima de aviso en el formato que espera el navegador; luego pasa por [HtmlSanitizer] para llevar la CSP. */
+    private fun oversizePage(kind: Kind): ByteArray = when (kind) {
+        Kind.SVG -> """<svg xmlns="http://www.w3.org/2000/svg"></svg>"""
+        Kind.HTML -> """<!DOCTYPE html><html lang="es"><head><title></title></head><body><p>$OVERSIZE_MESSAGE</p></body></html>"""
+        Kind.XHTML -> """<html xmlns="http://www.w3.org/1999/xhtml" lang="es" xml:lang="es"><head><title></title></head>""" +
+            """<body><p>$OVERSIZE_MESSAGE</p></body></html>"""
+    }.toByteArray(Charsets.UTF_8)
+
+    /**
+     * Envoltorio que limita la lectura a los primeros [max] + 1 bytes. `TransformingResource` lee el recurso
+     * "entero" (sin rango); aquí ese "entero" se cambia por el rango `0..max`. Si llegan más de [max] bytes,
+     * el original pasa del tope. Readium lee un rango de una entrada del ZIP sin descomprimir el resto.
+     */
+    private class BoundedRead(private val source: Resource, private val max: Long) : Resource by source {
+        override suspend fun read(range: LongRange?): Try<ByteArray, ReadError> {
+            val r = range ?: (0L..max)
+            return source.read(r.first..minOf(r.last, max))
         }
     }
 
