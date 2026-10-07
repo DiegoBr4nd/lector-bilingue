@@ -7,6 +7,7 @@ import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.InputStream
 
 /** Lo que dibuja la Biblioteca. [loaded] es false hasta la primera lectura de la base. */
@@ -51,13 +53,18 @@ class LibraryViewModel(
         combine(repo.books, importing, opening, notice) { books, imp, op, n -> LibraryUiState(books, true, imp, op, n) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
-    /** [source] es null si la persona cerró el selector sin elegir: no pasa nada. Una importación a la vez. */
-    fun import(source: (() -> InputStream?)?, name: String?) {
+    /**
+     * [source] es null si la persona cerró el selector sin elegir: no pasa nada. Una importación a la vez.
+     * [name] da el nombre del archivo (título de respaldo); puede consultar el ContentResolver, por eso se pide
+     * aquí, fuera del hilo principal.
+     */
+    fun import(source: (() -> InputStream?)?, name: () -> String?) {
         if (source == null || importing.value) return
         importing.value = true
         viewModelScope.launch {
             try {
-                val r = repo.import(source, name)
+                val fileName = withContext(Dispatchers.IO) { name() }
+                val r = repo.import(source, fileName)
                 if (r is ImportResult.Error) eventChannel.send(LibraryEvent.Message(LibraryRules.message(r.reason)))
             } finally { importing.value = false }
         }

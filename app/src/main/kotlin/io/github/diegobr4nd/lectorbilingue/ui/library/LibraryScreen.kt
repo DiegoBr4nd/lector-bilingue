@@ -146,8 +146,10 @@ fun LibraryScreen(
     var failedId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val resolver = context.applicationContext.contentResolver
-        vm.import(uri?.let { u -> { resolver.openInputStream(u) } }, uri?.let { displayName(context, it) })
+        val appContext = context.applicationContext
+        val resolver = appContext.contentResolver
+        // Ni abrir el archivo ni leer su nombre ocurren aquí (hilo principal): el ViewModel lo hace en segundo plano.
+        vm.import(uri?.let { u -> { resolver.openInputStream(u) } }, name = { uri?.let { displayName(appContext, it) } })
     }
 
     // Eventos solo con la pantalla visible: si llegan en segundo plano esperan en el canal.

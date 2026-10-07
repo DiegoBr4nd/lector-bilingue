@@ -76,7 +76,7 @@ class LibraryViewModelTest {
 
     @Test fun `cancelar el selector no hace nada`() = runTest(dispatcher) {
         val vm = viewModel()
-        vm.import(source = null, name = null)
+        vm.import(source = null, name = { null })
         advanceUntilIdle()
         assertFalse(vm.state.value.importing)
         assertTrue(events.isEmpty())
@@ -84,7 +84,7 @@ class LibraryViewModelTest {
 
     @Test fun `error de importacion emite el mensaje`() = runTest(dispatcher) {
         val vm = viewModel()
-        vm.import(source = { "no zip".byteInputStream() }, name = "x.epub")
+        vm.import(source = { "no zip".byteInputStream() }, name = { "x.epub" })
         untilReal { !vm.state.value.importing }
         assertEquals(listOf<LibraryEvent>(LibraryEvent.Message(LibraryMessage.NOT_EPUB)), events)
         assertFalse(vm.state.value.importing)
@@ -99,18 +99,31 @@ class LibraryViewModelTest {
             MetadataRead.Ok(BookMetadata("Nuevo", null, null))
         })
         advanceUntilIdle()
-        vm.import(source = { minimalEpub().inputStream() }, name = "nuevo.epub")
+        vm.import(source = { minimalEpub().inputStream() }, name = { "nuevo.epub" })
         // El importador copia en Dispatchers.IO (hilo real): se espera a que llegue a leer los metadatos.
         reading.await()
         advanceUntilIdle()
         assertTrue(vm.state.value.importing)
         // Un segundo intento mientras importa se ignora.
-        vm.import(source = { minimalEpub().inputStream() }, name = "otro.epub")
+        vm.import(source = { minimalEpub().inputStream() }, name = { "otro.epub" })
         gate.complete(Unit)
         // Espera a que el importador (en IO) termine y el ViewModel baje la bandera.
         untilReal { !vm.state.value.importing }
         assertEquals(2, vm.state.value.books.size)
         assertTrue(events.isEmpty())
+    }
+
+    // El nombre sale de una consulta al ContentResolver (disco o IPC): nunca en el hilo principal.
+    @Test fun `el nombre del archivo se pide fuera del hilo principal y sirve de titulo`() = runTest(dispatcher) {
+        val main = Thread.currentThread()
+        var asked: Thread? = null
+        val vm = viewModel(readMetadata = { MetadataRead.Ok(BookMetadata(null, null, null)) })
+        advanceUntilIdle()
+        vm.import(source = { minimalEpub().inputStream() }, name = { asked = Thread.currentThread(); "Mi libro.epub" })
+        untilReal { !vm.state.value.importing }
+        assertNotNull(asked)
+        assertTrue(asked !== main, "se pidió en el hilo principal")
+        assertTrue(vm.state.value.books.any { it.title == "Mi libro" })
     }
 
     @Test fun `abrir con exito emite Open y marca abierto`() = runTest(dispatcher) {
