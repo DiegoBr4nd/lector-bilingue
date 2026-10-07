@@ -31,6 +31,15 @@
         android:theme="@style/Theme.LectorBilingue"
         tools:targetApi="31">
 
+        <!-- Privacidad: nada a Google mientras se lee. El WebView del Lector no sube métricas de uso ni de fallos,
+             y no consulta Safe Browsing (el libro lo sirve la propia app, sin red: no protegería de nada). -->
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
