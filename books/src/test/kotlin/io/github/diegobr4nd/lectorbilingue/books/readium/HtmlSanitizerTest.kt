@@ -231,4 +231,12 @@ class HtmlSanitizerTest {
         assertFalse(out.contains("ping", true)); assertFalse(out.contains("espia.example")); assertFalse(out.contains("srcdoc", true))
         assertTrue(out.contains("href=\"c2.xhtml\"")); assertTrue(out.contains("src=\"i.png\""))
     }
+
+    // Con target="_blank" el WebView del Lector descarta el clic (no abre ventanas nuevas): el enlace externo no
+    // haría nada y nunca saldría el diálogo. Sin target se comporta como cualquier otro enlace.
+    @Test fun `quita target de los enlaces`() {
+        val out = HtmlSanitizer.sanitize(xhtml("""<a href="https://example.org/" target="_blank">a</a><a href="c2.xhtml" TARGET="x">b</a>"""))
+        assertFalse(out.contains("target", true)); assertFalse(out.contains("_blank"))
+        assertTrue(out.contains("href=\"https://example.org/\"")); assertTrue(out.contains("href=\"c2.xhtml\""))
+    }
 }

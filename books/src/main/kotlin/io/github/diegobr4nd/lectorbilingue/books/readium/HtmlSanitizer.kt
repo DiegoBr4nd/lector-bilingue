@@ -97,8 +97,13 @@ object HtmlSanitizer {
      */
     private val LINK_REL_ALLOWED = setOf("stylesheet", "alternate")
 
-    /** Atributos que piden a la red o crean documentos, sea cual sea el elemento: `<a ping>`, `srcdoc`, `attributionsrc`. */
-    private val REMOVE_ATTRIBUTES = setOf("ping", "srcdoc", "attributionsrc")
+    /**
+     * Atributos que se quitan sea cual sea el elemento:
+     * - piden a la red o crean documentos: `<a ping>`, `srcdoc`, `attributionsrc`;
+     * - `target`: con `_blank` el WebView del Lector descarta el clic (no abre ventanas nuevas) y el enlace no
+     *   haría nada; sin él, el enlace externo pasa por el diálogo como cualquier otro.
+     */
+    private val REMOVE_ATTRIBUTES = setOf("ping", "srcdoc", "attributionsrc", "target")
 
     fun sanitize(markup: String, kind: Kind = Kind.XHTML): String =
         clean(Jsoup.parse(markup, "", parserFor(kind)), kind)
