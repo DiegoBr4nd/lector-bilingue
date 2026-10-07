@@ -164,6 +164,10 @@ class LibraryOnDeviceTest {
     @Test
     fun vaciaConLetraGrandeAnadirSeVeSinDesplazar() = assertAddVisibleWithoutScrolling(fontScale = 2f)
 
+    // Diseño B12: al 130 % la vista vacía todavía lleva dibujo y márgenes grandes (el modo compacto empieza en 150 %).
+    @Test
+    fun vaciaConLetraAl130AnadirSeVeSinDesplazar() = assertAddVisibleWithoutScrolling(fontScale = 1.3f)
+
     /**
      * Teléfono pequeño (360 × 640 dp) con la letra a [fontScale] y el aviso de idiomas arriba: "Añadir libro"
      * cabe ENTERO en la pantalla sin desplazar (diseño B10). `assertIsDisplayed` no basta: pasa aunque solo se
