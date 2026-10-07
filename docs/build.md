@@ -18,6 +18,13 @@
 | transformers / torch (solo conversión del modelo) | 4.57.6 / 2.14.1+cpu | `tools/models/requirements.txt` |
 | JDK para correr Gradle | local: JBR de Android Studio (25); CI: Temurin 17 | — |
 
+## Módulos
+- `:app`: pantallas y arranque.
+- `:core:text`, `:core:ui`: texto compartido y diseño.
+- `:engine:api`, `:engine:opus`, `:engine:firefox`: motores de traducción.
+- `:models`: gestor de modelos y catálogo.
+- `:books`: biblioteca: importar y validar EPUB, Room y Readium (sin pantallas).
+
 ## Comandos (Git Bash, desde la raíz)
 ```bash
 export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"

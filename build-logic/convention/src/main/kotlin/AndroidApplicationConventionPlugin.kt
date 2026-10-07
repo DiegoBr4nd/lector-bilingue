@@ -19,6 +19,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             compileOptions {
                 sourceCompatibility = ProjectConfig.JAVA_VERSION
                 targetCompatibility = ProjectConfig.JAVA_VERSION
+                // Readium necesita java.time y otras APIs nuevas; el desugaring las traduce para minSdk 26.
+                isCoreLibraryDesugaringEnabled = true
             }
 
             flavorDimensions += "distribution"

@@ -2,6 +2,10 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -28,11 +32,19 @@ import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.data.PairStatus
 import io.github.diegobr4nd.lectorbilingue.data.RowStatus
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
-import io.github.diegobr4nd.lectorbilingue.ui.home.HomeScreen
+import io.github.diegobr4nd.lectorbilingue.ui.library.LanguageNotice
+import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryContent
+import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryUiState
+import io.github.diegobr4nd.lectorbilingue.ui.library.languageNotices
+import io.github.diegobr4nd.lectorbilingue.ui.nav.AppNav
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Before
@@ -71,7 +83,7 @@ private fun installedOpus() = listOf(
     ),
 )
 
-/** Inicio e Idiomas con un gestor falso. Los ajustes usan su propio archivo, nunca el real. */
+/** Idiomas y el aviso de idiomas de la Biblioteca con un gestor falso. Los ajustes usan su propio archivo, nunca el real. */
 @RunWith(AndroidJUnit4::class)
 class LanguagesOnDeviceTest {
     @get:Rule
@@ -150,55 +162,50 @@ class LanguagesOnDeviceTest {
     }
 
     @Test
-    fun sin_idiomas_el_inicio_invita_a_descargar_y_lleva_a_idiomas() {
-        var opened = 0
+    fun sin_idiomas_el_aviso_invita_a_descargar() = runBlocking {
+        settings.loadEnginePreference()
+        val notice = withTimeout(5_000) { languageNotices(LangFakeHub(emptyList()), settings).first() }
+        assertEquals(LanguageNotice.NoLanguages, notice)
+    }
+
+    @Test
+    fun con_un_idioma_listo_no_hay_aviso() = runBlocking {
+        settings.loadEnginePreference()
+        // Gestor y ajustes ya cargados: el primer valor es el definitivo, y no hay nada que avisar.
+        val notice = withTimeout(5_000) { languageNotices(LangFakeHub(installedOpus()), settings).first() }
+        assertNull(notice)
+    }
+
+    @Test
+    fun cambiar_el_motor_en_idiomas_se_ve_en_la_biblioteca_al_volver() {
+        settings.welcomeDone = true
+        runBlocking { settings.loadEnginePreference() }
+        val hub = LangFakeHub(installedOpus())
         rule.setContent {
             LectorTheme {
-                HomeScreen(
-                    hub = LangFakeHub(emptyList()),
-                    settings = settings,
-                    onLanguages = { opened++ },
-                    onDeveloper = null,
+                AppNav(
+                    settings, hub,
+                    library = { onLanguages, _ ->
+                        val notice by remember { languageNotices(hub, settings) }.collectAsState(null)
+                        LibraryContent(
+                            state = LibraryUiState(loaded = true, notice = notice),
+                            onAdd = {}, onOpen = {}, onDelete = {},
+                            onLanguages = onLanguages, onDeveloper = null,
+                            snackbar = remember { SnackbarHostState() },
+                        )
+                    },
                 )
             }
         }
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("Aún no tienes idiomas").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNode(hasText("Descargar idiomas") and hasClickAction()).assertHeightIsAtLeast(48.dp).performClick()
-        assertEquals(1, opened)
-    }
-
-    @Test
-    fun con_un_idioma_el_inicio_dice_listo_para_traducir() {
-        rule.setContent {
-            LectorTheme {
-                HomeScreen(hub = LangFakeHub(installedOpus()), settings = settings, onLanguages = {}, onDeveloper = null)
-            }
-        }
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("Listo para traducir · Calidad").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("Inglés → español").assertExists()
-        rule.onNodeWithContentDescription("Más opciones").assertHeightIsAtLeast(48.dp)
-    }
-
-    @Test
-    fun cambiar_el_motor_en_idiomas_se_ve_en_inicio_al_volver() {
-        settings.welcomeDone = true
-        val both = listOf(
-            PairStatus(
-                "en-es",
-                listOf(
-                    RowStatus("opus-en-es", EngineId.OPUS, 238_524_992, true, null),
-                    RowStatus("firefox-en-es", EngineId.FIREFOX, 36_594_513, true, null),
-                ),
-            ),
-        )
-        val hub = LangFakeHub(both)
-        rule.setContent { LectorTheme { io.github.diegobr4nd.lectorbilingue.ui.nav.AppNav(settings, hub) } }
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("Listo para traducir · Calidad").fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Biblioteca").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Falta", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("Más opciones").performClick()
         rule.onNode(hasText("Idiomas") and hasClickAction()).performClick()
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Motor").fetchSemanticsNodes().isNotEmpty() }
+        // Solo Calidad está instalado: elegir Rápido deja al par sin el motor elegido.
         rule.onNode(radio and hasText("Rápido")).performClick()
         androidx.test.espresso.Espresso.pressBack()
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("Listo para traducir · Rápido").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("Listo para traducir · Calidad").assertDoesNotExist()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Falta Rápido", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Falta Rápido", substring = true).assertHeightIsAtLeast(48.dp)
     }
 }

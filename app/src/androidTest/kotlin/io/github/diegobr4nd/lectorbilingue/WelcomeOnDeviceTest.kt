@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -89,7 +90,10 @@ class WelcomeOnDeviceTest {
         }
     }
 
-    private fun setNav(hub: ModelHubApi) = rule.setContent { LectorTheme { AppNav(settings, hub) } }
+    // La Biblioteca de verdad necesita la base de la app: aquí basta una marca para saber que se llegó.
+    private fun setNav(hub: ModelHubApi) = rule.setContent {
+        LectorTheme { AppNav(settings, hub, library = { _, _ -> Text("Biblioteca de prueba") }) }
+    }
 
     @Test
     fun recorre_los_tres_pasos_con_Siguiente() {
@@ -128,14 +132,14 @@ class WelcomeOnDeviceTest {
     }
 
     @Test
-    fun mas_tarde_marca_la_bienvenida_y_abre_inicio() {
+    fun mas_tarde_marca_la_bienvenida_y_abre_la_biblioteca() {
         setNav(FakeHub())
         rule.onNodeWithText("Siguiente").performClick()
         rule.onNodeWithText("Siguiente").performClick()
         rule.onNodeWithText("Más tarde").performClick()
         rule.waitForIdle()
         assertTrue(settings.welcomeDone)
-        rule.onNodeWithText("Hola").assertExists()
+        rule.onNodeWithText("Biblioteca de prueba").assertExists()
     }
 
     @Test

@@ -48,22 +48,57 @@
     <string name="pair_direction_en_es">inglés → español</string>
     <string name="pair_direction_es_en">español → inglés</string>
 
-    <!-- Inicio -->
-    <string name="home_title">Hola</string>
-    <string name="home_menu">Más opciones</string>
-    <string name="home_menu_languages">Idiomas</string>
-    <string name="home_menu_developer">Desarrollador</string>
-    <string name="home_loading">Cargando…</string>
-    <string name="home_ready">Listo para traducir · %1$s</string>
-    <string name="home_cancel_download">Cancelar descarga de %1$s (%2$s)</string>
-    <string name="home_missing">Falta %1$s · descárgalo en Idiomas</string>
-    <string name="home_missing_action">Ir a Idiomas</string>
-    <string name="home_no_languages_title">Aún no tienes idiomas</string>
-    <string name="home_no_languages_body">Descarga uno para poder traducir tus libros.</string>
-    <string name="home_download_languages">Descargar idiomas</string>
-    <string name="home_languages">Idiomas</string>
-    <string name="home_library_title">Tu biblioteca llega pronto</string>
-    <string name="home_library_body">Aquí verás tus libros en la próxima versión.</string>
+    <!-- Menú de la Biblioteca -->
+    <string name="library_menu">Más opciones</string>
+    <string name="library_menu_languages">Idiomas</string>
+    <string name="library_menu_developer">Desarrollador</string>
+
+    <!-- Biblioteca -->
+    <string name="library_title">Biblioteca</string>
+    <string name="library_loading">Cargando…</string>
+    <string name="library_add">Añadir libro</string>
+    <string name="library_empty_title">Añade tu primer libro EPUB</string>
+    <string name="library_empty_body">Se guarda una copia privada en el teléfono. Nada sale de aquí.</string>
+    <string name="library_importing">Añadiendo…</string>
+    <string name="library_opening">Abriendo…</string>
+    <string name="library_untitled">Libro sin título</string>
+    <!-- Lo que TalkBack dice tras "doble toque para…". En minúscula: va dentro de esa frase. -->
+    <string name="library_open_action">abrir el libro</string>
+    <string name="library_notice_action">abrir Idiomas</string>
+    <string name="library_progress">%1$d %% leído</string>
+    <string name="library_delete">Borrar libro</string>
+    <string name="library_delete_title">¿Borrar «%1$s»?</string>
+    <string name="library_delete_body">Se borra la copia de la app y la posición de lectura. El archivo original de tu teléfono no se toca.</string>
+    <string name="library_delete_confirm">Borrar</string>
+    <string name="library_open_failed_title">No se pudo abrir este libro</string>
+    <string name="library_open_failed_body">El archivo de la app parece dañado.</string>
+    <string name="library_open_failed_remove">Quitar de la biblioteca</string>
+    <string name="library_close">Cerrar</string>
+    <string name="library_error_not_epub">Este archivo no es un EPUB válido</string>
+    <string name="library_error_too_big">El libro es demasiado grande (máx. 100 MB)</string>
+    <string name="library_error_drm">Este libro tiene protección DRM y no se puede abrir</string>
+    <string name="library_error_damaged">El archivo parece dañado</string>
+    <string name="library_error_no_space">No hay espacio suficiente en el teléfono</string>
+    <string name="library_notice_downloading">Descargando %1$s… %2$d %%</string>
+    <string name="library_notice_downloading_nopct">Descargando %1$s…</string>
+    <string name="library_notice_failed">Falló la descarga de %1$s · Reintentar en Idiomas</string>
+    <string name="library_notice_missing">Falta %1$s para %2$s · Descargar</string>
+    <string name="library_notice_none">Aún no tienes idiomas · Descargar</string>
+
+    <!-- Lector -->
+    <string name="reader_back">Volver</string>
+    <string name="reader_toc">Índice</string>
+    <string name="reader_toc_empty">Este libro no trae índice</string>
+    <!-- Entrada del Índice cuyo capítulo no trae título (en vez del nombre del archivo). -->
+    <string name="reader_toc_untitled">Sección sin título</string>
+    <string name="reader_current_chapter">Capítulo actual</string>
+    <!-- Lo que TalkBack dice tras "doble toque para…". -->
+    <string name="reader_toc_action">ir al capítulo</string>
+    <string name="reader_position">%1$s · %2$d %%</string>
+    <string name="reader_position_pct">%1$d %%</string>
+    <string name="reader_external_title">¿Abrir en el navegador?</string>
+    <string name="reader_external_body">Este enlace sale del libro: %1$s</string>
+    <string name="reader_external_open">Abrir</string>
 
     <!-- Idiomas -->
     <string name="languages_title">Idiomas</string>

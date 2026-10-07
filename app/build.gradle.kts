@@ -49,6 +49,10 @@ dependencies {
     implementation(project(":engine:firefox"))
     implementation(project(":core:ui"))
     implementation(project(":models"))
+    implementation(project(":books"))
+    implementation(libs.readium.navigator)
+    implementation(libs.androidx.fragment.compose)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -72,4 +76,5 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.espresso.core)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(libs.androidx.room.testing)
 }

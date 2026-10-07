@@ -7,7 +7,7 @@ import kotlin.test.assertNull
 class StartRulesTest {
     @Test fun sinBienvenidaEmpiezaEnElPaso1() = assertEquals(Route.Welcome(1), StartRules.start(false))
 
-    @Test fun conBienvenidaHechaEmpiezaEnInicio() = assertEquals(Route.Home, StartRules.start(true))
+    @Test fun conBienvenidaHechaEmpiezaEnInicio() = assertEquals(Route.Library, StartRules.start(true))
 
     @Test fun atrasEnBienvenidaVuelveAlPasoAnterior() =
         assertEquals(Route.Welcome(2), StartRules.back(Route.Welcome(3)))

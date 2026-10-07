@@ -22,4 +22,7 @@ object LectorIcons {
     @DrawableRes val MoreVert = R.drawable.ic_more_vert
     @DrawableRes val Close = R.drawable.ic_close
     @DrawableRes val ArrowBack = R.drawable.ic_arrow_back
+    @DrawableRes val Add = R.drawable.ic_add
+    @DrawableRes val Toc = R.drawable.ic_toc
+    @DrawableRes val Error = R.drawable.ic_error
 }
