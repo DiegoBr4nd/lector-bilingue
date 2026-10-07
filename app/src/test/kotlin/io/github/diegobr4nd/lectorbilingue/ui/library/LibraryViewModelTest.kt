@@ -176,6 +176,7 @@ class LibraryViewModelTest {
         vm.delete(id)
         untilReal { vm.state.value.books.isEmpty() }
         assertTrue(vm.state.value.books.isEmpty())
+        assertEquals(listOf(id), closedIds) // El ViewModel suelta el libro abierto; la pantalla ya no lo hace.
     }
 
     /**

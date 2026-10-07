@@ -105,12 +105,9 @@ import io.github.diegobr4nd.lectorbilingue.ui.ScreenMaxWidth
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import org.readium.r2.shared.publication.Locator
 import java.io.File
 
 /**
@@ -131,7 +128,7 @@ fun LibraryScreen(
             initializer {
                 LibraryViewModel(
                     app.books,
-                    opener = { id -> openBook(app, id) },
+                    opener = app.bookOpener::open,
                     languageNotices(app.hub, app.settings),
                     close = app.openBooks::close,
                 )
@@ -167,16 +164,11 @@ fun LibraryScreen(
         }
     }
 
-    fun remove(id: String) {
-        app.openBooks.close(id)
-        vm.delete(id)
-    }
-
     LibraryContent(
         state = state,
         onAdd = { picker.launch(arrayOf("application/epub+zip")) },
         onOpen = vm::open,
-        onDelete = ::remove,
+        onDelete = vm::delete,
         onLanguages = onLanguages,
         onDeveloper = onDeveloper,
         snackbar = snackbar,
@@ -187,33 +179,10 @@ fun LibraryScreen(
             onClose = { failedId = null },
             onRemove = {
                 failedId = null
-                remove(id)
+                vm.delete(id)
             },
         )
     }
-}
-
-/**
- * Abre el EPUB guardado y lo deja en [LectorApp.openBooks] con la posición guardada. false si no abrió.
- * Siempre un objeto nuevo, nunca el que ya estaba en memoria: un Lector anterior que aún está terminando cierra
- * "su" objeto al final, y si fuera el mismo cerraría el del Lector nuevo. `put` cierra el anterior.
- * La posición también se relee siempre.
- */
-private suspend fun openBook(app: LectorApp, id: String): Boolean = try {
-    val pub = app.readium.open(app.books.epubFile(id)).getOrNull()
-    if (pub == null) {
-        false
-    } else {
-        // Posición guardada; un JSON dañado empieza desde el principio en vez de fallar.
-        val book = app.books.get(id)
-        val initial = book?.locator?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
-        app.openBooks.put(id, pub, initial, book?.title)
-        true
-    }
-} catch (e: CancellationException) {
-    throw e
-} catch (_: Exception) {
-    false // Cualquier otra falla se trata como "no se pudo abrir" (diálogo), nunca como un cierre de la app.
 }
 
 /** Nombre del archivo elegido, para usarlo como título si el libro no trae uno. Nunca se registra. */

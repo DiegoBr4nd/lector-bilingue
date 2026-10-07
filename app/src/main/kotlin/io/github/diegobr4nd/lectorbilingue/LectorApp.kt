@@ -9,8 +9,12 @@ import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.books.readium.ReadiumBooks
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
+import io.github.diegobr4nd.lectorbilingue.data.BookOpener
 import io.github.diegobr4nd.lectorbilingue.data.ModelHub
 import io.github.diegobr4nd.lectorbilingue.data.OpenBooks
+import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.Publication
 import java.io.File
 
 /**
@@ -22,6 +26,15 @@ class LectorApp : Application() {
     val settings: AppSettings by lazy { AppSettings.of(this) }
     val readium: ReadiumBooks by lazy { ReadiumBooks(this) }
     val openBooks = OpenBooks()
+    /** Abre el libro que la persona tocó en la Biblioteca y lo deja en [openBooks] para el Lector. */
+    val bookOpener: BookOpener<Publication> by lazy {
+        BookOpener(
+            openBooks,
+            openFile = { id -> readium.open(books.epubFile(id)).getOrNull() },
+            stored = { id -> books.get(id) },
+            parseLocator = { json -> Locator.fromJSON(JSONObject(json)) },
+        )
+    }
     private val bookFiles by lazy { BookFiles(filesDir) }
     val books: BookRepository by lazy {
         val dao = LectorDatabase.open(this).books()

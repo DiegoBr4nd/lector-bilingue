@@ -93,7 +93,11 @@ class LibraryViewModel(
         }
     }
 
-    fun delete(id: String) { viewModelScope.launch { repo.delete(id) } }
+    /** Suelta el libro si estaba abierto y lo borra. Si se estaba abriendo, [open] lo suelta al terminar. */
+    fun delete(id: String) {
+        close(id)
+        viewModelScope.launch { repo.delete(id) }
+    }
 }
 
 /** Aviso de idiomas a partir del gestor de modelos y del motor elegido. Nada hasta tener los dos cargados. */
