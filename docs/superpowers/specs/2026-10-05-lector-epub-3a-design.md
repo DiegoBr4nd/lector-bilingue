@@ -158,7 +158,7 @@ Abre `files/books/<id>.epub` con Readium (`AssetRetriever` + `PublicationOpener`
 
 ## 7. Accesibilidad
 - Áreas táctiles de 48 dp como mínimo. Contraste AA en los 4 temas de la interfaz.
-- `contentDescription` en español en portadas ("Portada de <título>"), FAB, menú e Índice.
+- `contentDescription` en español en el FAB, el menú y el Índice. Las portadas son decorativas (sin descripción y sin leer la inicial del recuadro): cada libro se anuncia una sola vez como "<título>, <autor>, N % leído", con la acción "abrir el libro".
 - El % leído se anuncia como texto. El capítulo actual se marca sin depender del color.
 - Borrar también se ofrece en las acciones de TalkBack (`customActions`), no solo con mantener presionado.
 - Letra del sistema al 200 %: los títulos largos se cortan con "…" y nunca tapan los botones.
