@@ -162,11 +162,17 @@ class LibraryOnDeviceTest {
     }
 
     @Test
-    fun vaciaConLetraGrandeAnadirSeVeSinDesplazar() {
-        // Teléfono pequeño (360 × 640 dp) con la letra al 200 % y el aviso de idiomas arriba.
+    fun vaciaConLetraGrandeAnadirSeVeSinDesplazar() = assertAddVisibleWithoutScrolling(fontScale = 2f)
+
+    /**
+     * Teléfono pequeño (360 × 640 dp) con la letra a [fontScale] y el aviso de idiomas arriba: "Añadir libro"
+     * cabe ENTERO en la pantalla sin desplazar (diseño B10). `assertIsDisplayed` no basta: pasa aunque solo se
+     * vea un trozo del botón. Se usa la posición y el tamaño sin recortar (no `boundsInRoot`, que la lista recorta).
+     */
+    private fun assertAddVisibleWithoutScrolling(fontScale: Float) {
         rule.setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = fontScale)) {
                 LectorTheme {
                     Box(Modifier.size(360.dp, 640.dp)) {
                         LibraryContent(
@@ -177,7 +183,13 @@ class LibraryOnDeviceTest {
                 }
             }
         }
-        rule.onNodeWithText("Añadir libro").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        val button = rule.onNodeWithText("Añadir libro").assertIsDisplayed().assertHeightIsAtLeast(48.dp).fetchSemanticsNode()
+        with(rule.density) {
+            val top = button.positionInRoot.y.toDp()
+            val bottom = (button.positionInRoot.y + button.size.height).toDp()
+            assertTrue(top >= 0.dp, "al ${fontScale * 100} % el botón empieza en $top")
+            assertTrue(bottom <= 640.dp, "al ${fontScale * 100} % el botón termina en $bottom, fuera de los 640 dp")
+        }
     }
 
     @Test
