@@ -129,3 +129,27 @@ Meta del proyecto: ≥ 15 palabras/s y < 2 s por párrafo con beam 1. Se mide en
 | Readium recarga la página y se pierden tarjetas | T3 y reinserción desde el ViewModel |
 | Poca memoria al cargar el motor junto al WebView | Revisión de memoria libre antes de cargar; descarga al salir y por inactividad |
 | `evaluateJavascript` solo ve el recurso visible | Índices locales por recurso; el caché no depende de ellos |
+
+## 12. Resultado de la comprobación
+
+Rama local `spike/3b-tocar` (borrada), Readium 3.4.0, Pixel 7, libro inventado de 3 capítulos (párrafos con id `p1`…`p30`; `p4` con `role="button"`). En los registros solo hubo números, booleanos e ids de prueba.
+
+| # | Pregunta | Resultado | Evidencia |
+|---|---|---|---|
+| T1 | Con TalkBack, el toque doble llega a `onTap` dentro del párrafo | ✅ | Con TalkBack encendido por Juan: foco en p3 → toque doble → `onTap` (538, 611) y `elementFromPoint(point / density)` = p3; foco en p6 → `onTap` (538, 1118), bajo el punto = p6, foco = p6. Llega como un `click` real del DOM (`isTrusted` true) en el **centro** del párrafo (clientX 205 = 538 / 2,625). Juan: TalkBack leía los párrafos y mostraba el recuadro verde; tras el toque doble no vio ningún cambio (en el spike no se inserta nada). Del toque doble sobre p4 no quedó registro (ver abajo) |
+| T1b | Acción con nombre ("Traducir") en el contenido web | ❌ | Ningún nodo ofrece acciones con etiqueta propia. `role="button"` solo cambia la clase a `android.widget.Button` y añade la acción de clic; Juan no oyó "botón" ni "toca dos veces para activar" en p4. No hace falta: el `<p>` normal ya recibe el toque doble |
+| T2 | Hoja CSS de la app sin cambiar la CSP | ✅ | Dos vías. **B (recomendada):** `EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*"))` + `<link rel="stylesheet" href="https://readium_assets/lector/tarjeta.css">` tras la CSP → `borderLeftWidth` 4,95 px (5 px ajustado a píxeles del aparato), `window.readium` sigue listo. **A:** recurso en el contenedor **y** en `manifest.resources` (`https://readium_package/lector/tarjeta.css`) → 6,86 px (7 px). Solo en el contenedor **no** basta: Readium sirve su página de error (200, 0 reglas). Una sola `<meta>` CSP; `git diff` de `HtmlSanitizer.kt` vacío |
+| T3 | Recarga al cambiar de capítulo y volver | ✅ (se pierde) | Capítulo 1 con tarjeta y `window.__marca` → Índice al 3 → Índice al 1: ni tarjeta ni marca (documento recargado). `evaluateJavascript` ya ve el recurso nuevo con `readyState` `"complete"` y `window.readium` ~60 ms **antes** del primer `currentLocator` con el `href` nuevo (2300 → 2361 ms; 4407 → 4473 ms) |
+
+**Decisión:** se sigue con el enfoque A (§2, decisión 5) sin cambiar la CSP:
+- Toque: `InputListener.onTap` sirve igual con y sin TalkBack. No hace falta el botón "Traducir" en la barra.
+- Hoja: vía B (assets de la app en `readium_assets`). El libro no puede tapar el archivo, y es el mismo origen que el CSS de Readium. El `<link>` se inyecta tras la CSP sin duplicarse (Readium sanea dos veces).
+- Reinserción: al llegar un `currentLocator` con `href` distinto. El script comprueba antes `document.readyState === "complete"` y que `location.pathname` sea el del recurso esperado; si no, reintenta poco después.
+
+**APIs de Readium 3.4.0 que difieren o conviene saber:**
+- `WebViewServer.servedUrlToLink` solo sirve en `readium_package` los `href` del manifiesto.
+- `servedAssets` se **suma** a `readium/.*` (no lo reemplaza). Se pasa en `createFragmentFactory(configuration = …)`.
+- Las reglas de una hoja de `readium_assets` no se leen desde la página (`SecurityError`, otro origen), pero sí se aplican.
+- El ViewPager tiene cargado el capítulo vecino: sus nodos de accesibilidad tienen los mismos ids (fuera de pantalla, `isVisibleToUser` false con TalkBack). Los scripts propios solo ven el recurso visible.
+- Con TalkBack **apagado**, `performAction(ACTION_CLICK)` desde UiAutomation no hace nada. Con TalkBack encendido genera el clic en el centro del nodo, también en un `<p>` sin acción de clic declarada. Para la prueba automática del plan (§9), TalkBack debe estar encendido.
+- Del toque doble de Juan sobre p4 no hubo registro: hubo foco en p4 (30,5 s) y luego en p6 (35,8 s), sin `onTap` entre los dos. Es probable que el toque doble no llegara a hacerse ahí. La parte automática sí dio `onTap` en p4. Se vuelve a mirar en la prueba con TalkBack del plan.
