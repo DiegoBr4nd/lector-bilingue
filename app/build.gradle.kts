@@ -40,6 +40,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+    // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
+    sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }
 }
 
 dependencies {

@@ -30,10 +30,13 @@ class BookRepository(
     suspend fun savePosition(id: String, locator: String, progress: Float) =
         dao.savePosition(id, locator, progress.coerceIn(0f, 1f))
 
+    /** Dirección de traducción del libro; null = automática. */
+    suspend fun setDirection(id: String, direction: String?) = dao.setDirection(id, direction)
+
     suspend fun markOpened(id: String) = dao.markOpened(id, clock())
 
     fun epubFile(id: String): File = files.epub(id)
 
     private fun BookEntity.toBook() =
-        Book(id, title, author, coverPath?.let { File(files.booksDir, it) }, progress, locator)
+        Book(id, title, author, coverPath?.let { File(files.booksDir, it) }, progress, locator, direction)
 }

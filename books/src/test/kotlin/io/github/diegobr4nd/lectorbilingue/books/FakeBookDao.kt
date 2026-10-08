@@ -23,6 +23,9 @@ class FakeBookDao : BookDao {
     override suspend fun savePosition(id: String, locator: String, progress: Float) {
         rows.value[id]?.let { rows.value = rows.value + (id to it.copy(locator = locator, progress = progress)) }
     }
+    override suspend fun setDirection(id: String, direction: String?) {
+        rows.value[id]?.let { rows.value = rows.value + (id to it.copy(direction = direction)) }
+    }
     override suspend fun markOpened(id: String, at: Long) {
         rows.value[id]?.let { rows.value = rows.value + (id to it.copy(lastOpenedAt = at)) }
     }
