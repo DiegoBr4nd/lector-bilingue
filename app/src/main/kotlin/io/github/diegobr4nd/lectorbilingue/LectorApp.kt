@@ -8,14 +8,20 @@ import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.books.readium.ReadiumBooks
+import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.BookOpener
 import io.github.diegobr4nd.lectorbilingue.data.ModelHub
 import io.github.diegobr4nd.lectorbilingue.data.OpenBooks
+import io.github.diegobr4nd.lectorbilingue.data.TranslationService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * La "Application" vive mientras viva el proceso: es el lugar para lo que debe existir una sola vez.
@@ -36,8 +42,10 @@ class LectorApp : Application() {
         )
     }
     private val bookFiles by lazy { BookFiles(filesDir) }
+    /** Una sola base para toda la app (libros y traducciones). */
+    private val db by lazy { LectorDatabase.open(this) }
     val books: BookRepository by lazy {
-        val dao = LectorDatabase.open(this).books()
+        val dao = db.books()
         BookRepository(
             dao, bookFiles,
             BookImporter(
@@ -47,6 +55,20 @@ class LectorApp : Application() {
                 },
                 saveCover = ::saveCover,
             ),
+        )
+    }
+
+    /**
+     * Traducción de párrafos con un hilo propio ("motor-traduccion"): el motor nunca corre dos veces a la vez
+     * ni ocupa los hilos compartidos. El ámbito vive lo que el proceso (SupervisorJob: un fallo no lo apaga).
+     */
+    val translations: TranslationService by lazy {
+        val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-traduccion") }.asCoroutineDispatcher()
+        TranslationService(
+            AndroidEngineProvider(this, worker),
+            db.translations(),
+            worker = worker,
+            scope = CoroutineScope(SupervisorJob() + worker),
         )
     }
 
