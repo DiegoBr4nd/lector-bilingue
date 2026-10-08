@@ -37,13 +37,7 @@ object TranslationRules {
     }
 
     fun batches(normalizedText: String, maxChars: Int = 4000): List<List<String>> {
-        val sentences = SentenceSplitter.split(normalizedText).flatMap { sentence ->
-            if (sentence.length <= MAX_SENTENCE_CHARS) {
-                listOf(sentence)
-            } else {
-                splitLongSentence(sentence)
-            }
-        }
+        val sentences = SentenceSplitter.split(normalizedText).flatMap { splitLongSentence(it) }
         val out = mutableListOf<MutableList<String>>()
         var size = 0
         for (s in sentences) {
