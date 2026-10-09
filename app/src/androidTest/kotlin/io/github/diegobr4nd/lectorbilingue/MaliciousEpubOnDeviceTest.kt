@@ -625,6 +625,7 @@ class MaliciousEpubOnDeviceTest {
             val hit = runBlocking { bridge.paragraphsAt((x * density).toFloat(), (y * density).toFloat(), density) }
             assertTrue((System.nanoTime() - start) / 1_000_000 < 2_000, "paragraphsAt tardó más de 2 s")
             assertEquals(TranslationRules.MAX_PARAGRAPH_CHARS + 1, hit.first().text.length)
+            assertTrue(hit.first().cut, "sin la marca de recorte")
             // (a) Toque real: estado final "demasiado largo" (estilo de error) en menos de 30 s.
             tapCss(s, x, y)
             waitFinal(s, "g", "error", timeout = 30_000)
