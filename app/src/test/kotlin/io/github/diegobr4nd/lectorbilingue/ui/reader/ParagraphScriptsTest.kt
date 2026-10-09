@@ -172,10 +172,13 @@ class ParagraphScriptsTest {
     }
 
     // Seguridad 3b: la página manda a lo sumo el tope + 1 por párrafo (Kotlin ve que es demasiado largo sin recibir megas).
-    @Test fun `find recorta cada texto al tope mas uno ya con espacios colapsados`() {
+    // Se normaliza como TranslationRules.normalize y, si pasa del tope, se corta y se marca con "…": así el recorte nunca
+    // acaba en un espacio que Kotlin quitaría (dejaría justo el tope y se traduciría a medias).
+    @Test fun `find recorta cada texto al tope mas uno sin acabar en espacio`() {
         val js = ParagraphScripts.find(1.0, 2.0)
-        assertTrue(js.contains("\"max\":20001"), js)
-        assertTrue(js.contains("function clip(t) { return t.replace(/\\s+/g, ' ').trim().slice(0, a.max); }"), js)
+        assertTrue(js.contains("\"max\":20000"), js)
+        assertTrue(js.contains("""t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();"""), js)
+        assertTrue(js.contains("return t.length > a.max ? t.slice(0, a.max) + '…' : t;"), js)
         assertTrue(js.contains("out = [{ i: at, t: clip(text) }]"), js)
         assertTrue(js.contains("out.push({ i: k, t: clip(t) })"), js)
     }

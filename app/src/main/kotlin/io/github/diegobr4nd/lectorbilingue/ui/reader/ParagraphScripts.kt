@@ -70,12 +70,13 @@ object ParagraphScripts {
     /**
      * El párrafo bajo el punto (en px CSS) y los [following] siguientes con texto.
      * Responde `JSON.stringify([{i, t}, …])`, el tocado primero; `[]` si no hay párrafo con texto. Cada `t` va con los
-     * espacios colapsados y recortado a [TranslationRules.MAX_PARAGRAPH_CHARS] + 1: así la app sabe que es demasiado
-     * largo sin recibir megas de texto.
+     * espacios colapsados como en [TranslationRules.normalize] y, si pasa de [TranslationRules.MAX_PARAGRAPH_CHARS],
+     * cortado ahí más "…" (el tope + 1, nunca acabado en espacio): así la app sabe que es demasiado largo sin recibir
+     * megas de texto.
      */
     fun find(xCss: Double, yCss: Double, following: Int = 5): String = script(
         JSONObject().put("sel", SELECTOR).put("x", xCss).put("y", yCss).put("n", following)
-            .put("max", TranslationRules.MAX_PARAGRAPH_CHARS + 1),
+            .put("max", TranslationRules.MAX_PARAGRAPH_CHARS),
         """
         var hit = document.elementFromPoint(a.x, a.y);
         var el = hit && hit.closest ? hit.closest(a.sel) : null;
@@ -84,7 +85,10 @@ object ParagraphScripts {
         var at = all.indexOf(el);
         var text = el.textContent || '';
         if (at < 0 || !text.trim()) return JSON.stringify([]);
-        function clip(t) { return t.replace(/\s+/g, ' ').trim().slice(0, a.max); }
+        function clip(t) {
+          t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();
+          return t.length > a.max ? t.slice(0, a.max) + '…' : t;
+        }
         var out = [{ i: at, t: clip(text) }];
         for (var k = at + 1; k < all.length && out.length <= a.n; k++) {
           var t = all[k].textContent || '';
