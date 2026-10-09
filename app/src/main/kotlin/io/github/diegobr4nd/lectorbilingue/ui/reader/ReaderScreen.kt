@@ -86,7 +86,12 @@ fun ReaderScreen(
     onExternalDone: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val vm: ReaderViewModel = viewModel(factory = viewModelFactory { initializer { ReaderViewModel(bookId, app.books) } })
+    val vm: ReaderViewModel = viewModel(
+        factory = viewModelFactory {
+            // Idiomas del OPF (`dc:language`, p. ej. "en", "es-MX"): solo para la dirección automática.
+            initializer { ReaderViewModel(bookId, app.books, app.translations, publication.metadata.languages) }
+        },
+    )
     val barsVisible by vm.barsVisible.collectAsStateWithLifecycle()
     val label by vm.label.collectAsStateWithLifecycle()
     val link by externalLink.collectAsStateWithLifecycle()
