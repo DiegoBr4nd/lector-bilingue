@@ -53,6 +53,25 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 @Preview(name = "Oscuro 840", widthDp = 840, heightDp = 800, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 private annotation class ReaderPreviewSet
 
+/**
+ * Como [ReaderPreviewSet], con alto para hasta cuatro estados de la tarjeta uno bajo otro: con letra al 200 % cada
+ * párrafo con su tarjeta ocupa unos 550 dp y en 720 dp quedaban recortados.
+ */
+@Preview(name = "Claro 360", widthDp = 360, heightDp = 1200, showBackground = true)
+@Preview(name = "Oscuro 360", widthDp = 360, heightDp = 1200, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "Claro 360 letra 200", widthDp = 360, heightDp = 2600, fontScale = 2f, showBackground = true)
+@Preview(
+    name = "Oscuro 360 letra 200",
+    widthDp = 360,
+    heightDp = 2600,
+    fontScale = 2f,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    showBackground = true,
+)
+@Preview(name = "Claro 840", widthDp = 840, heightDp = 1000, showBackground = true)
+@Preview(name = "Oscuro 840", widthDp = 840, heightDp = 1000, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+private annotation class CardPreviewSet
+
 // Textos inventados. La página de Readium no se puede previsualizar (es un WebView): se simula con texto fijo.
 private const val SampleTitle = "La ciudad de los faros apagados y otras historias de marineros"
 private const val SampleText = "Párrafo de muestra inventado. La lluvia golpeaba los cristales del faro mientras " +
@@ -202,15 +221,25 @@ private fun CardSimulation(card: SampleCard) {
     }
 }
 
-/** Los estados de la tarjeta (con las variantes de preparación y de párrafo demasiado largo), cada uno bajo su párrafo. */
-@ReaderPreviewSet
+/** Cada estado de la tarjeta bajo su párrafo, en dos tandas para que ninguno quede recortado. */
 @Composable
-private fun TarjetasEstados() = LectorTheme {
+private fun CardStates(cards: List<SampleCard>) = LectorTheme {
     Column(Modifier.fillMaxSize().background(PageWhite).verticalScroll(rememberScrollState()).padding(Spacing.l)) {
-        for (card in SampleCard.entries) {
+        for (card in cards) {
             Text(SampleText, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = ReadingFontFamily), color = PageInk)
             CardSimulation(card)
         }
         Spacer(Modifier.height(Spacing.l))
     }
 }
+
+/** Mientras traduce y con la traducción. */
+@CardPreviewSet
+@Composable
+private fun TarjetasEstados() = CardStates(listOf(SampleCard.Esqueleto, SampleCard.Preparando, SampleCard.Texto))
+
+/** Los avisos: falta el modelo, los dos fallos y el párrafo demasiado largo. */
+@CardPreviewSet
+@Composable
+private fun TarjetasAvisos() =
+    CardStates(listOf(SampleCard.FaltaModelo, SampleCard.Fallo, SampleCard.FalloPreparar, SampleCard.DemasiadoLargo))
