@@ -484,4 +484,28 @@ class ReaderViewModelTest {
         advanceUntilIdle()
         assertTrue(said.isEmpty())
     }
+
+    // Seguridad 3b (MEDIO): el párrafo enorme no ocupa el motor, no se reintenta y el siguiente se traduce.
+    @Test fun parrafoDemasiadoLargoMuestraSuTarjetaSinReintento() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps()
+        val huge = "Ab. ".repeat(6_000)
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, huge), p(1, "B.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.TooLong), ops.last())
+        assertEquals(0, engine.loadCount)
+        val before = ops.size
+        vm.retry("c1.xhtml", 0); advanceUntilIdle()
+        assertEquals(before, ops.size)
+        vm.onTap("c1.xhtml", listOf(p(1, "B.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 1, CardState.Text("T(B.)")), ops.last())
+    }
+
+    @Test fun noPretraduceParrafosLargos() = runTest(dispatcher) {
+        val (vm, _) = vmWithOps()
+        vm.onResourceShown("c1.xhtml")
+        vm.onTap("c1.xhtml", listOf(p(0, "A."), p(1, "B".repeat(4_001)), p(2, "C.")))
+        advanceUntilIdle()
+        assertEquals(listOf("A.", "C."), engine.translatedTexts)
+    }
 }

@@ -12,6 +12,12 @@ object TranslationRules {
     // Máximo de caracteres por oración en los motores (OpusEngine.kt y FirefoxEngine.kt)
     private const val MAX_SENTENCE_CHARS = 1000
 
+    /**
+     * Tope de un párrafo (ya normalizado). Uno más largo ocuparía el motor minutos (y el toque siguiente esperaría
+     * detrás): se responde enseguida "demasiado largo", sin traducirlo.
+     */
+    const val MAX_PARAGRAPH_CHARS = 20_000
+
     /** [override] (columna `books.direction`) manda si es un par válido; si no, el primer idioma del libro. */
     fun direction(bookLanguages: List<String>, override: String?): LanguagePair {
         parseWire(override)?.let { return it }
@@ -30,6 +36,9 @@ object TranslationRules {
     }
 
     fun normalize(text: String): String = text.replace(SPACES, " ").trim()
+
+    /** true si [normalizedText] pasa de [MAX_PARAGRAPH_CHARS]. */
+    fun tooLong(normalizedText: String): Boolean = normalizedText.length > MAX_PARAGRAPH_CHARS
 
     fun cacheKey(modelTag: String, pair: LanguagePair, normalizedText: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest("$modelTag\n${wire(pair)}\n$normalizedText".toByteArray(Charsets.UTF_8))

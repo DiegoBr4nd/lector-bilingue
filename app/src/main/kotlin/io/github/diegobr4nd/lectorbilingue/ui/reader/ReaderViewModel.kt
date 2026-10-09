@@ -219,6 +219,7 @@ class ReaderViewModel(
         is TranslateResult.MissingModel -> CardState.MissingModel(engine)
         TranslateResult.EngineFailed -> CardState.Failed(prepare = true)
         TranslateResult.ParagraphFailed -> CardState.Failed(prepare = false)
+        TranslateResult.TooLong -> CardState.TooLong
     }
 
     /** Al salir del Lector: se cancela la fila y se descarga el motor. */

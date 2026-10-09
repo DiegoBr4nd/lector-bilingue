@@ -223,4 +223,26 @@ class TranslationServiceTest {
         assertEquals(0, engine.loadCount)
         assertTrue(engine.translatedTexts.isEmpty())
     }
+
+    // Seguridad 3b (MEDIO): un párrafo enorme ocuparía el motor minutos; se responde enseguida, sin fila ni motor.
+    @Test fun parrafoDemasiadoLargoRespondeEnseguidaSinMotor() = runTest(dispatcher) {
+        val engine = FakeEngine()
+        val provider = FakeEngineProvider(opus = engine)
+        val s = service(engine, provider)
+        val huge = "Ab. ".repeat(6_000) // 23 999 caracteres normalizados
+        assertEquals(TranslateResult.TooLong, s.translate(req(huge)))
+        s.prefetch(listOf(req(huge, Priority.PREFETCH)))
+        advanceUntilIdle()
+        assertEquals(0, provider.installedCalls) // ni siquiera mira lo instalado
+        assertEquals(0, engine.loadCount)
+        assertTrue(engine.translatedTexts.isEmpty())
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun elTopeSeMideSobreElTextoNormalizado() = runTest(dispatcher) {
+        val s = service()
+        assertEquals(TranslateResult.Done("T(a b)"), s.translate(req("a" + " ".repeat(30_000) + "b")))
+        // Justo en el tope todavía se traduce.
+        assertTrue(s.translate(req("a".repeat(20_000))) is TranslateResult.Done)
+    }
 }

@@ -6,6 +6,7 @@ import io.github.diegobr4nd.lectorbilingue.engine.opus.NativeBridge as OpusNativ
 import io.github.diegobr4nd.lectorbilingue.engine.firefox.NativeBridge as FirefoxNativeBridge
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -36,6 +37,11 @@ class TranslationRulesTest {
         assertNotEquals(k, TranslationRules.cacheKey("opus:opus-en-es:1", esEn, "Hi."))
         assertNotEquals(k, TranslationRules.cacheKey("opus:opus-en-es:1", enEs, "Hi!"))
         assertEquals(k, TranslationRules.cacheKey("opus:opus-en-es:1", enEs, "Hi."))
+    }
+    @Test fun `un parrafo normalizado de mas de 20000 caracteres es demasiado largo`() {
+        assertEquals(20_000, TranslationRules.MAX_PARAGRAPH_CHARS)
+        assertFalse(TranslationRules.tooLong("a".repeat(20_000)))
+        assertTrue(TranslationRules.tooLong("a".repeat(20_001)))
     }
     @Test fun `tandas de oraciones de hasta 4000 caracteres sin partir oraciones`() {
         val s = "Una oración de prueba. ".repeat(400).trim()

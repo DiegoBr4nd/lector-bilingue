@@ -170,4 +170,20 @@ class ParagraphScriptsTest {
         val js = ParagraphScripts.insert(0, Card.Preparing, labels)
         assertTrue(js.contains("a.kind === 'esqueleto' || a.kind === 'preparando'"), js)
     }
+
+    // Seguridad 3b: la página manda a lo sumo el tope + 1 por párrafo (Kotlin ve que es demasiado largo sin recibir megas).
+    @Test fun `find recorta cada texto al tope mas uno ya con espacios colapsados`() {
+        val js = ParagraphScripts.find(1.0, 2.0)
+        assertTrue(js.contains("\"max\":20001"), js)
+        assertTrue(js.contains("function clip(t) { return t.replace(/\\s+/g, ' ').trim().slice(0, a.max); }"), js)
+        assertTrue(js.contains("out = [{ i: at, t: clip(text) }]"), js)
+        assertTrue(js.contains("out.push({ i: k, t: clip(t) })"), js)
+    }
+
+    @Test fun `la tarjeta de parrafo demasiado largo es de error sin enlace`() {
+        val js = ParagraphScripts.insert(0, Card.TooLong("Este párrafo es demasiado largo para traducirlo"), labels)
+        assertTrue(js.contains("\"kind\":\"error\""), js)
+        assertTrue(js.contains("\"spoken\":\"Este párrafo es demasiado largo para traducirlo\""), js)
+        assertFalse(js.contains("\"retry\""), js)
+    }
 }

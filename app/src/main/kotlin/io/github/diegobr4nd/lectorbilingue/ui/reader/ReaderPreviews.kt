@@ -155,11 +155,12 @@ private val WarmBg = Color(0xFFFEF3F2)
 private val WarmRule = Color(0xFFB42318)
 private val WarmLink = Color(0xFF912018)
 
-private enum class SampleCard { Esqueleto, Preparando, Texto, FaltaModelo, Fallo, FalloPreparar }
+private enum class SampleCard { Esqueleto, Preparando, Texto, FaltaModelo, Fallo, FalloPreparar, DemasiadoLargo }
 
 @Composable
 private fun CardSimulation(card: SampleCard) {
-    val warm = card == SampleCard.FaltaModelo || card == SampleCard.Fallo || card == SampleCard.FalloPreparar
+    val warm = card == SampleCard.FaltaModelo || card == SampleCard.Fallo || card == SampleCard.FalloPreparar ||
+        card == SampleCard.DemasiadoLargo
     val fontSize = MaterialTheme.typography.bodyLarge.fontSize * 0.92f
     Row(
         Modifier
@@ -179,6 +180,8 @@ private fun CardSimulation(card: SampleCard) {
                     Box(Modifier.padding(top = 8.dp).fillMaxWidth(0.62f).height(10.dp).clip(RoundedCornerShape(4.dp)).background(CardStripe))
                 }
                 SampleCard.Texto -> Text("Era una noche oscura y la lluvia no dejaba de caer sobre el tejado.", style = style)
+                // Sin enlace: reintentar daría lo mismo.
+                SampleCard.DemasiadoLargo -> Text("Este párrafo es demasiado largo para traducirlo", style = style)
                 else -> {
                     val (label, action) = when (card) {
                         SampleCard.FaltaModelo -> "Falta el idioma inglés → español (227 MB)" to "Descargar"
@@ -199,7 +202,7 @@ private fun CardSimulation(card: SampleCard) {
     }
 }
 
-/** Los cinco estados de la tarjeta (y la variante de preparación), cada uno bajo su párrafo. */
+/** Los estados de la tarjeta (con las variantes de preparación y de párrafo demasiado largo), cada uno bajo su párrafo. */
 @ReaderPreviewSet
 @Composable
 private fun TarjetasEstados() = LectorTheme {

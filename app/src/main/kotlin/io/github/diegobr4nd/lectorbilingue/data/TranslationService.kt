@@ -27,6 +27,7 @@ sealed interface TranslateResult {
     data class MissingModel(val engine: EngineId) : TranslateResult
     data object EngineFailed : TranslateResult      // no se pudo preparar el motor
     data object ParagraphFailed : TranslateResult   // falló una oración: nada en caché
+    data object TooLong : TranslateResult           // más de MAX_PARAGRAPH_CHARS: ni fila ni motor
 }
 
 /**
@@ -39,6 +40,7 @@ sealed interface TranslateResult {
  * - **Sin duplicados:** un pedido con la misma huella que otro en la fila o en curso espera el resultado de
  *   ese (un `Deferred`, una "promesa" de resultado, por huella).
  * - **Caché:** primero Room; solo se guarda un párrafo completo.
+ * - **Tope:** un párrafo de más de [TranslationRules.MAX_PARAGRAPH_CHARS] responde [TranslateResult.TooLong] enseguida.
  * - **Motor perezoso:** se carga con el primer pedido que lo necesita, mirando cada vez lo instalado; se
  *   descarga tras [idleUnloadMillis] sin pedidos o con [release].
  *
@@ -163,6 +165,8 @@ class TranslationService(
     private suspend fun submit(request: TranslateRequest, epoch: Long): Deferred<TranslateResult>? {
         val text = TranslationRules.normalize(request.text)
         if (text.isEmpty()) return CompletableDeferred(TranslateResult.Done(""))
+        // Antes de mirar lo instalado: el párrafo enorme no ocupa ni el hilo del motor.
+        if (TranslationRules.tooLong(text)) return CompletableDeferred(TranslateResult.TooLong)
         val tag = when (val r = resolve(request.pair)) {
             is Resolution.Ready -> r.tag
             is Resolution.Missing -> return CompletableDeferred(r.result)

@@ -42,6 +42,7 @@ class CardRulesTest {
         prepareFailed = "No se pudo preparar el traductor",
         retry = "Reintentar",
         download = "Descargar",
+        tooLong = "Este párrafo es demasiado largo para traducirlo",
         missing = { engine -> "Falta $engine" },
         missingSpoken = { engine -> "Falta $engine, dicho" },
     )
@@ -53,6 +54,14 @@ class CardRulesTest {
         assertEquals(Card.MissingModel("Falta OPUS", "Descargar", "Falta OPUS, dicho"), CardRules.card(CardState.MissingModel(EngineId.OPUS), texts))
         assertEquals(Card.Failed("No se pudo traducir este párrafo", "Reintentar"), CardRules.card(CardState.Failed(prepare = false), texts))
         assertEquals(Card.Failed("No se pudo preparar el traductor", "Reintentar"), CardRules.card(CardState.Failed(prepare = true), texts))
+        // Sin enlace: reintentar daría lo mismo.
+        assertEquals(Card.TooLong("Este párrafo es demasiado largo para traducirlo"), CardRules.card(CardState.TooLong, texts))
+    }
+
+    @Test fun `no pretraduce parrafos de mas de 4000 caracteres`() {
+        val long = "B. ".repeat(1_500).trim() // 4 499 caracteres
+        val hit = listOf(PageParagraph(0, "A."), PageParagraph(1, long), PageParagraph(2, "C."), PageParagraph(3, "D".repeat(4_000)))
+        assertEquals(listOf(PageParagraph(2, "C."), PageParagraph(3, "D".repeat(4_000))), CardRules.prefetchTargets(hit, emptySet()))
     }
 
     @Test fun `tamano del modelo que falta segun el catalogo`() {
@@ -73,5 +82,6 @@ class CardRulesTest {
         assertEquals("No se pudo preparar el traductor. Reintentar", CardRules.spoken(CardState.Failed(prepare = true), texts))
         assertEquals(null, CardRules.spoken(CardState.Skeleton, texts))
         assertEquals(null, CardRules.spoken(CardState.Preparing, texts))
+        assertEquals("Este párrafo es demasiado largo para traducirlo", CardRules.spoken(CardState.TooLong, texts))
     }
 }

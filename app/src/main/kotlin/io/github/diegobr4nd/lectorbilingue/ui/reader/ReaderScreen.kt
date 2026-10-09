@@ -381,9 +381,10 @@ private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardText
     val prepareFailed = stringResource(R.string.reader_card_prepare_failed)
     val retry = stringResource(R.string.reader_card_retry)
     val download = stringResource(R.string.reader_card_download)
-    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download) {
+    val tooLong = stringResource(R.string.reader_card_too_long)
+    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong) {
         CardTexts(
-            failed, prepareFailed, retry, download,
+            failed, prepareFailed, retry, download, tooLong,
             missing = { engine -> CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize },
             // Para TalkBack: "a" en vez de la flecha y "megabytes" en vez de "MB".
             missingSpoken = { engine ->

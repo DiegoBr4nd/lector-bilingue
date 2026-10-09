@@ -113,6 +113,7 @@
     <string name="reader_card_download">Descargar</string>
     <string name="reader_card_failed">No se pudo traducir este párrafo</string>
     <string name="reader_card_prepare_failed">No se pudo preparar el traductor</string>
+    <string name="reader_card_too_long">Este párrafo es demasiado largo para traducirlo</string>
     <string name="reader_card_retry">Reintentar</string>
     <string name="reader_card_hidden">Traducción oculta</string>
     <string name="reader_card_announce">Traducción: %1$s</string>

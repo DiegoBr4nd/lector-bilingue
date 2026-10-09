@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue.ui.reader
 
+import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -24,6 +25,9 @@ sealed interface Card {
     data class MissingModel(val label: String, val action: String, val spoken: String) : Card
 
     data class Failed(val label: String, val retry: String) : Card
+
+    /** "Este párrafo es demasiado largo…": estilo de error, sin enlace (reintentar daría lo mismo). */
+    data class TooLong(val label: String) : Card
 }
 
 /** Textos fijos de la tarjeta (vienen de strings.xml). [translationPrefix] es el nombre que oye TalkBack. */
@@ -65,10 +69,13 @@ object ParagraphScripts {
 
     /**
      * El párrafo bajo el punto (en px CSS) y los [following] siguientes con texto.
-     * Responde `JSON.stringify([{i, t}, …])`, el tocado primero; `[]` si no hay párrafo con texto.
+     * Responde `JSON.stringify([{i, t}, …])`, el tocado primero; `[]` si no hay párrafo con texto. Cada `t` va con los
+     * espacios colapsados y recortado a [TranslationRules.MAX_PARAGRAPH_CHARS] + 1: así la app sabe que es demasiado
+     * largo sin recibir megas de texto.
      */
     fun find(xCss: Double, yCss: Double, following: Int = 5): String = script(
-        JSONObject().put("sel", SELECTOR).put("x", xCss).put("y", yCss).put("n", following),
+        JSONObject().put("sel", SELECTOR).put("x", xCss).put("y", yCss).put("n", following)
+            .put("max", TranslationRules.MAX_PARAGRAPH_CHARS + 1),
         """
         var hit = document.elementFromPoint(a.x, a.y);
         var el = hit && hit.closest ? hit.closest(a.sel) : null;
@@ -77,10 +84,11 @@ object ParagraphScripts {
         var at = all.indexOf(el);
         var text = el.textContent || '';
         if (at < 0 || !text.trim()) return JSON.stringify([]);
-        var out = [{ i: at, t: text }];
+        function clip(t) { return t.replace(/\s+/g, ' ').trim().slice(0, a.max); }
+        var out = [{ i: at, t: clip(text) }];
         for (var k = at + 1; k < all.length && out.length <= a.n; k++) {
           var t = all[k].textContent || '';
-          if (t.trim()) out.push({ i: k, t: t });
+          if (t.trim()) out.push({ i: k, t: clip(t) });
         }
         return JSON.stringify(out);
         """,
@@ -121,6 +129,7 @@ object ParagraphScripts {
             is Card.Text -> data.put("kind", "texto").put("text", card.translation)
             is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action).put("spoken", card.spoken)
             is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry)
+            is Card.TooLong -> data.put("kind", "error").put("text", card.label).put("spoken", card.label)
         }
         return script(
             data,
