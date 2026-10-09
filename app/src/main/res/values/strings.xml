@@ -103,19 +103,26 @@
     <string name="reader_card_translation">Traducción</string>
     <string name="reader_card_skeleton">Traduciendo…</string>
     <string name="reader_card_preparing">Preparando el traductor…</string>
-    <string name="reader_card_missing">Falta el idioma %1$s (%2$d MB) ·</string>
-    <string name="reader_card_missing_nosize">Falta el idioma %1$s ·</string>
+    <string name="reader_card_missing">Falta el idioma %1$s (%2$d MB)</string>
+    <string name="reader_card_missing_nosize">Falta el idioma %1$s</string>
+    <plurals name="reader_card_missing_spoken">
+        <item quantity="one">Falta el idioma %1$s a %2$s, %3$d megabyte. Descargar</item>
+        <item quantity="other">Falta el idioma %1$s a %2$s, %3$d megabytes. Descargar</item>
+    </plurals>
+    <string name="reader_card_missing_spoken_nosize">Falta el idioma %1$s a %2$s. Descargar</string>
     <string name="reader_card_download">Descargar</string>
-    <string name="reader_card_failed">No se pudo traducir este párrafo ·</string>
-    <string name="reader_card_prepare_failed">No se pudo preparar el traductor ·</string>
+    <string name="reader_card_failed">No se pudo traducir este párrafo</string>
+    <string name="reader_card_prepare_failed">No se pudo preparar el traductor</string>
     <string name="reader_card_retry">Reintentar</string>
     <string name="reader_card_hidden">Traducción oculta</string>
+    <string name="reader_card_announce">Traducción: %1$s</string>
     <!-- Dirección de traducción del libro (3b). -->
     <string name="reader_direction">%1$s → %2$s</string>
     <string name="reader_direction_desc">Idioma de traducción: %1$s a %2$s</string>
     <string name="reader_direction_action">cambiar el idioma</string>
     <string name="reader_direction_title">Traducir de</string>
     <string name="reader_direction_current">Dirección actual</string>
+    <string name="reader_direction_option">%1$s a %2$s</string>
     <string name="reader_direction_changed">Traducir de %1$s a %2$s</string>
     <string name="language_en">inglés</string>
     <string name="language_es">español</string>

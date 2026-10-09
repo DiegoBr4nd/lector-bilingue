@@ -79,6 +79,15 @@ class ParagraphBridgeOnDeviceTest {
             bridge.show(1, Card.Skeleton, labels)
             assertEquals("Traduciendo…", js(s, "$CARD.querySelector('span.lector-esqueleto').textContent"))
             assertEquals("1", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            // "Preparando…" late igual (mismo span); sin modelo, TalkBack oye "a" en vez de la flecha y vuelve "Traducción" después.
+            bridge.show(1, Card.Preparing, labels)
+            assertEquals("Preparando el traductor…", js(s, "$CARD.querySelector('span.lector-esqueleto').textContent"))
+            bridge.show(1, Card.MissingModel("Falta el idioma inglés → español (227 MB)", "Descargar", "Falta el idioma inglés a español"), labels)
+            assertEquals("Falta el idioma inglés a español", js(s, "$CARD.getAttribute('aria-label')"))
+            assertEquals("Descargar", js(s, "$CARD.querySelector('span.lector-reintentar').textContent"))
+            assertTrue(js(s, "String($CARD.querySelector('span.lector-reintentar').getBoundingClientRect().height)")!!.toDouble() >= 47.0)
+            bridge.show(1, Card.Text("Hola"), labels)
+            assertEquals("Traducción", js(s, "$CARD.getAttribute('aria-label')"))
 
             // 4. Texto hostil: entra como texto; nada se ejecuta ni se crea marcado.
             val evil = "\"); alert(1); (\" </script><img src=x onerror=alert(2)>   fin <img src=x onerror=\"window.__lectorXss=1\">"

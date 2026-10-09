@@ -43,13 +43,14 @@ class CardRulesTest {
         retry = "Reintentar",
         download = "Descargar",
         missing = { engine -> "Falta $engine" },
+        missingSpoken = { engine -> "Falta $engine, dicho" },
     )
 
     @Test fun `cada estado se vuelve la tarjeta con sus textos`() {
         assertEquals(Card.Skeleton, CardRules.card(CardState.Skeleton, texts))
         assertEquals(Card.Preparing, CardRules.card(CardState.Preparing, texts))
         assertEquals(Card.Text("Hola"), CardRules.card(CardState.Text("Hola"), texts))
-        assertEquals(Card.MissingModel("Falta OPUS", "Descargar"), CardRules.card(CardState.MissingModel(EngineId.OPUS), texts))
+        assertEquals(Card.MissingModel("Falta OPUS", "Descargar", "Falta OPUS, dicho"), CardRules.card(CardState.MissingModel(EngineId.OPUS), texts))
         assertEquals(Card.Failed("No se pudo traducir este párrafo", "Reintentar"), CardRules.card(CardState.Failed(prepare = false), texts))
         assertEquals(Card.Failed("No se pudo preparar el traductor", "Reintentar"), CardRules.card(CardState.Failed(prepare = true), texts))
     }
@@ -63,5 +64,14 @@ class CardRulesTest {
         assertEquals(40L, CardRules.modelMegabytes(pairs, "en-es", EngineId.FIREFOX))
         assertEquals(null, CardRules.modelMegabytes(pairs, "es-en", EngineId.FIREFOX))
         assertEquals(null, CardRules.modelMegabytes(emptyList(), "en-es", EngineId.OPUS)) // sin catálogo: sin tamaño
+    }
+
+    @Test fun `que oye TalkBack al llegar el resultado de un toque`() {
+        assertEquals("Hola", CardRules.spoken(CardState.Text("Hola"), texts))
+        assertEquals("Falta OPUS, dicho", CardRules.spoken(CardState.MissingModel(EngineId.OPUS), texts))
+        assertEquals("No se pudo traducir este párrafo. Reintentar", CardRules.spoken(CardState.Failed(prepare = false), texts))
+        assertEquals("No se pudo preparar el traductor. Reintentar", CardRules.spoken(CardState.Failed(prepare = true), texts))
+        assertEquals(null, CardRules.spoken(CardState.Skeleton, texts))
+        assertEquals(null, CardRules.spoken(CardState.Preparing, texts))
     }
 }

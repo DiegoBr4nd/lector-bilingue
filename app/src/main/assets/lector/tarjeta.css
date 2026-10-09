@@ -40,6 +40,15 @@ aside.lector-tarjeta .lector-reintentar {
   text-decoration: underline;
 }
 
+/* El "·" de antes del enlace es solo visual: el texto alternativo vacío ("/ ''") hace que TalkBack no lo lea. */
+aside.lector-tarjeta .lector-reintentar::before {
+  content: "\00b7\00a0" / "";
+  display: inline-block;
+  color: #1f2937;
+  text-decoration: none;
+  margin-inline-end: 0.15em;
+}
+
 aside.lector-tarjeta[data-lector-estado="error"] .lector-reintentar,
 aside.lector-tarjeta[data-lector-estado="falta-modelo"] .lector-reintentar {
   color: #912018; /* 8,0:1 sobre #fef3f2 */

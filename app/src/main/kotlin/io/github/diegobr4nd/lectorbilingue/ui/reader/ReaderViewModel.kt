@@ -72,6 +72,11 @@ class ReaderViewModel(
     private val _cardOps = MutableSharedFlow<CardOp>(extraBufferCapacity = 256)
     val cardOps: SharedFlow<CardOp> = _cardOps.asSharedFlow()
 
+    // Ruling L: el resultado de un toque (o de reintentar tocando la tarjeta) se anuncia a TalkBack; la reinserción,
+    // la pretraducción y los reintentos al cerrar Idiomas no. Solo si llega con su recurso a la vista.
+    private val _announcements = MutableSharedFlow<CardOp.Show>(extraBufferCapacity = 16)
+    val announcements: SharedFlow<CardOp.Show> = _announcements.asSharedFlow()
+
     /** Una tarjeta abierta. [token] cambia con cada pedido: un resultado viejo (o de una tarjeta ya cerrada) se ignora. */
     private class OpenCard(val text: String, var state: CardState, var token: Long)
 
@@ -112,7 +117,7 @@ class ReaderViewModel(
         if (TranslationRules.normalize(tapped.text).isEmpty()) return
         val card = OpenCard(tapped.text, CardState.Skeleton, 0)
         open[tapped.index] = card
-        request(resource, tapped.index, card, hit)
+        request(resource, tapped.index, card, hit, announce = true)
     }
 
     /** El recurso visible cambió o se recargó: se cancela la pretraducción de los demás y se reponen sus tarjetas. */
@@ -128,7 +133,7 @@ class ReaderViewModel(
     /** Tocar una tarjeta con error (o sin modelo) la vuelve a pedir. Cualquier otro estado: nada. */
     fun retry(resource: String, index: Int) {
         val card = cards[resource]?.get(index) ?: return
-        if (card.state is CardState.Failed || card.state is CardState.MissingModel) request(resource, index, card, null)
+        if (card.state is CardState.Failed || card.state is CardState.MissingModel) request(resource, index, card, null, announce = true)
     }
 
     /**
@@ -167,8 +172,11 @@ class ReaderViewModel(
         }
     }
 
-    /** Pide la traducción de [card] como toque; con [hit], al llegar pretraduce los siguientes. */
-    private fun request(resource: String, index: Int, card: OpenCard, hit: List<PageParagraph>?) {
+    /**
+     * Pide la traducción de [card] como toque; con [hit], al llegar pretraduce los siguientes. [announce]: la pidió la
+     * persona con un toque, así que el resultado se anuncia.
+     */
+    private fun request(resource: String, index: Int, card: OpenCard, hit: List<PageParagraph>?, announce: Boolean = false) {
         val token = ++nextToken
         card.token = token
         card.state = if (translations.engineReady(_direction.value)) CardState.Skeleton else CardState.Preparing
@@ -187,6 +195,7 @@ class ReaderViewModel(
             card.state = result.toCardState()
             // En otro recurso no se inserta; queda guardado y se repone al volver (onResourceShown).
             showIfVisible(resource, index, card.state)
+            if (announce && visible == resource) _announcements.tryEmit(CardOp.Show(resource, index, card.state))
             // Solo si tradujo: tras un fallo o sin modelo, cada pretraducción volvería a intentar cargar el motor.
             if (hit != null && result is TranslateResult.Done) prefetch(resource, pair, hit)
         }

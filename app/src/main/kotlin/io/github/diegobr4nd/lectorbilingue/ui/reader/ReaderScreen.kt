@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -118,8 +119,8 @@ fun ReaderScreen(
     var languagesOpen by rememberSaveable { mutableStateOf(false) }
     var resumes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
-    val view = LocalView.current
-    val pageDensity = LocalDensity.current // px del aparato por px CSS (el WebView no aplica zoom)
+    val view by rememberUpdatedState(LocalView.current)
+    val pageDensity by rememberUpdatedState(LocalDensity.current) // px del aparato por px CSS (el WebView no aplica zoom)
     val scope = rememberCoroutineScope()
     val touchExploration = rememberTouchExploration()
     val reduceMotion = rememberReduceMotion()
@@ -133,8 +134,9 @@ fun ReaderScreen(
         stringResource(R.string.reader_card_preparing),
     )
     val currentLabels by rememberUpdatedState(labels)
-    val announceTranslating = stringResource(R.string.reader_card_skeleton)
-    val announceHidden = stringResource(R.string.reader_card_hidden)
+    val announceTranslating by rememberUpdatedState(stringResource(R.string.reader_card_skeleton))
+    val announceHidden by rememberUpdatedState(stringResource(R.string.reader_card_hidden))
+    val announceTranslation by rememberUpdatedState(stringResource(R.string.reader_card_announce))
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
     // Al pausar (antes de onStop): si la persona vuelve y reabre enseguida, la Biblioteca ya lee la última posición.
@@ -151,6 +153,15 @@ fun ReaderScreen(
                 is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels)
                 is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index)
             }
+        }
+    }
+    // Ruling L: TalkBack dice el resultado de un toque ("Traducción: …", "Falta el idioma…", "No se pudo…"). El texto
+    // solo va al servicio de accesibilidad: nunca a registros ni a la red.
+    LaunchedEffect(vm) {
+        vm.announcements.collect { op ->
+            if (op.resource != currentHref) return@collect
+            val spoken = CardRules.spoken(op.card, cardTexts) ?: return@collect
+            view.announce(if (op.card is CardState.Text) announceTranslation.format(spoken) else spoken)
         }
     }
     // Recurso nuevo (o vuelta al frente): cuando la página está lista y es ese recurso, primero se quitan todas las
@@ -180,7 +191,8 @@ fun ReaderScreen(
 
             // Toque (también el toque doble de TalkBack, que llega en el centro del párrafo). La página se lee de forma
             // asíncrona, así que no se sabe aquí si había un párrafo: se devuelve false y Readium sigue igual (no hay
-            // otros oyentes de toque).
+            // otros oyentes de toque). Ojo: si algún día se suma un DirectionalNavigationAdapter, también pasaría de
+            // página con los toques que traducen.
             override fun onTap(event: TapEvent): Boolean {
                 val href = currentHref ?: return false
                 val x = event.point.x
@@ -190,9 +202,11 @@ fun ReaderScreen(
                     val hit = bridge.paragraphsAt(x, y, density)
                     if (href != currentHref) return@launch
                     if (hit.isNotEmpty()) {
-                        val closing = vm.cardState(href, hit[0].index) != null
+                        val had = vm.cardState(href, hit[0].index) != null
                         vm.onTap(href, hit)
-                        view.announce(if (closing) announceHidden else announceTranslating)
+                        val has = vm.cardState(href, hit[0].index) != null
+                        // Solo si de verdad se abrió o cerró (un párrafo sin texto normalizado no abre nada).
+                        if (had && !has) view.announce(announceHidden) else if (!had && has) view.announce(announceTranslating)
                         return@launch
                     }
                     // ¿Sobre una tarjeta? (find no la cuenta como párrafo.)
@@ -359,14 +373,25 @@ private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardText
     val name = pairDirection(wire).withNoBreakArrow()
     val missing = stringResource(R.string.reader_card_missing)
     val missingNoSize = stringResource(R.string.reader_card_missing_nosize, name)
+    val source = languageName(direction.source)
+    val target = languageName(direction.target)
+    val resources = LocalResources.current
+    val spokenNoSize = stringResource(R.string.reader_card_missing_spoken_nosize, source, target)
     val failed = stringResource(R.string.reader_card_failed)
     val prepareFailed = stringResource(R.string.reader_card_prepare_failed)
     val retry = stringResource(R.string.reader_card_retry)
     val download = stringResource(R.string.reader_card_download)
-    return remember(pairs, wire, name, missing, missingNoSize, failed, prepareFailed, retry, download) {
-        CardTexts(failed, prepareFailed, retry, download) { engine ->
-            CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize
-        }
+    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download) {
+        CardTexts(
+            failed, prepareFailed, retry, download,
+            missing = { engine -> CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize },
+            // Para TalkBack: "a" en vez de la flecha y "megabytes" en vez de "MB".
+            missingSpoken = { engine ->
+                CardRules.modelMegabytes(pairs, wire, engine)?.let { mb ->
+                    resources.getQuantityString(R.plurals.reader_card_missing_spoken, mb.toInt(), source, target, mb)
+                } ?: spokenNoSize
+            },
+        )
     }
 }
 

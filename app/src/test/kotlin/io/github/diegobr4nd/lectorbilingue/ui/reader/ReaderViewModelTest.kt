@@ -429,4 +429,59 @@ class ReaderViewModelTest {
         vm.onTap("c1.xhtml", listOf(p(0, "")))
         assertNull(vm.cardState("c1.xhtml", 0)) // cerrada
     }
+
+    /** El VM, sus ops y lo que pide anunciar a TalkBack (Ruling L). */
+    private suspend fun TestScope.vmWithAnnouncements(): Triple<ReaderViewModel, List<CardOp>, List<CardOp.Show>> {
+        val (vm, ops) = vmWithOps()
+        val said = mutableListOf<CardOp.Show>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.announcements.toList(said) }
+        return Triple(vm, ops, said)
+    }
+
+    // Ruling L: se anuncia el resultado de un toque; la reinserción (volver al capítulo o al frente) no.
+    @Test fun anunciaElResultadoDelToqueYNoLaReinsercion() = runTest(dispatcher) {
+        val (vm, _, said) = vmWithAnnouncements()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi."), p(1, "Dos.")))
+        advanceUntilIdle()
+        assertEquals(listOf(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)"))), said)
+        vm.onResourceShown("c3.xhtml"); vm.onResourceShown("c1.xhtml")
+        advanceUntilIdle()
+        assertEquals(1, said.size) // ni la reinserción ni la pretraducción del párrafo 1
+    }
+
+    @Test fun anunciaElFalloYElReintentoPeroNoAlCerrarIdiomas() = runTest(dispatcher) {
+        engine.failOn = "Hi."
+        val (vm, _, said) = vmWithAnnouncements()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Failed(prepare = false)), said.single())
+        engine.failOn = null
+        vm.retry("c1.xhtml", 0) // también es un toque (sobre la tarjeta)
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)")), said.last())
+        assertEquals(2, said.size)
+    }
+
+    @Test fun sinModeloAnunciaYAlCerrarIdiomasNoVuelveAAnunciar() = runTest(dispatcher) {
+        provider.installedEngines = emptyMap()
+        val (vm, ops, said) = vmWithAnnouncements()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.MissingModel(EngineId.OPUS)), said.single())
+        provider.installedEngines = mapOf(EngineId.OPUS to FakeEngineProvider.OPUS_TAG)
+        vm.onLanguagesClosed()
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)")), ops.last())
+        assertEquals(1, said.size)
+    }
+
+    @Test fun resultadoQueLlegaEnOtroCapituloNoSeAnuncia() = runTest(dispatcher) {
+        val (vm, _, said) = vmWithAnnouncements()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        vm.onResourceShown("c3.xhtml")
+        advanceUntilIdle()
+        vm.onResourceShown("c1.xhtml")
+        advanceUntilIdle()
+        assertTrue(said.isEmpty())
+    }
 }

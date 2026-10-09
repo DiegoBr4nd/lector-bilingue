@@ -93,12 +93,16 @@ fun DirectionContent(current: LanguagePair, onSelect: (LanguagePair) -> Unit, mo
         )
         for (pair in ReaderDirections) {
             val selected = pair == current
+            // TalkBack oye "Inglés a español", no "flecha".
+            val spoken = stringResource(R.string.reader_direction_option, languageName(pair.source), languageName(pair.target))
+                .replaceFirstChar { it.uppercase() }
             Row(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .clickable(role = Role.Button) { onSelect(pair) }
                     .semantics {
+                        contentDescription = spoken
                         if (selected) {
                             this.selected = true
                             stateDescription = currentLabel

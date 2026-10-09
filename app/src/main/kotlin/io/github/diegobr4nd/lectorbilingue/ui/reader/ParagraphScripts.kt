@@ -17,8 +17,11 @@ sealed interface Card {
 
     data class Text(val translation: String) : Card
 
-    /** Texto ya armado, con el tamaño del modelo que falta; [action] ("Descargar") va como enlace subrayado. */
-    data class MissingModel(val label: String, val action: String) : Card
+    /**
+     * Texto ya armado, con el tamaño del modelo que falta; [action] ("Descargar") va como enlace subrayado. [spoken] es
+     * el nombre de la tarjeta para TalkBack, con "a" en vez de la flecha.
+     */
+    data class MissingModel(val label: String, val action: String, val spoken: String) : Card
 
     data class Failed(val label: String, val retry: String) : Card
 }
@@ -116,7 +119,7 @@ object ParagraphScripts {
             Card.Skeleton -> data.put("kind", "esqueleto").put("text", labels.skeleton)
             Card.Preparing -> data.put("kind", "preparando").put("text", labels.preparing)
             is Card.Text -> data.put("kind", "texto").put("text", card.translation)
-            is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action)
+            is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action).put("spoken", card.spoken)
             is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry)
         }
         return script(
@@ -131,12 +134,12 @@ object ParagraphScripts {
               card.classList.add('$CARD_CLASS');
               card.dataset.lectorI = String(a.i);
               card.setAttribute('role', 'note');
-              card.setAttribute('aria-label', a.prefix);
               p.after(card);
             }
+            card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);
             card.dataset.lectorEstado = a.kind;
             card.textContent = '';
-            if (a.kind === 'esqueleto') {
+            if (a.kind === 'esqueleto' || a.kind === 'preparando') {
               var s = document.createElement('span');
               s.classList.add('lector-esqueleto');
               s.textContent = a.text;

@@ -27,7 +27,7 @@ class ParagraphScriptsTest {
             ParagraphScripts.removeAll("OEBPS/c1.xhtml"),
             ParagraphScripts.insert(0, Card.Skeleton, labels),
             ParagraphScripts.insert(0, Card.Preparing, labels),
-            ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar"), labels),
+            ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar", "Falta el modelo, 40 megabytes. Descargar"), labels),
             ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar"), labels),
         )
         for (js in all) {
@@ -150,8 +150,11 @@ class ParagraphScriptsTest {
     }
 
     @Test fun `la tarjeta sin modelo lleva su accion como enlace`() {
-        val js = ParagraphScripts.insert(0, Card.MissingModel("Falta el idioma inglés → español (227 MB)", "Descargar"), labels)
+        val js = ParagraphScripts.insert(0, Card.MissingModel("Falta el idioma inglés → español (227 MB)", "Descargar", "Falta el idioma inglés a español"), labels)
         assertTrue(js.contains("\"retry\":\"Descargar\""), js)
+        // TalkBack oye "a" en vez de "flecha": nombre propio de la tarjeta, que se renueva en cada cambio de estado.
+        assertTrue(js.contains("\"spoken\":\"Falta el idioma inglés a español\""), js)
+        assertTrue(js.contains("card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix)"), js)
         assertTrue(js.contains("\"kind\":\"falta-modelo\""), js)
     }
 
@@ -160,5 +163,11 @@ class ParagraphScriptsTest {
         assertFalse(ParagraphScripts.parseReady("false"))
         assertFalse(ParagraphScripts.parseReady(null))
         assertFalse(ParagraphScripts.parseReady("\"true\""))
+    }
+
+    // "Preparando el traductor…" late como el esqueleto (va en el mismo span).
+    @Test fun `preparando usa el span que late`() {
+        val js = ParagraphScripts.insert(0, Card.Preparing, labels)
+        assertTrue(js.contains("a.kind === 'esqueleto' || a.kind === 'preparando'"), js)
     }
 }

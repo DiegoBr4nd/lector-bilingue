@@ -29,8 +29,9 @@ sealed interface CardOp {
 }
 
 /**
- * Textos de las tarjetas (vienen de strings.xml). [missing] arma "Falta el idioma …" para el motor que falta;
- * [retry] y [download] son el enlace subrayado del final.
+ * Textos de las tarjetas (vienen de strings.xml). [missing] arma "Falta el idioma …" para el motor que falta y
+ * [missingSpoken], lo mismo como lo oye TalkBack ("inglés a español, 227 megabytes. Descargar"); [retry] y [download]
+ * son el enlace subrayado del final.
  */
 class CardTexts(
     val paragraphFailed: String,
@@ -38,6 +39,7 @@ class CardTexts(
     val retry: String,
     val download: String,
     val missing: (EngineId) -> String,
+    val missingSpoken: (EngineId) -> String,
 )
 
 /** Reglas puras de las tarjetas del Lector. */
@@ -62,8 +64,19 @@ object CardRules {
         CardState.Skeleton -> Card.Skeleton
         CardState.Preparing -> Card.Preparing
         is CardState.Text -> Card.Text(state.translation)
-        is CardState.MissingModel -> Card.MissingModel(texts.missing(state.engine), texts.download)
+        is CardState.MissingModel -> Card.MissingModel(texts.missing(state.engine), texts.download, texts.missingSpoken(state.engine))
         is CardState.Failed -> Card.Failed(if (state.prepare) texts.prepareFailed else texts.paragraphFailed, texts.retry)
+    }
+
+    /**
+     * Lo que TalkBack dice cuando llega el resultado de un toque (Ruling L); null mientras traduce. Para el texto es solo
+     * la traducción: la pantalla le antepone "Traducción:". Solo va al servicio de accesibilidad, nunca a registros.
+     */
+    fun spoken(state: CardState, texts: CardTexts): String? = when (state) {
+        CardState.Skeleton, CardState.Preparing -> null
+        is CardState.Text -> state.translation
+        is CardState.MissingModel -> texts.missingSpoken(state.engine)
+        is CardState.Failed -> "${if (state.prepare) texts.prepareFailed else texts.paragraphFailed}. ${texts.retry}"
     }
 
     /** MB del modelo de [engine] para [pair] según el catálogo, o null si el catálogo aún no lo trae. */

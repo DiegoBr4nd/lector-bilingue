@@ -181,13 +181,13 @@ private fun CardSimulation(card: SampleCard) {
                 SampleCard.Texto -> Text("Era una noche oscura y la lluvia no dejaba de caer sobre el tejado.", style = style)
                 else -> {
                     val (label, action) = when (card) {
-                        SampleCard.FaltaModelo -> "Falta el idioma inglés → español (227 MB) ·" to "Descargar"
-                        SampleCard.Fallo -> "No se pudo traducir este párrafo ·" to "Reintentar"
-                        else -> "No se pudo preparar el traductor ·" to "Reintentar"
+                        SampleCard.FaltaModelo -> "Falta el idioma inglés → español (227 MB)" to "Descargar"
+                        SampleCard.Fallo -> "No se pudo traducir este párrafo" to "Reintentar"
+                        else -> "No se pudo preparar el traductor" to "Reintentar"
                     }
                     Text(
                         buildAnnotatedString {
-                            append("$label ")
+                            append("$label · ")
                             withStyle(SpanStyle(color = if (warm) WarmLink else CardLink, textDecoration = TextDecoration.Underline)) { append(action) }
                         },
                         style = style,
