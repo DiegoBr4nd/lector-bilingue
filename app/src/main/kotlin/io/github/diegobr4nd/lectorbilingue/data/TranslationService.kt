@@ -56,6 +56,10 @@ sealed interface TranslateResult {
  *
  * Nunca registra nada (ni texto, ni traducción, ni huella).
  *
+ * Fallos: se atrapa cualquier `Throwable` salvo la cancelación (también un `Error` del código nativo, como
+ * UnsatisfiedLinkError u OutOfMemoryError). Si se escapara, el ámbito lo descarta en silencio y el bucle quedaría
+ * muerto: todos los toques siguientes esperarían para siempre en "Preparando…".
+ *
  * La fila se protege con un candado corto (`synchronized`, sin suspender dentro) porque [prefetch],
  * [cancelPrefetchExcept] y [release] no son `suspend`. El motor cargado ([loaded]) solo cambia en [worker].
  */
@@ -222,7 +226,7 @@ class TranslationService(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Resolution.Missing(TranslateResult.EngineFailed)
             }
         }
@@ -247,6 +251,20 @@ class TranslationService(
     /** El único bucle que usa el motor. Termina cuando la fila queda vacía (y arranca la cuenta de inactividad). */
     private suspend fun runLoop() {
         val me = currentCoroutineContext()[Job]
+        try {
+            loopEntries(me)
+        } finally {
+            // Si el bucle terminara por algo inesperado, el siguiente pedido arranca otro.
+            synchronized(lock) {
+                if (loop === me) {
+                    loop = null
+                    running = null
+                }
+            }
+        }
+    }
+
+    private suspend fun loopEntries(me: Job?) {
         while (true) {
             val entry = synchronized(lock) {
                 // Un bucle cancelado por release() no toma trabajo del bucle nuevo.
@@ -264,6 +282,8 @@ class TranslationService(
             } catch (e: CancellationException) {
                 entry.result.cancel()
                 throw e
+            } catch (e: Throwable) {
+                TranslateResult.EngineFailed // última barrera (p. ej. un Error del caché)
             }
             entry.result.complete(result)
             synchronized(lock) {
@@ -285,7 +305,7 @@ class TranslationService(
             TranslationRules.join(TranslationRules.batches(entry.text).flatMap { engine.engine.translate(it) })
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             return TranslateResult.ParagraphFailed
         }
         val key = if (engine.tag == entry.tag) entry.key else TranslationRules.cacheKey(engine.tag, entry.pair, entry.text)
@@ -317,8 +337,8 @@ class TranslationService(
                     val engine = provider.engine(c.engine)
                     try {
                         engine.load(pair, provider.config(c.engine))
-                    } catch (e: CancellationException) {
-                        engine.unload() // pudo quedar cargado a medias
+                    } catch (e: Throwable) {
+                        runCatching { engine.unload() } // pudo quedar cargado a medias
                         throw e
                     }
                     val l = Loaded(pair, installed.getValue(c.engine), engine)
@@ -328,7 +348,7 @@ class TranslationService(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             EngineOrResult.Failed(TranslateResult.EngineFailed)
         }
     }

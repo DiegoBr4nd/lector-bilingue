@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
  * - [gate]: cada `translate` espera a [releaseAll] (para dejar un pedido "en curso").
  * - [failOn]: lanza al llegar a esa oración. [failLoads]: cuántas `load` seguidas lanzan.
  * - [workMillis]: tiempo virtual que tarda cada `translate` (para ver si dos se solapan).
+ * - [loadError] / [translateError]: un `Error` (no `Exception`, como UnsatisfiedLinkError) que se lanza una sola vez.
  */
 class FakeEngine(
     override val id: String = EngineId.OPUS.wire,
@@ -22,6 +23,8 @@ class FakeEngine(
     var failLoads: Int = 0,
     private val workMillis: Long = 0,
 ) : TranslationEngine {
+    var loadError: Throwable? = null
+    var translateError: Throwable? = null
     var loadCount = 0
         private set
     var unloadCount = 0
@@ -40,6 +43,7 @@ class FakeEngine(
 
     override suspend fun load(pair: LanguagePair, config: EngineConfig) {
         loadCount++
+        loadError?.let { loadError = null; throw it }
         if (failLoads > 0) {
             failLoads--
             throw IllegalStateException("carga fallida")
@@ -51,6 +55,7 @@ class FakeEngine(
         current++
         maxConcurrent = maxOf(maxConcurrent, current)
         try {
+            translateError?.let { translateError = null; throw it }
             if (gate) opened.await()
             if (workMillis > 0) delay(workMillis)
             return sentences.map { s ->

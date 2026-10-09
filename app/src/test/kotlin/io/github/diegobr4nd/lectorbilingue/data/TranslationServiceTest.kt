@@ -245,4 +245,20 @@ class TranslationServiceTest {
         // Justo en el tope todavía se traduce.
         assertTrue(s.translate(req("a".repeat(20_000))) is TranslateResult.Done)
     }
+
+    // Revisión final 3b (I1): un Error (no Exception) del motor no deja la fila muerta para el resto de la sesión.
+    @Test fun unErrorAlCargarDaFalloYElSiguientePedidoTraduce() = runTest(dispatcher) {
+        val engine = FakeEngine().apply { loadError = ExceptionInInitializerError("biblioteca nativa") }
+        val s = service(engine)
+        assertEquals(TranslateResult.EngineFailed, s.translate(req("A.")))
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+    }
+
+    @Test fun unErrorAlTraducirDaFalloDelParrafoYElSiguienteTraduce() = runTest(dispatcher) {
+        val engine = FakeEngine().apply { translateError = OutOfMemoryError("prueba") }
+        val s = service(engine)
+        assertEquals(TranslateResult.ParagraphFailed, s.translate(req("A.")))
+        assertEquals(TranslateResult.Done("T(B.)"), s.translate(req("B.")))
+        assertTrue(dao.rows.keys.none { it == key("A.") })
+    }
 }
