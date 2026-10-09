@@ -56,6 +56,9 @@ class ReaderActivity : FragmentActivity() {
             initialLocator = app.openBooks.initialLocator(id),
             initialPreferences = EpubPreferences(scroll = true),
             listener = linkListener,
+            // Readium sirve también assets/lector/ de la app en https://readium_assets/lector/ (se suma a su readium/):
+            // ahí está la hoja de las tarjetas de traducción, que HtmlSanitizer enlaza tras la CSP (spec 3b §12, T2).
+            configuration = EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*")),
         )
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

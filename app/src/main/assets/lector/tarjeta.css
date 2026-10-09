@@ -1,0 +1,44 @@
+/*
+ * Tarjeta de traducción bajo el párrafo tocado (Fase 3b). La sirve Readium desde los assets de la app
+ * (https://readium_assets/lector/tarjeta.css); el <link> lo pone HtmlSanitizer tras la CSP.
+ * Colores con contraste AA sobre la página blanca (hasta la 3c); diseno los fija en la Tarea 6.
+ */
+aside.lector-tarjeta {
+  display: block;
+  margin: 0.4em 0 1em;
+  padding: 0.6em 0.8em;
+  border-left: 4px solid #3b5bdb; /* 5,7:1 sobre blanco; 5,1:1 sobre el fondo */
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #1f2937; /* 13:1 sobre el fondo */
+  font-family: inherit;
+  font-size: 0.92em;
+  line-height: 1.45;
+  text-indent: 0;
+  text-align: start;
+}
+
+aside.lector-tarjeta[data-lector-estado="error"],
+aside.lector-tarjeta[data-lector-estado="falta-modelo"] {
+  border-left-color: #b42318; /* 6,5:1 sobre blanco */
+}
+
+aside.lector-tarjeta .lector-reintentar {
+  text-decoration: underline;
+}
+
+aside.lector-tarjeta .lector-esqueleto {
+  /* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo. */
+  animation: lector-latido 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes lector-latido {
+  from { opacity: 1; }
+  to { opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  aside.lector-tarjeta .lector-esqueleto {
+    animation: none;
+  }
+}

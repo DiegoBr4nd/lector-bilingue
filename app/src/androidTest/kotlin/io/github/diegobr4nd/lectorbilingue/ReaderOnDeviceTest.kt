@@ -128,20 +128,7 @@ class ReaderOnDeviceTest {
         }
     }
 
-    private suspend fun importAndOpen(): String {
-        val epub = TestEpub.build(dir, "lector.epub") {
-            title = "Libro largo de prueba"
-            replace("OEBPS/content.opf", opf().toByteArray())
-            replace("OEBPS/nav.xhtml", nav().toByteArray())
-            replace("OEBPS/c1.xhtml", chapter("Capítulo uno").toByteArray())
-            entry("OEBPS/c2.xhtml", chapter("Capítulo dos").toByteArray())
-            entry("OEBPS/c3.xhtml", chapter("Capítulo tres").toByteArray())
-        }
-        val id = (app.books.import({ epub.inputStream() }, "lector.epub") as ImportResult.Ok).bookId
-        created += id
-        app.openBooks.put(id, app.readium.open(app.books.epubFile(id)).getOrNull()!!, null)
-        return id
-    }
+    private suspend fun importAndOpen(): String = ReaderTestBook.importAndOpen(app, dir).also { created += it }
 
     private fun waitForText(text: String) =
         rule.waitUntil(10_000) { rule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -177,6 +164,30 @@ class ReaderOnDeviceTest {
         }
         return dark.toDouble() / total
     }
+}
+
+/**
+ * El libro inventado de 3 capítulos del Lector (un h1 y 70 párrafos por capítulo). Lo usan también otras pruebas del
+ * Lector, como ParagraphBridgeOnDeviceTest. Quien llama lo borra al terminar (app.openBooks.close + app.books.delete).
+ */
+internal object ReaderTestBook {
+    /** Lo importa por el camino real, lo deja abierto en memoria (como la Biblioteca) y devuelve su id. */
+    suspend fun importAndOpen(app: LectorApp, dir: File): String {
+        val epub = TestEpub.build(dir, "lector.epub") {
+            title = "Libro largo de prueba"
+            replace("OEBPS/content.opf", opf().toByteArray())
+            replace("OEBPS/nav.xhtml", nav().toByteArray())
+            replace("OEBPS/c1.xhtml", chapter("Capítulo uno").toByteArray())
+            entry("OEBPS/c2.xhtml", chapter("Capítulo dos").toByteArray())
+            entry("OEBPS/c3.xhtml", chapter("Capítulo tres").toByteArray())
+        }
+        val id = (app.books.import({ epub.inputStream() }, "lector.epub") as ImportResult.Ok).bookId
+        app.openBooks.put(id, app.readium.open(app.books.epubFile(id)).getOrNull()!!, null)
+        return id
+    }
+
+    /** Texto del párrafo [i] (1…70) de cualquier capítulo. */
+    fun paragraph(i: Int) = "Párrafo $i inventado para probar el lector. La lluvia caía sobre el puerto y nadie miraba el mar."
 
     private fun opf() = """<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
@@ -201,7 +212,7 @@ class ReaderOnDeviceTest {
 
     private fun chapter(title: String) = buildString {
         append("""<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>$title</title></head><body><h1>$title</h1>""")
-        for (i in 1..70) append("<p>Párrafo $i inventado para probar el lector. La lluvia caía sobre el puerto y nadie miraba el mar.</p>")
+        for (i in 1..70) append("<p>${paragraph(i)}</p>")
         append("</body></html>")
     }
 }

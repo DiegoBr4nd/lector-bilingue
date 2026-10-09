@@ -239,4 +239,54 @@ class HtmlSanitizerTest {
         assertFalse(out.contains("target", true)); assertFalse(out.contains("_blank"))
         assertTrue(out.contains("href=\"https://example.org/\"")); assertTrue(out.contains("href=\"c2.xhtml\""))
     }
+
+    // --- Fase 3b: hoja de la tarjeta de traducción (spec §12, T2 vía B) ---
+
+    private fun linkCount(out: String) = Regex(Regex.escape(HtmlSanitizer.CARD_STYLESHEET)).findAll(out).count()
+
+    // La CSP no cambia sin aprobación de seguridad: este valor está fijado a propósito.
+    @Test fun `la CSP sigue siendo la misma`() {
+        assertEquals(
+            "default-src 'self' https: data: blob:; script-src 'self' https:; " +
+                "style-src 'self' https: 'unsafe-inline' data:; img-src 'self' https: data: blob:; font-src 'self' https: data:; " +
+                "media-src 'self' data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; " +
+                "manifest-src 'none'; form-action 'none'; base-uri 'none'",
+            HtmlSanitizer.CSP,
+        )
+        assertEquals("https://readium_assets/lector/tarjeta.css", HtmlSanitizer.CARD_STYLESHEET)
+    }
+
+    @Test fun `la hoja de la tarjeta va justo despues de la CSP una sola vez aunque se sanee dos veces`() {
+        for (kind in listOf(HtmlSanitizer.Kind.XHTML, HtmlSanitizer.Kind.HTML)) {
+            val once = HtmlSanitizer.sanitize(xhtml("<p>a</p>").toByteArray(), kind)
+            val twice = HtmlSanitizer.sanitize(once, kind)
+            assertTrue(once.contentEquals(twice), kind.name)
+            val out = twice.toString(Charsets.UTF_8)
+            assertEquals(1, cspCount(out), "$kind: $out"); assertEquals(1, linkCount(out), "$kind: $out")
+            val parser = if (kind == HtmlSanitizer.Kind.HTML) Parser.htmlParser() else Parser.xmlParser()
+            val meta = Jsoup.parse(out, "", parser).select("meta[http-equiv=Content-Security-Policy]").single()
+            val link = meta.nextElementSibling()!!
+            assertEquals("link", link.tagName()); assertEquals("stylesheet", link.attr("rel"))
+            assertEquals(HtmlSanitizer.CARD_STYLESHEET, link.attr("href"))
+            assertEquals(HtmlSanitizer.CSP, meta.attr("content"))
+        }
+    }
+
+    @Test fun `un link del libro a la misma hoja no la duplica`() {
+        val out = HtmlSanitizer.sanitize(
+            xhtml("<p>a</p>", head = """<title>t</title><link rel="stylesheet" href=" ${HtmlSanitizer.CARD_STYLESHEET} "/>"""),
+        )
+        assertEquals(1, linkCount(out), out)
+    }
+
+    @Test fun `raiz con prefijo recibe la hoja con el mismo prefijo`() {
+        val out = HtmlSanitizer.sanitize("""<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>t</h:title></h:head><h:body><h:p>a</h:p></h:body></h:html>""")
+        assertEquals(1, linkCount(out), out)
+        assertTrue(out.contains("<h:link rel=\"stylesheet\" href=\"${HtmlSanitizer.CARD_STYLESHEET}\""), out)
+    }
+
+    @Test fun `SVG no lleva la hoja`() {
+        val out = HtmlSanitizer.sanitize("""<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>""", HtmlSanitizer.Kind.SVG)
+        assertEquals(0, linkCount(out))
+    }
 }
