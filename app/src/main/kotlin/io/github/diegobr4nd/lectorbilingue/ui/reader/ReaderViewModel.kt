@@ -151,7 +151,7 @@ class ReaderViewModel(
         }
     }
 
-    /** Guarda la dirección del libro y cierra todas las tarjetas (eran de la otra dirección). */
+    /** Guarda la dirección del libro, cierra todas las tarjetas (eran de la otra dirección) y vacía la fila del servicio. */
     fun setDirection(pair: LanguagePair) {
         if (pair == _direction.value) return
         directionChosen = true
@@ -160,6 +160,9 @@ class ReaderViewModel(
             for (index in open.keys) _cardOps.tryEmit(CardOp.Hide(resource, index))
         }
         cards.clear()
+        // Lo pedido con la dirección vieja (toques y pretraducción) ya no sirve: sin esto el motor lo terminaría y
+        // cambiaría de modelo dos veces (5 a 15 s de espera tras elegir la nueva).
+        translations.release()
         // NonCancellable: si se sale enseguida del Lector, la elección se guarda igual.
         viewModelScope.launch {
             withContext(NonCancellable) {

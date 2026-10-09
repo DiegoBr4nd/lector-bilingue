@@ -508,4 +508,19 @@ class ReaderViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("A.", "C."), engine.translatedTexts)
     }
+
+    // Revisión final 3b (I2): al cambiar de dirección, lo pedido con la vieja no llega al motor (ni lo obliga a cambiar).
+    @Test fun cambiarDireccionVaciaLaFilaDeLaVieja() = runTest(dispatcher) {
+        val slow = FakeEngine(workMillis = 100)
+        val (vm, _) = vmWithOps(slow)
+        advanceUntilIdle()
+        vm.onResourceShown("c1.xhtml")
+        vm.onTap("c1.xhtml", listOf(p(0, "A."), p(1, "B."), p(2, "C."), p(3, "D.")))
+        advanceTimeBy(150); runCurrent() // A. hecha; B. en curso; C. y D. en la fila
+        vm.setDirection(esEn)
+        vm.onTap("c1.xhtml", listOf(p(5, "Hola.")))
+        advanceUntilIdle()
+        assertEquals(listOf("A.", "Hola."), slow.translatedTexts)
+        assertEquals(listOf(enEs, esEn), slow.loadedPairs)
+    }
 }
