@@ -2,7 +2,9 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.view.View
 import android.view.accessibility.AccessibilityManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -32,6 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -59,12 +67,20 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.ConfirmDialog
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
+import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
+import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
+import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
+import org.readium.r2.navigator.input.TapEvent
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
@@ -86,22 +102,77 @@ fun ReaderScreen(
     onExternalDone: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val vm: ReaderViewModel = viewModel(factory = viewModelFactory { initializer { ReaderViewModel(bookId, app.books) } })
+    val vm: ReaderViewModel = viewModel(
+        factory = viewModelFactory {
+            // Idiomas del OPF (`dc:language`, p. ej. "en", "es-MX"): solo para la dirección automática.
+            initializer { ReaderViewModel(bookId, app.books, app.translations, publication.metadata.languages) }
+        },
+    )
     val barsVisible by vm.barsVisible.collectAsStateWithLifecycle()
     val label by vm.label.collectAsStateWithLifecycle()
     val link by externalLink.collectAsStateWithLifecycle()
+    val direction by vm.direction.collectAsStateWithLifecycle()
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var currentHref by remember { mutableStateOf<String?>(null) }
     var tocOpen by rememberSaveable { mutableStateOf(false) }
+    var directionOpen by rememberSaveable { mutableStateOf(false) }
+    var languagesOpen by rememberSaveable { mutableStateOf(false) }
+    var resumes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val view by rememberUpdatedState(LocalView.current)
+    val pageDensity by rememberUpdatedState(LocalDensity.current) // px del aparato por px CSS (el WebView no aplica zoom)
+    val scope = rememberCoroutineScope()
     val touchExploration = rememberTouchExploration()
     val reduceMotion = rememberReduceMotion()
     val toc = remember(publication) { ReaderRules.flattenToc(publication.tableOfContents.map { it.toSource() }) }
+    // El navegador se lee en cada llamada: el fragmento de Readium llega (o se recrea) después.
+    val bridge = remember { ParagraphBridge { navigator } }
+    val cardTexts by rememberUpdatedState(rememberCardTexts(app, direction))
+    val labels = CardLabels(
+        stringResource(R.string.reader_card_translation),
+        stringResource(R.string.reader_card_skeleton),
+        stringResource(R.string.reader_card_preparing),
+    )
+    val currentLabels by rememberUpdatedState(labels)
+    val announceTranslating by rememberUpdatedState(stringResource(R.string.reader_card_skeleton))
+    val announceHidden by rememberUpdatedState(stringResource(R.string.reader_card_hidden))
+    val announceTranslation by rememberUpdatedState(stringResource(R.string.reader_card_announce))
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
     // Al pausar (antes de onStop): si la persona vuelve y reabre enseguida, la Biblioteca ya lee la última posición.
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.flush() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.flush() }
+    // Al volver al frente se reponen las tarjetas (por si la página se recargó mientras tanto).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumes++ }
+
+    // Tarjetas: se aplican durante toda la composición (no solo al frente: ninguna se pierde) y solo en el recurso
+    // visible; las de otro recurso se reponen al volver a él (onResourceShown).
+    LaunchedEffect(vm) {
+        vm.cardOps.collect { op ->
+            when (op) {
+                is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels)
+                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index)
+            }
+        }
+    }
+    // Ruling L: TalkBack dice el resultado de un toque ("Traducción: …", "Falta el idioma…", "No se pudo…"). El texto
+    // solo va al servicio de accesibilidad: nunca a registros ni a la red.
+    LaunchedEffect(vm) {
+        vm.announcements.collect { op ->
+            if (op.resource != currentHref) return@collect
+            val spoken = CardRules.spoken(op.card, cardTexts) ?: return@collect
+            view.announce(if (op.card is CardState.Text) announceTranslation.format(spoken) else spoken)
+        }
+    }
+    // Recurso nuevo (o vuelta al frente): cuando la página está lista y es ese recurso, primero se quitan todas las
+    // tarjetas (las viejas de un capítulo vecino ya cargado) y luego el ViewModel repone las abiertas (spec §12).
+    LaunchedEffect(currentHref, resumes) {
+        val href = currentHref ?: return@LaunchedEffect
+        var tries = 0
+        while (!bridge.hideAll(href) && tries++ < PageReadyTries) delay(PageReadyDelayMs)
+        // Aun si la página nunca respondió, el ViewModel debe saber cuál es el recurso visible.
+        vm.onResourceShown(href)
+    }
 
     // Posición (para la etiqueta y para guardar) y gesto (para las barras), solo mientras exista el navegador.
     LaunchedEffect(navigator) {
@@ -116,6 +187,44 @@ fun ReaderScreen(
             override fun onDrag(event: DragEvent): Boolean {
                 if (event.type != DragEvent.Type.Start) vm.onDrag(event.offset.y.toDouble())
                 return false // Readium sigue desplazando el texto.
+            }
+
+            // Toque (también el toque doble de TalkBack, que llega en el centro del párrafo). La página se lee de forma
+            // asíncrona, así que no se sabe aquí si había un párrafo: se devuelve false y Readium sigue igual (no hay
+            // otros oyentes de toque). Ojo: si algún día se suma un DirectionalNavigationAdapter, también pasaría de
+            // página con los toques que traducen.
+            override fun onTap(event: TapEvent): Boolean {
+                val href = currentHref ?: return false
+                val x = event.point.x
+                val y = event.point.y
+                val density = pageDensity.density
+                scope.launch {
+                    val hit = bridge.paragraphsAt(x, y, density)
+                    if (href != currentHref) return@launch
+                    if (hit.isNotEmpty()) {
+                        val had = vm.cardState(href, hit[0].index) != null
+                        vm.onTap(href, hit)
+                        val has = vm.cardState(href, hit[0].index) != null
+                        // Solo si de verdad se abrió o cerró (un párrafo sin texto normalizado no abre nada).
+                        if (had && !has) view.announce(announceHidden) else if (!had && has) view.announce(announceTranslating)
+                        return@launch
+                    }
+                    // ¿Sobre una tarjeta? (find no la cuenta como párrafo.)
+                    val index = bridge.indexAt(x, y, density) ?: return@launch
+                    when (vm.cardState(href, index)) {
+                        null -> Unit
+                        is CardState.Failed -> {
+                            vm.retry(href, index)
+                            view.announce(announceTranslating)
+                        }
+                        is CardState.MissingModel -> languagesOpen = true
+                        else -> {
+                            vm.onTap(href, listOf(PageParagraph(index, "")))
+                            view.announce(announceHidden)
+                        }
+                    }
+                }
+                return false
             }
         }
         nav?.addInputListener(listener)
@@ -134,7 +243,13 @@ fun ReaderScreen(
             exit = if (reduceMotion) ExitTransition.None else slideOutVertically { -it } + fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            ReaderTopBar(title = title, onBack = onBack, onToc = { tocOpen = true })
+            ReaderTopBar(
+                title = title,
+                direction = direction,
+                onBack = onBack,
+                onDirection = { directionOpen = true },
+                onToc = { tocOpen = true },
+            )
         }
         AnimatedVisibility(
             visible = barsVisible && positionText(label) != null,
@@ -143,6 +258,16 @@ fun ReaderScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             ReaderBottomBar(label)
+        }
+
+        // Idiomas a pantalla completa sobre el Lector (desde una tarjeta "Falta el idioma"): el libro sigue abierto debajo.
+        if (languagesOpen) {
+            val close = {
+                languagesOpen = false
+                vm.onLanguagesClosed() // suelta el motor y vuelve a pedir las tarjetas sin modelo
+            }
+            BackHandler(onBack = close)
+            LanguagesScreen(app.hub, app.settings, onBack = close)
         }
     }
 
@@ -156,6 +281,30 @@ fun ReaderScreen(
             },
             onDismiss = { tocOpen = false },
         )
+    }
+
+    if (directionOpen) {
+        // "Traducir de español a inglés": TalkBack lo dice al elegir (el botón de la barra ya cambió).
+        val changed = ReaderDirections.associateWith {
+            stringResource(R.string.reader_direction_changed, languageName(it.source), languageName(it.target))
+        }
+        DirectionSheet(
+            current = direction,
+            onSelect = { pair ->
+                directionOpen = false
+                if (pair != direction) {
+                    vm.setDirection(pair) // guarda para el libro y cierra las tarjetas abiertas
+                    changed[pair]?.let(view::announce)
+                }
+            },
+            onDismiss = { directionOpen = false },
+        )
+    }
+
+    // Mientras Idiomas tapa el libro, TalkBack no debe entrar en la página de debajo.
+    LaunchedEffect(languagesOpen, navigator) {
+        navigator?.view?.importantForAccessibility =
+            if (languagesOpen) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     }
 
     link?.let { url ->
@@ -176,10 +325,20 @@ fun ReaderScreen(
     }
 }
 
-/** Barra superior: volver, título del libro (una línea) e Índice. Sin estado: se previsualiza sola. */
+/**
+ * Barra superior: volver, título del libro (una línea), dirección de traducción ("EN → ES") e Índice.
+ * Con letra grande el título cede espacio: el botón de dirección nunca se recorta. Sin estado: se previsualiza sola.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReaderTopBar(title: String?, onBack: () -> Unit, onToc: () -> Unit, modifier: Modifier = Modifier) {
+fun ReaderTopBar(
+    title: String?,
+    direction: LanguagePair,
+    onBack: () -> Unit,
+    onDirection: () -> Unit,
+    onToc: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     TopAppBar(
         title = {
             Text(
@@ -196,6 +355,7 @@ fun ReaderTopBar(title: String?, onBack: () -> Unit, onToc: () -> Unit, modifier
             }
         },
         actions = {
+            DirectionButton(direction, onDirection)
             IconButton(onClick = onToc, modifier = Modifier.size(48.dp)) {
                 Icon(painterResource(LectorIcons.Toc), contentDescription = stringResource(R.string.reader_toc))
             }
@@ -204,6 +364,45 @@ fun ReaderTopBar(title: String?, onBack: () -> Unit, onToc: () -> Unit, modifier
         modifier = modifier,
     )
 }
+
+/** Textos de las tarjetas; "Falta el idioma" lleva el tamaño del modelo según el catálogo (si ya se conoce). */
+@Composable
+private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardTexts {
+    val pairs by app.hub.pairs.collectAsStateWithLifecycle()
+    val wire = TranslationRules.wire(direction)
+    val name = pairDirection(wire).withNoBreakArrow()
+    val missing = stringResource(R.string.reader_card_missing)
+    val missingNoSize = stringResource(R.string.reader_card_missing_nosize, name)
+    val source = languageName(direction.source)
+    val target = languageName(direction.target)
+    val resources = LocalResources.current
+    val spokenNoSize = stringResource(R.string.reader_card_missing_spoken_nosize, source, target)
+    val failed = stringResource(R.string.reader_card_failed)
+    val prepareFailed = stringResource(R.string.reader_card_prepare_failed)
+    val retry = stringResource(R.string.reader_card_retry)
+    val download = stringResource(R.string.reader_card_download)
+    val tooLong = stringResource(R.string.reader_card_too_long)
+    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong) {
+        CardTexts(
+            failed, prepareFailed, retry, download, tooLong,
+            missing = { engine -> CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize },
+            // Para TalkBack: "a" en vez de la flecha y "megabytes" en vez de "MB".
+            missingSpoken = { engine ->
+                CardRules.modelMegabytes(pairs, wire, engine)?.let { mb ->
+                    resources.getQuantityString(R.plurals.reader_card_missing_spoken, mb.toInt(), source, target, mb)
+                } ?: spokenNoSize
+            },
+        )
+    }
+}
+
+/** Aviso de TalkBack ("Traduciendo…", "Traducción oculta"). Sin TalkBack no hace nada. */
+@Suppress("DEPRECATION") // Sin alternativa para un aviso puntual dentro de un WebView (minSdk 26).
+private fun View.announce(text: String) = announceForAccessibility(text)
+
+/** Hasta ~5 s esperando a que la página del recurso nuevo esté lista. */
+private const val PageReadyTries = 50
+private const val PageReadyDelayMs = 100L
 
 /** Barra inferior: "La tormenta · 42 %", "42 %" o nada. Se lee como texto (TalkBack la anuncia tal cual). */
 @Composable

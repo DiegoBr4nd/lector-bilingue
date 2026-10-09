@@ -44,4 +44,12 @@ class BookRepositoryTest {
         repo.savePosition(id, "{}", 1.7f)
         assertEquals(1f, dao.get(id)!!.progress)
     }
+
+    @Test fun `la direccion se guarda y se puede volver a automatica`() = runTest {
+        val files = BookFiles(tmp.root)
+        val dao = FakeBookDao().apply { insert(BookEntity(id, "T", null, null, 1, null, 0f, null)) }
+        val repo = BookRepository(dao, files, BookImporter(files, dao, { error("no") }, { _, _ -> }))
+        repo.setDirection(id, "es-en"); assertEquals("es-en", repo.get(id)!!.direction)
+        repo.setDirection(id, null); assertNull(repo.get(id)!!.direction)
+    }
 }

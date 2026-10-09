@@ -40,6 +40,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+    // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
+    sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }
 }
 
 dependencies {
@@ -70,6 +72,7 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.orgjson) // org.json de verdad en las pruebas JVM (en android.jar solo hay stubs).
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.kotlin.test.junit)

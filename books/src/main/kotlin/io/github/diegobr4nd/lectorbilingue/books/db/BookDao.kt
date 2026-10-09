@@ -23,6 +23,9 @@ interface BookDao {
     @Query("UPDATE books SET locator = :locator, progress = :progress WHERE id = :id")
     suspend fun savePosition(id: String, locator: String, progress: Float)
 
+    @Query("UPDATE books SET direction = :direction WHERE id = :id")
+    suspend fun setDirection(id: String, direction: String?)
+
     @Query("UPDATE books SET lastOpenedAt = :at WHERE id = :id")
     suspend fun markOpened(id: String, at: Long)
 }

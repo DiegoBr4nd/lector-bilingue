@@ -1,23 +1,44 @@
 package io.github.diegobr4nd.lectorbilingue
 
 import android.content.pm.PackageManager
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.ImportError
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
 import io.github.diegobr4nd.lectorbilingue.books.readium.HtmlSanitizer
+import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
+import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
+import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
+import io.github.diegobr4nd.lectorbilingue.ui.reader.PageParagraph
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphBridge
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphScripts
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -512,6 +533,178 @@ class MaliciousEpubOnDeviceTest {
         assertFalse(log.contains("FRASE_UNICA_8c41"), "texto en el registro")
     }
 
+    // ---------- Tocar y traducir (T), revisión de seguridad 3b ----------
+    // Libro de un capítulo en español (dirección es → en). Con el modelo instalado la tarjeta acaba en "texto"; sin él,
+    // en "falta-modelo". Toques REALES inyectados en la pantalla (como TapTranslateOnDeviceTest). Al final de cada
+    // caso: ningún script del libro corrió, el título sigue y nada se conectó al espía.
+
+    @Test fun t1ComillasYCierreDeScriptEnElParrafo() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val raw = "Dijo \"hola\" y 'adiós' \\ &lt;/script&gt;&lt;script&gt;window.__pwn=1&lt;/script&gt; fin T1Q"
+        val text = "Dijo \"hola\" y 'adiós' \\ </script><script>window.__pwn=1</script> fin T1Q"
+        val id = importOk(write("t1.epub", basic(SPACER + """<p id="q">$raw</p>""")))
+        val final = expectedFinal()
+        reader(id) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val (x, y) = visibleCenter(s, "#q")!!
+            // (a) El puente lee el texto exacto (ya sin entidades).
+            assertEquals(text, runBlocking { bridge.paragraphsAt((x * density).toFloat(), (y * density).toFloat(), density) }.first().text)
+            // (b) Toque real: la tarjeta es el hermano siguiente de #q.
+            tapCss(s, x, y)
+            waitFinal(s, "q", final)
+            assertEquals("true", js(s, "String(document.getElementById('q').nextElementSibling.matches('aside.lector-tarjeta[data-lector-i=\"0\"]'))"))
+            // (c) Nada corrió.
+            assertEquals("true", js(s, "String(window.__pwn === undefined)"))
+            // (d) Una traducción hostil entra como texto.
+            val evil = "\"x\" </script><script>window.__pwn=2</script>"
+            runBlocking { bridge.show(0, Card.Text(evil), LABELS) }
+            assertEquals(evil, js(s, "${cardOf("q")}.textContent"))
+            assertEquals("0", js(s, "String(${cardOf("q")}.children.length)"))
+            assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('script').length)"))
+            assertUntouched(s)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun t2ImgConOnerrorComoTexto() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val id = importOk(write("t2.epub", basic(SPACER + """<p id="q">&lt;img src=x onerror="window.__pwn=1"&gt; T2IMG</p>""")))
+        val final = expectedFinal()
+        reader(id) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val (x, y) = visibleCenter(s, "#q")!!
+            tapCss(s, x, y)
+            waitFinal(s, "q", final)
+            Thread.sleep(1_000) // por si un onerror llegara a cargarse
+            assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('img').length)"))
+            assertEquals("true", js(s, "String(window.__pwn === undefined)"))
+            runBlocking { bridge.show(0, Card.Text("<img src=x onerror=window.__pwn=1>"), LABELS) }
+            Thread.sleep(1_000)
+            assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals("<img src=x onerror=window.__pwn=1>", js(s, "${cardOf("q")}.textContent"))
+            assertUntouched(s)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun t3SeparadoresDeLineaYParrafo() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val id = importOk(write("t3.epub", basic(SPACER + "<p id=\"q\">Línea A\u2028Línea B\u2029Línea C T3LS</p>")))
+        val final = expectedFinal()
+        reader(id) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val (x, y) = visibleCenter(s, "#q")!!
+            val hit = runBlocking { bridge.paragraphsAt((x * density).toFloat(), (y * density).toFloat(), density) }
+            assertTrue(hit.isNotEmpty(), "evaluateJavascript no respondió")
+            tapCss(s, x, y)
+            waitFinal(s, "q", final)
+            assertEquals("true", js(s, ParagraphScripts.insert(0, Card.Text("a\u2028b\u2029c"), LABELS)))
+            val content = js(s, "${cardOf("q")}.textContent")!!
+            assertTrue(content.contains('\u2028') && content.contains('\u2029'), "faltan los separadores")
+            val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+            assertTrue(runBlocking { bridge.hideAll(href) })
+            assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            assertUntouched(s)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    // El arreglo del MEDIO: un párrafo de 50 000 caracteres no ocupa el motor; el siguiente se traduce enseguida.
+    @Test fun t4ParrafoEnormeNoBloqueaElMotor() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val huge = "Frase enorme de prueba T4. ".repeat(50_000 / 27 + 1).trim()
+        val id = importOk(write("t4.epub", basic("""<p id="g">$huge</p><p id="n">Un párrafo normal y corto T4B.</p>""")))
+        val final = expectedFinal()
+        val tooLong = app.getString(R.string.reader_card_too_long)
+        reader(id) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val (x, y) = visibleCenter(s, "#g")!!
+            // Control: leer el párrafo enorme es rápido (la página manda como mucho el tope + 1).
+            val start = System.nanoTime()
+            val hit = runBlocking { bridge.paragraphsAt((x * density).toFloat(), (y * density).toFloat(), density) }
+            assertTrue((System.nanoTime() - start) / 1_000_000 < 2_000, "paragraphsAt tardó más de 2 s")
+            assertEquals(TranslationRules.MAX_PARAGRAPH_CHARS + 1, hit.first().text.length)
+            assertTrue(hit.first().cut, "sin la marca de recorte")
+            // (a) Toque real: estado final "demasiado largo" (estilo de error) en menos de 30 s.
+            tapCss(s, x, y)
+            waitFinal(s, "g", "error", timeout = 30_000)
+            assertEquals(tooLong, js(s, "${cardOf("g")}.textContent"))
+            assertEquals("rgb(254, 243, 242)", js(s, "getComputedStyle(${cardOf("g")}).backgroundColor"))
+            // (b) El párrafo normal (páginas más abajo) da su tarjeta final en menos de 30 s.
+            val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+            val normal = js(s, "document.getElementById('n').textContent")!!
+            val vm = viewModel(s)
+            runBlocking(Dispatchers.Main) { vm.onTap(href, listOf(PageParagraph(1, normal))) }
+            waitFinal(s, "n", final, timeout = 30_000)
+            // (c) El Lector sigue vivo.
+            assertEquals(Lifecycle.State.RESUMED, s.state)
+            assertUntouched(s)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun t5TarjetaFalsaDelLibro() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val body = SPACER + """<p id="a">Real T5A</p><aside class="lector-tarjeta LECTOR-TARJETA" data-lector-i="0" data-lector-estado="texto" role="note">FALSA T5</aside>""" +
+            """<p id="b">Otro T5B</p><div class="lector-tarjeta"><p id="c">Dentro T5C</p></div>"""
+        val id = importOk(write("t5.epub", basic(body, head = "<style>aside{display:none}</style>")))
+        // (a) El HTML servido no trae nuestras marcas.
+        val html = served(open(id), "OEBPS/c1.xhtml")!!
+        assertFalse(html.contains("lector-tarjeta", ignoreCase = true), "clase de tarjeta en el libro")
+        assertFalse(html.contains("data-lector-", ignoreCase = true), "atributos data-lector- en el libro")
+        val final = expectedFinal()
+        reader(id) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            // (b) Antes de tocar no hay ninguna tarjeta.
+            assertEquals("0", js(s, "String(document.querySelectorAll('.lector-tarjeta').length)"))
+            // (c) El párrafo dentro del div es un párrafo más.
+            val (cx, cy) = visibleCenter(s, "#c")!!
+            assertTrue((runBlocking { bridge.indexAt((cx * density).toFloat(), (cy * density).toFloat(), density) } ?: -1) >= 0)
+            // (d) Tocar #a crea la tarjeta hermana, visible pese al aside{display:none} del libro.
+            val (ax, ay) = visibleCenter(s, "#a")!!
+            tapCss(s, ax, ay)
+            waitFinal(s, "a", final)
+            assertEquals("block", js(s, "getComputedStyle(${cardOf("a")}).display"))
+            // (e) La falsa (que la prueba hace visible) no abre ni cierra la de #a.
+            js(s, "var f = Array.prototype.find.call(document.querySelectorAll('aside'), function (e) { return e.textContent === 'FALSA T5'; }); f.id = 'falsa'; f.style.display = 'block'; 1")
+            val (fx, fy) = visibleCenter(s, "#falsa")!!
+            assertTrue(runBlocking { bridge.indexAt((fx * density).toFloat(), (fy * density).toFloat(), density) } != 0, "el aside del libro cuenta como tarjeta")
+            tapCss(s, fx, fy)
+            Thread.sleep(1_500)
+            assertEquals(final, js(s, "${cardOf("a")}.dataset.lectorEstado"))
+            assertEquals("1", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            // (f) hideAll quita solo las tarjetas de la app.
+            val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+            assertTrue(runBlocking { bridge.hideAll(href) })
+            assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            assertEquals("FALSA T5", js(s, "document.getElementById('falsa').textContent"))
+            assertUntouched(s)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    // Seguridad 3b (BAJO): el camino de tocar y traducir tampoco deja en el registro el texto, la traducción ni la huella.
+    @Test fun t6TocarYTraducirNoDejaNadaEnElRegistro() = runBlocking<Unit> {
+        val id = importOk(write("t6.epub", basic(SPACER + """<p id="q">FRASE_UNICA_8c41 inventada.</p>""")))
+        val final = expectedFinal()
+        var translation: String? = null
+        reader(id) { s ->
+            val (x, y) = visibleCenter(s, "#q")!!
+            tapCss(s, x, y)
+            waitFinal(s, "q", final, timeout = 60_000)
+            if (final == "texto") translation = js(s, "${cardOf("q")}.textContent")
+        }
+        val pair = LanguagePair("es", "en")
+        val keys = AndroidEngineProvider(app, Dispatchers.IO).installed(pair).values
+            .map { tag -> TranslationRules.cacheKey(tag, pair, "FRASE_UNICA_8c41 inventada.") }
+        val log = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "brief", "--pid", android.os.Process.myPid().toString()))
+            .inputStream.bufferedReader().use { it.readText() }
+        assertFalse(log.contains("FRASE_UNICA_8c41"), "texto en el registro")
+        translation?.let { assertFalse(log.contains(it), "traducción en el registro") }
+        for (k in keys) assertFalse(log.contains(k), "huella en el registro")
+    }
+
     @Test fun webViewSinMetricasNiSafeBrowsing() {
         val meta = app.packageManager.getApplicationInfo(app.packageName, PackageManager.GET_META_DATA).metaData
         assertNotNull(meta, "sin meta-data")
@@ -520,6 +713,100 @@ class MaliciousEpubOnDeviceTest {
     }
 
     // ---------- Ayudas ----------
+
+    private val density: Float get() = app.resources.displayMetrics.density
+
+    private fun ActivityScenario<ReaderActivity>.navigatorOrNull(): EpubNavigatorFragment? =
+        runCatching { navigator() }.getOrNull()
+
+    /** La tarjeta de la app bajo el elemento con id [id] (su hermano siguiente). */
+    private fun cardOf(id: String) = "document.getElementById('$id').nextElementSibling"
+
+    /**
+     * Centro (px CSS) de la parte visible del primer recuadro de [selector], entre el 25 % y el 75 % del alto (lejos de
+     * las barras). null si no se ve.
+     */
+    private fun visibleCenter(s: ActivityScenario<ReaderActivity>, selector: String): Pair<Double, Double>? {
+        val json = js(
+            s,
+            "(function () { var e = document.querySelector(" + JSONObject.quote(selector) + "); if (!e) return null;" +
+                " var r = e.getClientRects()[0]; if (!r) return null; var h = window.innerHeight, w = window.innerWidth;" +
+                " var t = Math.max(r.top, h * 0.25), b = Math.min(r.bottom, h * 0.75), l = Math.max(r.left, 0), rr = Math.min(r.right, w);" +
+                " if (t >= b || l >= rr) return null; return JSON.stringify({x: (l + rr) / 2, y: (t + b) / 2}); })()",
+        ) ?: return null
+        val o = JSONObject(json)
+        return o.getDouble("x") to o.getDouble("y")
+    }
+
+    /** Toque real (abajo y arriba) en un punto CSS de la página, como TapTranslateOnDeviceTest. Solo con el Lector al frente. */
+    private fun tapCss(s: ActivityScenario<ReaderActivity>, xCss: Double, yCss: Double) {
+        // Como TapTranslateOnDeviceTest: página cargada y la barra ya compuesta (el oyente de toques ya está puesto).
+        rule.waitUntil("página lista", 10_000) { js(s, "document.readyState === 'complete' && !!window.readium") == "true" }
+        rule.waitUntil("barra del Lector", 10_000) {
+            rule.onAllNodes(hasContentDescription("Idioma de traducción: español a inglés")).fetchSemanticsNodes().isNotEmpty()
+        }
+        var focused = false
+        val at = IntArray(2)
+        s.onActivity { a ->
+            focused = a.hasWindowFocus()
+            visibleWebView(s.navigator().requireView())!!.getLocationOnScreen(at)
+        }
+        assumeTrue("el Lector no está al frente", focused)
+        val x = (at[0] + xCss * density).toFloat()
+        val y = (at[1] + yCss * density).toFloat()
+        val down = SystemClock.uptimeMillis()
+        for ((action, time) in listOf(MotionEvent.ACTION_DOWN to down, MotionEvent.ACTION_UP to down + 60)) {
+            val e = MotionEvent.obtain(down, time, action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+            instrumentation.uiAutomation.injectInputEvent(e, true)
+            e.recycle()
+        }
+        instrumentation.waitForIdleSync()
+    }
+
+    /** El WebView del capítulo visible (el ViewPager tiene también el vecino, fuera de pantalla). */
+    private fun visibleWebView(v: View): WebView? {
+        if (v is WebView && v.isShown && v.getGlobalVisibleRect(android.graphics.Rect())) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) visibleWebView(v.getChildAt(i))?.let { return it }
+        return null
+    }
+
+    /** Espera a que la tarjeta de #[id] llegue al estado [state] (y sea nuestra: aside.lector-tarjeta). */
+    private fun waitFinal(s: ActivityScenario<ReaderActivity>, id: String, state: String, timeout: Long = 30_000) {
+        val probe = "var c = ${cardOf(id)}; c && c.matches('aside.lector-tarjeta') ? c.dataset.lectorEstado : null"
+        try {
+            rule.waitUntil("tarjeta de #$id en $state", timeout) { js(s, probe) == state }
+        } catch (e: Throwable) {
+            // Solo estados y cuentas (nunca texto del libro), para saber dónde se quedó.
+            val seen = js(s, probe)
+            val all = js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)")
+            throw AssertionError("tarjeta de #$id: se esperaba $state, hay $seen (tarjetas en la página: $all)", e)
+        }
+    }
+
+    /** Ningún script del libro corrió y el título sigue. */
+    private fun assertUntouched(s: ActivityScenario<ReaderActivity>) {
+        assertEquals("true", js(s, "String(window.__pwn === undefined && document.title === 'C1')"))
+    }
+
+    /** Estado final de una tarjeta en estos libros (español → inglés): "texto" con el modelo, "falta-modelo" sin él. */
+    private suspend fun expectedFinal(): String {
+        withTimeout(10_000) { app.hub.loaded.first { it } }
+        val installed = app.hub.pairs.value.any { p -> p.pair == "es-en" && p.rows.any { it.installed } }
+        return if (installed) "texto" else "falta-modelo"
+    }
+
+    /** El ViewModel que el Lector ya creó (la prueba no crea otro). */
+    private fun viewModel(s: ActivityScenario<ReaderActivity>): ReaderViewModel {
+        var vm: ReaderViewModel? = null
+        s.onActivity { a ->
+            val noNew = object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T = error("el Lector no creó su ViewModel")
+            }
+            vm = ViewModelProvider(a.viewModelStore, noNew)[ReaderViewModel::class.java]
+        }
+        return vm!!
+    }
+
 
     /** Importa por el camino real y comprueba que no quedan restos (temporal vacío; si falla, ni archivos ni filas nuevas). */
     private suspend fun importChecked(file: File): ImportResult {
@@ -588,7 +875,7 @@ class MaliciousEpubOnDeviceTest {
     private fun js(s: ActivityScenario<ReaderActivity>, script: String): String? {
         val nav = runCatching { s.navigator() }.getOrNull() ?: return null
         val raw = runBlocking(Dispatchers.Main) { nav.evaluateJavascript(script) } ?: return null
-        return JSONArray("[$raw]").opt(0)?.takeIf { it != org.json.JSONObject.NULL }?.toString()
+        return JSONArray("[$raw]").opt(0)?.takeIf { it != JSONObject.NULL }?.toString()
     }
 
     /** Espía de red: cuenta cada conexión TCP que llega a 127.0.0.1:[port]. */
@@ -742,6 +1029,10 @@ p::after { content: url('SPY/after.png'); }
 
     private companion object {
         val MIME = "application/epub+zip".toByteArray()
+        val LABELS = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
+
+        /** Hueco al principio del capítulo: el primer párrafo queda a media pantalla, lejos de las barras del Lector. */
+        const val SPACER = """<div style="height: 40vh"></div>"""
 
         const val CONTAINER = """<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">

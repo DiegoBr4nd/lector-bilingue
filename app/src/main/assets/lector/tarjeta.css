@@ -1,0 +1,88 @@
+/*
+ * Tarjeta de traducción bajo el párrafo tocado (Fase 3b). La sirve Readium desde los assets de la app
+ * (https://readium_assets/lector/tarjeta.css); el <link> lo pone HtmlSanitizer tras la CSP.
+ * Colores finales de la 3b (boceto aprobado por Juan), con contraste AA sobre la página blanca; la 3c los
+ * redefine por tema.
+ */
+aside.lector-tarjeta {
+  /* Muchos EPUB3 ocultan los aside (notas emergentes). !important gana frente a reglas genéricas de `aside`;
+     una regla del libro con !important y más específica (p. ej. `body aside[data-lector-i]`) aún podría taparla. */
+  display: block !important;
+  visibility: visible !important;
+  margin: 0.4em 0 1em;
+  padding: 0.6em 0.8em;
+  border-left: 4px solid #3b5bdb; /* 5,7:1 sobre blanco; 5,1:1 sobre el fondo */
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #1f2937; /* 13:1 sobre el fondo */
+  font-family: inherit;
+  font-size: 0.92em;
+  line-height: 1.45;
+  text-indent: 0;
+  text-align: start;
+}
+
+/* Error y falta de modelo: línea roja + fondo cálido + texto (nunca solo el color). */
+aside.lector-tarjeta[data-lector-estado="error"],
+aside.lector-tarjeta[data-lector-estado="falta-modelo"] {
+  border-left-color: #b42318; /* 6,6:1 sobre blanco */
+  background: #fef3f2; /* el texto #1f2937 queda a 13,5:1 */
+}
+
+/* "Reintentar" / "Descargar": enlace subrayado de al menos 48 px de alto (toda la tarjeta es tocable). */
+aside.lector-tarjeta .lector-reintentar {
+  display: inline-block;
+  min-height: 48px;
+  padding: 0.8em 0;
+  box-sizing: border-box;
+  vertical-align: middle;
+  color: #364fc7; /* 6,1:1 sobre #eef2ff */
+  text-decoration: underline;
+}
+
+/* El "·" de antes del enlace es solo visual: el texto alternativo vacío ("/ ''") hace que TalkBack no lo lea. */
+aside.lector-tarjeta .lector-reintentar::before {
+  content: "\00b7\00a0" / "";
+  display: inline-block;
+  color: #1f2937;
+  text-decoration: none;
+  margin-inline-end: 0.15em;
+}
+
+aside.lector-tarjeta[data-lector-estado="error"] .lector-reintentar,
+aside.lector-tarjeta[data-lector-estado="falta-modelo"] .lector-reintentar {
+  color: #912018; /* 8,0:1 sobre #fef3f2 */
+}
+
+/* Esqueleto y "Preparando…": dos rayas decorativas (TalkBack no las lee; el texto es la información). */
+aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+aside.lector-tarjeta[data-lector-estado="preparando"]::after {
+  content: "";
+  display: block;
+  height: 2.1em;
+  margin-top: 0.3em;
+  background:
+    linear-gradient(#c7d0ea, #c7d0ea) 0 0.25em / 100% 0.6em no-repeat,
+    linear-gradient(#c7d0ea, #c7d0ea) 0 1.35em / 62% 0.6em no-repeat;
+  border-radius: 4px;
+}
+
+/* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo (queda #5d6573, 5,3:1). */
+aside.lector-tarjeta .lector-esqueleto,
+aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+aside.lector-tarjeta[data-lector-estado="preparando"]::after {
+  animation: lector-latido 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes lector-latido {
+  from { opacity: 1; }
+  to { opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  aside.lector-tarjeta .lector-esqueleto,
+  aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+  aside.lector-tarjeta[data-lector-estado="preparando"]::after {
+    animation: none;
+  }
+}

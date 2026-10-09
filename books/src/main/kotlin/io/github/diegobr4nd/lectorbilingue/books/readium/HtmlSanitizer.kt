@@ -28,7 +28,7 @@ import java.io.ByteArrayInputStream
  * - si algo no cuadra (un XHTML sin `<html>` en la raíz), no sirve el original: devuelve una página vacía.
  *
  * Es idempotente: Readium 3.4.0 lo aplica dos veces al mismo capítulo (spike, P3), y sanear dos veces
- * da exactamente lo mismo que sanear una (una sola CSP, la nuestra).
+ * da exactamente lo mismo que sanear una (una sola CSP, la nuestra, y un solo `<link>` a [CARD_STYLESHEET]).
  */
 object HtmlSanitizer {
     /** Cómo leerá el navegador el recurso; depende del tipo con que Readium lo sirve ([ResourceSanitizing.kindFor]). */
@@ -68,6 +68,19 @@ object HtmlSanitizer {
         "style-src 'self' https: 'unsafe-inline' data:; img-src 'self' https: data: blob:; font-src 'self' https: data:; " +
         "media-src 'self' data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; " +
         "manifest-src 'none'; form-action 'none'; base-uri 'none'"
+
+    /**
+     * Hoja de la app para las tarjetas de traducción (Fase 3b). Readium la sirve desde los assets de la app
+     * (`servedAssets = lector/.*` en ReaderActivity), en el mismo origen que su propio CSS: el libro no puede cambiar
+     * el archivo. Sí puede competir en la cascada con su propio CSS; por eso la hoja marca `display` y `visibility`
+     * con `!important` y aquí se quitan del libro las marcas de la tarjeta ([removeCardClass]).
+     * Va justo después de la CSP; la CSP no cambia (ya permite estilos `https:`). Spec 3b §12, T2 vía B.
+     */
+    const val CARD_STYLESHEET = "https://readium_assets/lector/tarjeta.css"
+
+    /** Clase y prefijo de atributos de las tarjetas de la app (ParagraphScripts en :app). El libro no puede usarlos. */
+    private const val CARD_CLASS = "lector-tarjeta"
+    private const val CARD_DATA_PREFIX = "data-lector-"
 
     private const val XHTML_NS = "http://www.w3.org/1999/xhtml"
 
@@ -165,7 +178,7 @@ object HtmlSanitizer {
             // Todos los <meta http-equiv> (refresh, CSP del libro, content-type…) y <meta charset>: se pone lo nuestro.
             (name == "meta" && el.attributes().asList().any { localName(it.key) == "http-equiv" || localName(it.key) == "charset" }) ||
             (name in ANIMATIONS && el.attributes().asList().any { localName(it.key) == "attributename" && localName(it.value) == "href" }) ||
-            (name == "link" && hasForbiddenRel(el))
+            (name == "link" && (hasForbiddenRel(el) || isCardStylesheet(el)))
     }
 
     /** true si algún token de `rel` (separados por espacios, sin distinguir mayúsculas, con o sin prefijo) no está permitido. */
@@ -175,12 +188,32 @@ object HtmlSanitizer {
             .flatMap { it.value.lowercase().split(' ', '\t', '\n', '\r', '\u000C') }
             .any { it.isNotEmpty() && it !in LINK_REL_ALLOWED }
 
+    /** El `<link>` a nuestra hoja (de una pasada anterior o puesto por el libro): se quita y se repone uno solo. */
+    private fun isCardStylesheet(link: Element): Boolean =
+        link.attributes().asList().any { localName(it.key) == "href" && it.value.trim().equals(CARD_STYLESHEET, ignoreCase = true) }
+
     private fun cleanAttributes(el: Element) {
         val toRemove = el.attributes().asList().filter { attr ->
             localName(attr.key).startsWith("on") || localName(attr.key) in REMOVE_ATTRIBUTES ||
+                localName(attr.key).startsWith(CARD_DATA_PREFIX) ||
                 attr.key.lowercase() == "xml:base" || isDangerousUrl(attr.value)
         }
         for (attr in toRemove) el.removeAttr(attr.key)
+        removeCardClass(el)
+    }
+
+    /**
+     * Las marcas de nuestras tarjetas (clase [CARD_CLASS] y atributos `data-lector-…`) son solo de la app: el libro no
+     * puede hacerse pasar por una tarjeta ni esconder una tocando esas marcas. Las demás clases se quedan.
+     * Sin distinguir mayúsculas: en modo "quirks" el navegador compara las clases así.
+     */
+    private fun removeCardClass(el: Element) {
+        for (attr in el.attributes().asList().filter { localName(it.key) == "class" }) {
+            val tokens = attr.value.split(' ', '\t', '\n', '\r', '\u000C').filter { it.isNotEmpty() }
+            if (tokens.none { it.equals(CARD_CLASS, ignoreCase = true) }) continue
+            val kept = tokens.filterNot { it.equals(CARD_CLASS, ignoreCase = true) }
+            if (kept.isEmpty()) el.removeAttr(attr.key) else el.attr(attr.key, kept.joinToString(" "))
+        }
     }
 
     /**
@@ -206,6 +239,7 @@ object HtmlSanitizer {
             // jsoup siempre crea <html>, <head> y <body> en modo HTML.
             val head = doc.head()
             head.prependElement("meta").attr("http-equiv", "Content-Security-Policy").attr("content", CSP)
+                .after(Element("link").attr("rel", "stylesheet").attr("href", CARD_STYLESHEET))
             head.prependElement("meta").attr("charset", "UTF-8")
             return true
         }
@@ -221,6 +255,7 @@ object HtmlSanitizer {
             ?.takeIf { it.tagName() == q("head") && (!it.hasAttr(nsAttr) || it.attr(nsAttr) == XHTML_NS) }
             ?: root.prependElement(q("head"))
         head.prependElement(q("meta")).attr("http-equiv", "Content-Security-Policy").attr("content", CSP)
+            .after(Element(q("link")).attr("rel", "stylesheet").attr("href", CARD_STYLESHEET))
         return true
     }
 }
