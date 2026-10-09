@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 class FakeBookDao : BookDao {
     val rows = MutableStateFlow<Map<String, BookEntity>>(emptyMap())
     var failInsert = false
+    var failSetDirection = false
 
     override fun observeAll(): Flow<List<BookEntity>> = rows.map { m ->
         m.values.sortedWith(compareBy<BookEntity> { it.lastOpenedAt == null }.thenByDescending { it.lastOpenedAt ?: 0 }.thenByDescending { it.addedAt })
@@ -24,6 +25,7 @@ class FakeBookDao : BookDao {
         rows.value[id]?.let { rows.value = rows.value + (id to it.copy(locator = locator, progress = progress)) }
     }
     override suspend fun setDirection(id: String, direction: String?) {
+        if (failSetDirection) throw IllegalStateException("falla de prueba")
         rows.value[id]?.let { rows.value = rows.value + (id to it.copy(direction = direction)) }
     }
     override suspend fun markOpened(id: String, at: Long) {

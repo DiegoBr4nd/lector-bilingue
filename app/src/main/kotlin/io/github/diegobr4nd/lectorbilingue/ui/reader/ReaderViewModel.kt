@@ -145,14 +145,23 @@ class ReaderViewModel(
 
     /** Guarda la dirección del libro y cierra todas las tarjetas (eran de la otra dirección). */
     fun setDirection(pair: LanguagePair) {
-        directionChosen = true
         if (pair == _direction.value) return
+        directionChosen = true
         _direction.value = pair
         for ((resource, open) in cards) {
             for (index in open.keys) _cardOps.tryEmit(CardOp.Hide(resource, index))
         }
         cards.clear()
-        viewModelScope.launch { repo.setDirection(bookId, TranslationRules.wire(pair)) }
+        // NonCancellable: si se sale enseguida del Lector, la elección se guarda igual.
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                try {
+                    repo.setDirection(bookId, TranslationRules.wire(pair))
+                } catch (e: Exception) {
+                    // Sin la base, la dirección vale mientras el Lector siga abierto.
+                }
+            }
+        }
     }
 
     /** Pide la traducción de [card] como toque; con [hit], al llegar pretraduce los siguientes. */
@@ -175,7 +184,8 @@ class ReaderViewModel(
             card.state = result.toCardState()
             // En otro recurso no se inserta; queda guardado y se repone al volver (onResourceShown).
             showIfVisible(resource, index, card.state)
-            if (hit != null) prefetch(resource, pair, hit)
+            // Solo si tradujo: tras un fallo o sin modelo, cada pretraducción volvería a intentar cargar el motor.
+            if (hit != null && result is TranslateResult.Done) prefetch(resource, pair, hit)
         }
     }
 

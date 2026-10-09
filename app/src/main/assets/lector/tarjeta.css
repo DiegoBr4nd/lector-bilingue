@@ -4,7 +4,8 @@
  * Colores con contraste AA sobre la página blanca (hasta la 3c); diseno los fija en la Tarea 6.
  */
 aside.lector-tarjeta {
-  /* Muchos EPUB3 ocultan los aside (notas emergentes): !important para que la tarjeta se vea igual. */
+  /* Muchos EPUB3 ocultan los aside (notas emergentes). !important gana frente a reglas genéricas de `aside`;
+     una regla del libro con !important y más específica (p. ej. `body aside[data-lector-i]`) aún podría taparla. */
   display: block !important;
   visibility: visible !important;
   margin: 0.4em 0 1em;

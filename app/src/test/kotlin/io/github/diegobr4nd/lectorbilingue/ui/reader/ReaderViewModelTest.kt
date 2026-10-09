@@ -333,6 +333,74 @@ class ReaderViewModelTest {
         assertEquals(before, ops.size)
     }
 
+    // Fix 1: tras un fallo del motor, la pretraducción no vuelve a intentar cargarlo una vez por párrafo.
+    @Test fun sinTraduccionNoPretraduce() = runTest(dispatcher) {
+        engine.failLoads = 1
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "A."), p(1, "B."), p(2, "C.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Failed(prepare = true)), ops.last())
+        assertEquals(1, engine.loadCount)
+        assertTrue(engine.translatedTexts.isEmpty())
+    }
+
+    @Test fun sinModeloNoPretraduce() = runTest(dispatcher) {
+        provider.installedEngines = emptyMap()
+        val (vm, _) = vmWithOps()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "A."), p(1, "B.")))
+        advanceUntilIdle()
+        val calls = provider.installedCalls
+        provider.installedEngines = mapOf(EngineId.OPUS to FakeEngineProvider.OPUS_TAG)
+        advanceUntilIdle()
+        assertEquals(calls, provider.installedCalls) // nada quedó en la fila
+        assertTrue(engine.translatedTexts.isEmpty())
+    }
+
+    // Fix 3: elegir la misma dirección antes de leer el libro no tapa la guardada.
+    @Test fun elegirLaMismaDireccionNoTapaLaGuardada() = runTest(dispatcher) {
+        val vm = viewModel(direction = "es-en", languages = listOf("en"))
+        assertEquals(enEs, vm.direction.value) // aún no se leyó el libro
+        vm.setDirection(enEs) // igual a la actual: no hace nada
+        advanceUntilIdle()
+        assertEquals(esEn, vm.direction.value)
+        assertEquals("es-en", dao.get(id)!!.direction)
+    }
+
+    // Fix 2: si la base falla al guardar la dirección, el Lector sigue (sin caerse) con la dirección elegida.
+    @Test fun guardarLaDireccionQueFallaNoTumbaElLector() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        dao.failSetDirection = true
+        vm.setDirection(esEn)
+        advanceUntilIdle()
+        assertEquals(esEn, vm.direction.value)
+        assertNull(dao.get(id)!!.direction)
+    }
+
+    // Fix 5a: soltar el motor con una traducción en curso no deja la tarjeta en "Traduciendo…".
+    @Test fun cerrarIdiomasConUnaTraduccionEnCursoLaTermina() = runTest(dispatcher) {
+        val g = FakeEngine(gate = true)
+        val (vm, ops) = vmWithOps(g)
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        runCurrent()
+        vm.onLanguagesClosed()
+        runCurrent(); g.releaseAll(); advanceUntilIdle()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)")), ops.last())
+    }
+
+    // Fix 5b: cambiar de dirección con una traducción en curso: el resultado viejo no aparece.
+    @Test fun cambiarDireccionEnCursoNoMuestraLaVieja() = runTest(dispatcher) {
+        val g = FakeEngine(gate = true)
+        val (vm, ops) = vmWithOps(g)
+        advanceUntilIdle()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        runCurrent()
+        vm.setDirection(esEn)
+        runCurrent(); g.releaseAll(); advanceUntilIdle()
+        assertEquals(CardOp.Hide("c1.xhtml", 0), ops.last())
+        assertTrue(ops.none { it is CardOp.Show && it.card is CardState.Text }, "$ops")
+    }
+
     @Test fun alLimpiarseSueltaElMotor() = runTest(dispatcher) {
         val (vm, _) = vmWithOps()
         vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
