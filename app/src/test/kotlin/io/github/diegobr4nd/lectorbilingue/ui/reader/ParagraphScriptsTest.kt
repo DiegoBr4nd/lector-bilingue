@@ -24,9 +24,10 @@ class ParagraphScriptsTest {
             ParagraphScripts.find(1.0, 2.0),
             ParagraphScripts.remove(1),
             ParagraphScripts.indexAt(1.0, 2.0),
+            ParagraphScripts.removeAll("OEBPS/c1.xhtml"),
             ParagraphScripts.insert(0, Card.Skeleton, labels),
             ParagraphScripts.insert(0, Card.Preparing, labels),
-            ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)"), labels),
+            ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar"), labels),
             ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar"), labels),
         )
         for (js in all) {
@@ -129,5 +130,35 @@ class ParagraphScriptsTest {
         assertNull(ParagraphScripts.parseIndex("null"))
         assertNull(ParagraphScripts.parseIndex("\"3\""))
         assertNull(ParagraphScripts.parseIndex("2.5"))
+    }
+
+    // Ruling K: al quedar lista la página se quitan TODAS nuestras tarjetas antes de reponer las abiertas.
+    @Test fun `removeAll solo quita y solo si la pagina lista es la esperada`() {
+        val js = ParagraphScripts.removeAll("OEBPS/cap 1\"</script>.xhtml")
+        // Solo quitar del DOM: no crea, no escribe texto ni atributos.
+        for (bad in listOf("createElement", "appendChild", "textContent", "setAttribute", ".after(", "dataset.lectorEstado =")) {
+            assertFalse(js.contains(bad), "usa $bad: $js")
+        }
+        assertTrue(js.contains(".remove()"))
+        assertTrue(js.contains("querySelectorAll('aside.lector-tarjeta[data-lector-i]')"))
+        // Página lista y del recurso esperado (spec §12); si no, responde false y la pantalla reintenta.
+        assertTrue(js.contains("document.readyState !== 'complete'"))
+        assertTrue(js.contains("location.pathname"))
+        // La ruta va como dato JSON, escapada.
+        assertFalse(js.contains("</script>"))
+        assertTrue(js.contains("\"path\""))
+    }
+
+    @Test fun `la tarjeta sin modelo lleva su accion como enlace`() {
+        val js = ParagraphScripts.insert(0, Card.MissingModel("Falta el idioma inglés → español (227 MB)", "Descargar"), labels)
+        assertTrue(js.contains("\"retry\":\"Descargar\""), js)
+        assertTrue(js.contains("\"kind\":\"falta-modelo\""), js)
+    }
+
+    @Test fun `leer la respuesta de removeAll`() {
+        assertTrue(ParagraphScripts.parseReady("true"))
+        assertFalse(ParagraphScripts.parseReady("false"))
+        assertFalse(ParagraphScripts.parseReady(null))
+        assertFalse(ParagraphScripts.parseReady("\"true\""))
     }
 }

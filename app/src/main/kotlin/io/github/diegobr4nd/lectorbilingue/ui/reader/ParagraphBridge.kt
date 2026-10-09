@@ -32,6 +32,12 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
         run(ParagraphScripts.remove(index))
     }
 
+    /**
+     * Si la página visible ya cargó y es [resource], quita todas las tarjetas y responde true; si no (o aún no hay
+     * página), false.
+     */
+    suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
+
     // El WebView solo se usa en el hilo principal.
     private suspend fun run(script: String): String? = withContext(Dispatchers.Main.immediate) {
         navigator()?.evaluateJavascript(script)

@@ -416,4 +416,17 @@ class ReaderViewModelTest {
         runCurrent()
         assertEquals(1, engine.unloadCount)
     }
+
+    // La pantalla resuelve un toque sobre la tarjeta con este estado (reintentar, abrir Idiomas o cerrar).
+    @Test fun estadoDeUnaTarjetaAbierta() = runTest(dispatcher) {
+        provider.installedEngines = emptyMap()
+        val (vm, _) = vmWithOps()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        assertEquals(CardState.MissingModel(EngineId.OPUS), vm.cardState("c1.xhtml", 0))
+        assertNull(vm.cardState("c1.xhtml", 1))
+        assertNull(vm.cardState("c3.xhtml", 0))
+        vm.onTap("c1.xhtml", listOf(p(0, "")))
+        assertNull(vm.cardState("c1.xhtml", 0)) // cerrada
+    }
 }

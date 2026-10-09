@@ -1,7 +1,8 @@
 /*
  * Tarjeta de traducción bajo el párrafo tocado (Fase 3b). La sirve Readium desde los assets de la app
  * (https://readium_assets/lector/tarjeta.css); el <link> lo pone HtmlSanitizer tras la CSP.
- * Colores con contraste AA sobre la página blanca (hasta la 3c); diseno los fija en la Tarea 6.
+ * Colores finales de la 3b (boceto aprobado por Juan), con contraste AA sobre la página blanca; la 3c los
+ * redefine por tema.
  */
 aside.lector-tarjeta {
   /* Muchos EPUB3 ocultan los aside (notas emergentes). !important gana frente a reglas genéricas de `aside`;
@@ -21,17 +22,46 @@ aside.lector-tarjeta {
   text-align: start;
 }
 
+/* Error y falta de modelo: línea roja + fondo cálido + texto (nunca solo el color). */
 aside.lector-tarjeta[data-lector-estado="error"],
 aside.lector-tarjeta[data-lector-estado="falta-modelo"] {
-  border-left-color: #b42318; /* 6,5:1 sobre blanco */
+  border-left-color: #b42318; /* 6,6:1 sobre blanco */
+  background: #fef3f2; /* el texto #1f2937 queda a 13,5:1 */
 }
 
+/* "Reintentar" / "Descargar": enlace subrayado de al menos 48 px de alto (toda la tarjeta es tocable). */
 aside.lector-tarjeta .lector-reintentar {
+  display: inline-block;
+  min-height: 48px;
+  padding: 0.8em 0;
+  box-sizing: border-box;
+  vertical-align: middle;
+  color: #364fc7; /* 6,1:1 sobre #eef2ff */
   text-decoration: underline;
 }
 
-aside.lector-tarjeta .lector-esqueleto {
-  /* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo. */
+aside.lector-tarjeta[data-lector-estado="error"] .lector-reintentar,
+aside.lector-tarjeta[data-lector-estado="falta-modelo"] .lector-reintentar {
+  color: #912018; /* 8,0:1 sobre #fef3f2 */
+}
+
+/* Esqueleto y "Preparando…": dos rayas decorativas (TalkBack no las lee; el texto es la información). */
+aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+aside.lector-tarjeta[data-lector-estado="preparando"]::after {
+  content: "";
+  display: block;
+  height: 2.1em;
+  margin-top: 0.3em;
+  background:
+    linear-gradient(#c7d0ea, #c7d0ea) 0 0.25em / 100% 0.6em no-repeat,
+    linear-gradient(#c7d0ea, #c7d0ea) 0 1.35em / 62% 0.6em no-repeat;
+  border-radius: 4px;
+}
+
+/* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo (queda #5d6573, 5,3:1). */
+aside.lector-tarjeta .lector-esqueleto,
+aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+aside.lector-tarjeta[data-lector-estado="preparando"]::after {
   animation: lector-latido 1.2s ease-in-out infinite alternate;
 }
 
@@ -41,7 +71,9 @@ aside.lector-tarjeta .lector-esqueleto {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  aside.lector-tarjeta .lector-esqueleto {
+  aside.lector-tarjeta .lector-esqueleto,
+  aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
+  aside.lector-tarjeta[data-lector-estado="preparando"]::after {
     animation: none;
   }
 }

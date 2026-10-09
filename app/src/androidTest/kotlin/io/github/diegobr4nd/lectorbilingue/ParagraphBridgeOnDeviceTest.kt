@@ -93,6 +93,15 @@ class ParagraphBridgeOnDeviceTest {
             // 5. Quitar.
             bridge.hide(1)
             assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+
+            // 6. Quitar todas (Ruling K): solo si la página lista es el recurso esperado (el href del localizador).
+            bridge.show(1, Card.Text("Uno"), labels)
+            bridge.show(3, Card.Text("Tres"), labels)
+            val href = s.navigator()!!.currentLocator.value.href.toString()
+            assertEquals(false, bridge.hideAll("OEBPS/c2.xhtml"))
+            assertEquals("2", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            assertEquals(true, bridge.hideAll("$href#algo"))
+            assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
         }
     }
 

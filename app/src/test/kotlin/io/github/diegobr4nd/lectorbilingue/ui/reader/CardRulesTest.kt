@@ -1,5 +1,8 @@
 package io.github.diegobr4nd.lectorbilingue.ui.reader
 
+import io.github.diegobr4nd.lectorbilingue.data.PairStatus
+import io.github.diegobr4nd.lectorbilingue.data.RowStatus
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,5 +35,33 @@ class CardRulesTest {
     @Test fun `un siguiente repetido o vacio se pide una sola vez`() {
         val hit = listOf(PageParagraph(0, "a"), PageParagraph(1, "b"), PageParagraph(2, " b "), PageParagraph(3, "  "))
         assertEquals(listOf(PageParagraph(1, "b")), CardRules.prefetchTargets(hit, emptySet()))
+    }
+
+    private val texts = CardTexts(
+        paragraphFailed = "No se pudo traducir este párrafo",
+        prepareFailed = "No se pudo preparar el traductor",
+        retry = "Reintentar",
+        download = "Descargar",
+        missing = { engine -> "Falta $engine" },
+    )
+
+    @Test fun `cada estado se vuelve la tarjeta con sus textos`() {
+        assertEquals(Card.Skeleton, CardRules.card(CardState.Skeleton, texts))
+        assertEquals(Card.Preparing, CardRules.card(CardState.Preparing, texts))
+        assertEquals(Card.Text("Hola"), CardRules.card(CardState.Text("Hola"), texts))
+        assertEquals(Card.MissingModel("Falta OPUS", "Descargar"), CardRules.card(CardState.MissingModel(EngineId.OPUS), texts))
+        assertEquals(Card.Failed("No se pudo traducir este párrafo", "Reintentar"), CardRules.card(CardState.Failed(prepare = false), texts))
+        assertEquals(Card.Failed("No se pudo preparar el traductor", "Reintentar"), CardRules.card(CardState.Failed(prepare = true), texts))
+    }
+
+    @Test fun `tamano del modelo que falta segun el catalogo`() {
+        val pairs = listOf(
+            PairStatus("en-es", listOf(RowStatus("o", EngineId.OPUS, 238_524_992, false, null), RowStatus("f", EngineId.FIREFOX, 40L * 1024 * 1024, false, null))),
+            PairStatus("es-en", listOf(RowStatus("o2", EngineId.OPUS, 1024L * 1024, false, null))),
+        )
+        assertEquals(227L, CardRules.modelMegabytes(pairs, "en-es", EngineId.OPUS))
+        assertEquals(40L, CardRules.modelMegabytes(pairs, "en-es", EngineId.FIREFOX))
+        assertEquals(null, CardRules.modelMegabytes(pairs, "es-en", EngineId.FIREFOX))
+        assertEquals(null, CardRules.modelMegabytes(emptyList(), "en-es", EngineId.OPUS)) // sin catálogo: sin tamaño
     }
 }

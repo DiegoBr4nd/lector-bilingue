@@ -122,6 +122,9 @@ class ReaderViewModel(
         cards[resource]?.forEach { (index, card) -> _cardOps.tryEmit(CardOp.Show(resource, index, card.state)) }
     }
 
+    /** Estado de la tarjeta abierta del párrafo [index] de [resource], o null si no tiene. */
+    fun cardState(resource: String, index: Int): CardState? = cards[resource]?.get(index)?.state
+
     /** Tocar una tarjeta con error (o sin modelo) la vuelve a pedir. Cualquier otro estado: nada. */
     fun retry(resource: String, index: Int) {
         val card = cards[resource]?.get(index) ?: return

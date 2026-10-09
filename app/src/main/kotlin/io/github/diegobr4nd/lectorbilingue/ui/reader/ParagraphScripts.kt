@@ -17,8 +17,8 @@ sealed interface Card {
 
     data class Text(val translation: String) : Card
 
-    /** Texto ya armado, con el tamaño del modelo que falta. */
-    data class MissingModel(val label: String) : Card
+    /** Texto ya armado, con el tamaño del modelo que falta; [action] ("Descargar") va como enlace subrayado. */
+    data class MissingModel(val label: String, val action: String) : Card
 
     data class Failed(val label: String, val retry: String) : Card
 }
@@ -116,7 +116,7 @@ object ParagraphScripts {
             Card.Skeleton -> data.put("kind", "esqueleto").put("text", labels.skeleton)
             Card.Preparing -> data.put("kind", "preparando").put("text", labels.preparing)
             is Card.Text -> data.put("kind", "texto").put("text", card.translation)
-            is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label)
+            is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action)
             is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry)
         }
         return script(
@@ -169,6 +169,28 @@ object ParagraphScripts {
         return true;
         """,
     )
+
+    /**
+     * Si la página ya cargó del todo y es el recurso [path] (el `href` del localizador, sin `#`), quita TODAS nuestras
+     * tarjetas y responde true; si no, false (la pantalla reintenta poco después). Así una tarjeta vieja (de un capítulo
+     * vecino que el ViewPager tenía cargado) no queda antes de reponer las abiertas (spec §12, Ruling K). Solo quita.
+     */
+    fun removeAll(path: String): String = script(
+        JSONObject().put("path", path.substringBefore('#').substringBefore('?')),
+        """
+        if (document.readyState !== 'complete') return false;
+        var here, want;
+        try { here = decodeURIComponent(location.pathname); want = decodeURIComponent(a.path); } catch (e) { return false; }
+        want = '/' + want.replace(/^\/+/, '');
+        if (here.slice(-want.length) !== want) return false;
+        var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
+        for (var k = 0; k < cards.length; k++) cards[k].remove();
+        return true;
+        """,
+    )
+
+    /** Lee la respuesta de [removeAll]: true solo si la página estaba lista (y ya sin tarjetas). */
+    fun parseReady(json: String?): Boolean = parse(json) == true
 
     /** Índice del párrafo o de la tarjeta bajo el punto (px CSS); -1 si no hay ninguno. Para cerrar tocando la tarjeta. */
     fun indexAt(xCss: Double, yCss: Double): String = script(
