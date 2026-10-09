@@ -62,7 +62,7 @@ object CardRules {
         val seen = HashSet(cachedOrOpen)
         return hit.drop(1).filter { p ->
             val text = TranslationRules.normalize(p.text)
-            text.isNotEmpty() && text.length <= MAX_PREFETCH_CHARS && seen.add(text)
+            !p.cut && text.isNotEmpty() && text.length <= MAX_PREFETCH_CHARS && seen.add(text)
         }
     }
 

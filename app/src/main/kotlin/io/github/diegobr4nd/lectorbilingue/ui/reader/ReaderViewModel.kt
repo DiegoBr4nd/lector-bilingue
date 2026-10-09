@@ -116,7 +116,7 @@ class ReaderViewModel(
         }
         val normalized = TranslationRules.normalize(tapped.text)
         if (normalized.isEmpty()) return
-        if (TranslationRules.tooLong(normalized)) {
+        if (tapped.cut || TranslationRules.tooLong(normalized)) {
             // Directa, sin pasar por "Preparando…": el servicio lo rechazaría enseguida igual (y no se reintenta).
             open[tapped.index] = OpenCard(tapped.text, CardState.TooLong, 0)
             showIfVisible(resource, tapped.index, CardState.TooLong)

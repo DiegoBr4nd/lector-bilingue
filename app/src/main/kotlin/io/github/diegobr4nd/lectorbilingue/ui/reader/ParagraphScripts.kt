@@ -5,8 +5,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 
-/** Un párrafo de la página visible: [index] es su posición entre los párrafos del recurso (0, 1, 2…). */
-data class PageParagraph(val index: Int, val text: String)
+/**
+ * Un párrafo de la página visible: [index] es su posición entre los párrafos del recurso (0, 1, 2…). [cut]: la página lo
+ * recortó al tope ([TranslationRules.MAX_PARAGRAPH_CHARS]); es demasiado largo aunque [text] quede en el tope.
+ */
+data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false)
 
 /** Lo que muestra la tarjeta bajo un párrafo. */
 sealed interface Card {
@@ -72,8 +75,8 @@ object ParagraphScripts {
      * El párrafo bajo el punto (en px CSS) y los [following] siguientes con texto.
      * Responde `JSON.stringify([{i, t}, …])`, el tocado primero; `[]` si no hay párrafo con texto. Cada `t` va con los
      * espacios colapsados como en [TranslationRules.normalize] y, si pasa de [TranslationRules.MAX_PARAGRAPH_CHARS],
-     * cortado ahí más "…" (el tope + 1, nunca acabado en espacio): así la app sabe que es demasiado largo sin recibir
-     * megas de texto.
+     * cortado ahí más "…" y con `cut: true`: así la app sabe que es demasiado largo sin recibir megas de texto (la marca
+     * cuenta aunque Kotlin, al recortar espacios, lo deje justo en el tope).
      */
     fun find(xCss: Double, yCss: Double, following: Int = 5): String = script(
         JSONObject().put("sel", SELECTOR).put("x", xCss).put("y", yCss).put("n", following)
@@ -86,14 +89,14 @@ object ParagraphScripts {
         var at = all.indexOf(el);
         var text = el.textContent || '';
         if (at < 0 || !text.trim()) return JSON.stringify([]);
-        function clip(t) {
+        function item(i, t) {
           t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();
-          return t.length > a.max ? t.slice(0, a.max) + '…' : t;
+          return t.length > a.max ? { i: i, t: t.slice(0, a.max) + '…', cut: true } : { i: i, t: t };
         }
-        var out = [{ i: at, t: clip(text) }];
+        var out = [item(at, text)];
         for (var k = at + 1; k < all.length && out.length <= a.n; k++) {
           var t = all[k].textContent || '';
-          if (t.trim()) out.push({ i: k, t: clip(t) });
+          if (t.trim()) out.push(item(k, t));
         }
         return JSON.stringify(out);
         """,
@@ -120,7 +123,7 @@ object ParagraphScripts {
             if (text.isEmpty()) {
                 if (k == 0) return emptyList() else continue
             }
-            out += PageParagraph(i, text)
+            out += PageParagraph(i, text, cut = o.opt("cut") == true)
         }
         return out
     }

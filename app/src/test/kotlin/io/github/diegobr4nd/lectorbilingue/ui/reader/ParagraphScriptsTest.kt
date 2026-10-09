@@ -1,5 +1,7 @@
 package io.github.diegobr4nd.lectorbilingue.ui.reader
 
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -178,9 +180,10 @@ class ParagraphScriptsTest {
         val js = ParagraphScripts.find(1.0, 2.0)
         assertTrue(js.contains("\"max\":20000"), js)
         assertTrue(js.contains("""t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();"""), js)
-        assertTrue(js.contains("return t.length > a.max ? t.slice(0, a.max) + '…' : t;"), js)
-        assertTrue(js.contains("out = [{ i: at, t: clip(text) }]"), js)
-        assertTrue(js.contains("out.push({ i: k, t: clip(t) })"), js)
+        // Revisión final 3b (M1): además del "…", una marca explícita de recorte.
+        assertTrue(js.contains("return t.length > a.max ? { i: i, t: t.slice(0, a.max) + '…', cut: true } : { i: i, t: t };"), js)
+        assertTrue(js.contains("var out = [item(at, text)];"), js)
+        assertTrue(js.contains("out.push(item(k, t))"), js)
     }
 
     // Diseño 3b (M1): la tarjeta con texto no lleva aria-label (taparía la traducción al deslizar con TalkBack).
@@ -203,5 +206,19 @@ class ParagraphScriptsTest {
         val js = ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar", "No se pudo traducir. Reintentar"), labels)
         assertTrue(js.contains("\"spoken\":\"No se pudo traducir. Reintentar\""), js)
         assertTrue(js.contains("\"kind\":\"error\""), js)
+    }
+
+    // Revisión final 3b (M1/M5): Kotlin quita al recortar caracteres que la página deja (U+001C a U+001F). Sin la marca,
+    // un párrafo recortado podía quedar justo en el tope y traducirse a medias; la marca `cut` lo dice igual.
+    @Test fun `parseFind conserva la marca de recorte aunque el texto quede en el tope`() {
+        val json = JSONArray()
+            .put(JSONObject().put("i", 0).put("t", "a".repeat(20_000) + Char(0x1F)).put("cut", true))
+            .put(JSONObject().put("i", 1).put("t", "b").put("cut", "true")) // solo el booleano true cuenta
+            .put(JSONObject().put("i", 2).put("t", "c"))
+            .toString()
+        assertEquals(
+            listOf(PageParagraph(0, "a".repeat(20_000), cut = true), PageParagraph(1, "b"), PageParagraph(2, "c")),
+            ParagraphScripts.parseFind(json),
+        )
     }
 }

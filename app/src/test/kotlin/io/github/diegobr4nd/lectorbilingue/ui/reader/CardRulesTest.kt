@@ -84,4 +84,9 @@ class CardRulesTest {
         assertEquals(null, CardRules.spoken(CardState.Preparing, texts))
         assertEquals("Este párrafo es demasiado largo para traducirlo", CardRules.spoken(CardState.TooLong, texts))
     }
+
+    @Test fun `no pretraduce un parrafo recortado por la pagina`() {
+        val hit = listOf(PageParagraph(0, "A."), PageParagraph(1, "B.", cut = true), PageParagraph(2, "C."))
+        assertEquals(listOf(PageParagraph(2, "C.")), CardRules.prefetchTargets(hit, emptySet()))
+    }
 }

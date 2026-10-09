@@ -536,4 +536,21 @@ class ReaderViewModelTest {
         assertEquals(CardState.TooLong, vm.cardState("c1.xhtml", 0))
         assertEquals(0, provider.installedCalls)
     }
+
+    // Revisión final 3b (M5): la cadena entera, de la respuesta de la página a la tarjeta, con un texto que tras el
+    // recorte de Kotlin queda justo en el tope: la marca `cut` basta para "demasiado largo" y el motor ni se carga.
+    @Test fun recortadoPorLaPaginaEsDemasiadoLargoAunqueQuedeEnElTope() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps()
+        val json = org.json.JSONArray()
+            .put(org.json.JSONObject().put("i", 0).put("t", "a".repeat(20_000) + Char(0x1F)).put("cut", true))
+            .put(org.json.JSONObject().put("i", 1).put("t", "B."))
+            .toString()
+        val hit = ParagraphScripts.parseFind(json)
+        assertEquals(20_000, hit[0].text.length) // por longitud sola se traduciría
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", hit)
+        advanceUntilIdle()
+        assertEquals(listOf<CardOp>(CardOp.Show("c1.xhtml", 0, CardState.TooLong)), ops)
+        assertEquals(0, engine.loadCount)
+        assertTrue(engine.translatedTexts.isEmpty())
+    }
 }
