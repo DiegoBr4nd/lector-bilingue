@@ -153,3 +153,17 @@ Rama local `spike/3b-tocar` (borrada), Readium 3.4.0, Pixel 7, libro inventado d
 - El ViewPager tiene cargado el capítulo vecino: sus nodos de accesibilidad tienen los mismos ids (fuera de pantalla, `isVisibleToUser` false con TalkBack). Los scripts propios solo ven el recurso visible.
 - Con TalkBack **apagado**, `performAction(ACTION_CLICK)` desde UiAutomation no hace nada. Con TalkBack encendido genera el clic en el centro del nodo, también en un `<p>` sin acción de clic declarada. Para la prueba automática del plan (§9), TalkBack debe estar encendido.
 - Del toque doble de Juan sobre p4 no hubo registro: hubo foco en p4 (30,5 s) y luego en p6 (35,8 s), sin `onTap` entre los dos. Es probable que el toque doble no llegara a hacerse ahí. La parte automática sí dio `onTap` en p4. Se vuelve a mirar en la prueba con TalkBack del plan.
+
+### Tiempos del motor real (Task 7)
+
+Pixel 7, modelo OPUS en-es (beam 1, 4 hilos), compilación debug, `TapTranslateTimingOnDeviceTest`, textos inventados en inglés de ~50 palabras (solo números). "Al frente" = la app visible (el sistema le da los núcleos rápidos); "de fondo" = la prueba corre con el lanzador al frente.
+
+| Medida | Meta | Al frente | De fondo |
+|---|---|---|---|
+| Toque, motor frío (con carga), 1 muestra | (sin meta) | 2967 ms | 7962 ms |
+| Toque, motor cargado, 50 palabras, 5 muestras | < 2 s | 1605 a 1904 ms (mediana 1852) | 6874 a 8135 ms |
+| Toque sobre párrafo pretraducido, 5 muestras | < 200 ms | 8 ms (7 a 8) | 7 a 10 ms |
+| 20 párrafos de 30 a 70 palabras, seguidos (1020 palabras) | ≥ 15 palabras/s | 26,2 palabras/s (38,97 s) | 7,0 palabras/s (145,8 s) |
+
+- Metas cumplidas con la app al frente, que es el uso real. De fondo no se cumplen: es el efecto ya medido en la puerta 1b (sin los núcleos rápidos), no un cambio de código.
+- No se tocaron beam ni hilos.
