@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -134,6 +135,11 @@ class TapTranslateOnDeviceTest {
             rule.onNode(hasText("Inglés → español") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Dirección actual"))
                 .assertExists()
             screenshot("hoja-direccion")
+            // Cada fila dice "a" en vez de la flecha y su acción "elegir esta dirección" (diseño B2).
+            for (spoken in listOf("Inglés a español", "Español a inglés")) {
+                val row = rule.onNode(hasContentDescription(spoken) and hasClickAction()).fetchSemanticsNode()
+                assertEquals("elegir esta dirección", row.config[SemanticsActions.OnClick].label)
+            }
             rule.onNodeWithText("Español → inglés").assertHeightIsAtLeast(48.dp).performClick()
 
             waitFor("dirección guardada") { runBlocking { app.books.get(id)?.direction } == "es-en" }

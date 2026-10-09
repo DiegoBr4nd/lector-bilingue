@@ -85,6 +85,7 @@ fun DirectionSheet(current: LanguagePair, onSelect: (LanguagePair) -> Unit, onDi
 @Composable
 fun DirectionContent(current: LanguagePair, onSelect: (LanguagePair) -> Unit, modifier: Modifier = Modifier) {
     val currentLabel = stringResource(R.string.reader_direction_current)
+    val selectLabel = stringResource(R.string.reader_direction_select)
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Text(
             stringResource(R.string.reader_direction_title),
@@ -100,7 +101,7 @@ fun DirectionContent(current: LanguagePair, onSelect: (LanguagePair) -> Unit, mo
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button) { onSelect(pair) }
+                    .clickable(role = Role.Button, onClickLabel = selectLabel) { onSelect(pair) }
                     .semantics {
                         contentDescription = spoken
                         if (selected) {

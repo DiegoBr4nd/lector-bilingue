@@ -123,6 +123,7 @@
     <string name="reader_direction_action">cambiar el idioma</string>
     <string name="reader_direction_title">Traducir de</string>
     <string name="reader_direction_current">Dirección actual</string>
+    <string name="reader_direction_select">elegir esta dirección</string>
     <string name="reader_direction_option">%1$s a %2$s</string>
     <string name="reader_direction_changed">Traducir de %1$s a %2$s</string>
     <string name="language_en">inglés</string>
