@@ -84,6 +84,44 @@ class ParagraphScriptsTest {
         assertTrue(js.contains("elementFromPoint")); assertTrue(js.contains("closest("))
     }
 
+    // Ruling G: la tarjeta de un párrafo es SOLO su hermano siguiente con nuestra clase y su índice; un aside del libro
+    // en otro sitio no cuenta (insert, remove e indexAt usan la misma regla).
+    @Test fun `la tarjeta se busca solo como hermano siguiente del parrafo`() {
+        val scripts = mapOf(
+            "insert" to ParagraphScripts.insert(2, Card.Text("x"), labels),
+            "remove" to ParagraphScripts.remove(2),
+            "indexAt" to ParagraphScripts.indexAt(1.0, 2.0),
+        )
+        for ((name, js) in scripts) {
+            assertTrue(js.contains("nextElementSibling"), "$name: $js")
+            assertTrue(js.contains("matches('aside.lector-tarjeta[data-lector-i=\"' + "), "$name: $js")
+            assertFalse(js.contains("document.querySelector('aside"), "$name busca en toda la página: $js")
+            assertTrue(js.contains(ParagraphScripts.SELECTOR), "$name necesita la lista de párrafos")
+        }
+        // indexAt solo acepta la tarjeta si de verdad sigue a su párrafo.
+        assertTrue(scripts.getValue("indexAt").contains("all[n].nextElementSibling === card"))
+    }
+
+    // Ruling H: solo hojas: un elemento del selector que contiene otro (blockquote > p, li > p) no cuenta.
+    @Test fun `la lista de parrafos solo tiene hojas`() {
+        for (js in listOf(
+            ParagraphScripts.find(1.0, 2.0), ParagraphScripts.insert(0, Card.Skeleton, labels),
+            ParagraphScripts.remove(0), ParagraphScripts.indexAt(1.0, 2.0),
+        )) {
+            assertTrue(js.contains("!e.querySelector(a.sel)"), js)
+        }
+    }
+
+    @Test fun `el punto tocado pasa a px CSS y lo que no es finito se descarta`() {
+        assertEquals(5.0 to 10.0, ParagraphScripts.cssPoint(10f, 20f, 2f))
+        assertEquals(0.0 to 0.0, ParagraphScripts.cssPoint(0f, 0f, 1f))
+        assertNull(ParagraphScripts.cssPoint(Float.NaN, 1f, 2f))
+        assertNull(ParagraphScripts.cssPoint(1f, Float.POSITIVE_INFINITY, 2f))
+        assertNull(ParagraphScripts.cssPoint(1f, 1f, Float.NaN))
+        assertNull(ParagraphScripts.cssPoint(1f, 1f, 0f))
+        assertNull(ParagraphScripts.cssPoint(1f, 1f, -2f))
+    }
+
     @Test fun `leer la respuesta de indexAt`() {
         assertEquals(3, ParagraphScripts.parseIndex("3"))
         assertNull(ParagraphScripts.parseIndex("-1"))

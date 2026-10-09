@@ -96,6 +96,66 @@ class ParagraphBridgeOnDeviceTest {
         }
     }
 
+    /**
+     * Libros raros u hostiles (Ruling G y H). La prueba monta en la página, con su propio script: un `blockquote` con un
+     * `p` dentro antes del primer párrafo, un `aside` falso con nuestras marcas al final y una regla que oculta los `aside`
+     * (como hacen muchos EPUB3). Así se ve el JS de verdad, que en la JVM solo se puede leer como texto.
+     */
+    @Test fun soloHojasLaTarjetaEsElHermanoSiguienteYNoSeOculta() = runBlocking<Unit> {
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            val bridge = ParagraphBridge { s.navigator() }
+            waitFor("página lista") {
+                js(s, "document.readyState === 'complete' && !!window.readium && document.querySelectorAll('p').length") == "70"
+            }
+            val density = app.resources.displayMetrics.density
+            assertEquals(
+                "ok",
+                js(
+                    s,
+                    "(function () { var first = document.querySelectorAll('p')[0];" +
+                        " var bq = document.createElement('blockquote'); var ip = document.createElement('p'); ip.id = 'cita';" +
+                        " ip.textContent = 'Cita.'; bq.appendChild(ip); first.before(bq);" +
+                        " var fake = document.createElement('aside'); fake.id = 'falsa'; fake.className = 'lector-tarjeta';" +
+                        " fake.dataset.lectorI = '2'; fake.textContent = 'falsa'; document.body.appendChild(fake);" +
+                        " var st = document.createElement('style'); st.textContent = 'aside { display: none !important; visibility: hidden !important; }';" +
+                        " document.head.appendChild(st); return 'ok'; })()",
+                ),
+            )
+
+            // 1. Tocar el p de dentro de la cita da ese p (índice 1: h1 = 0, el blockquote no cuenta); el primer p pasa a 2.
+            val (cx, cy) = centerOf(s, "document.getElementById('cita')")
+            val found = bridge.paragraphsAt((cx * density).toFloat(), (cy * density).toFloat(), density)
+            assertEquals(PageParagraph(1, "Cita."), found.first())
+            assertEquals((1..5).map { PageParagraph(it + 1, ReaderTestBook.paragraph(it)) }, found.drop(1))
+
+            // 2. La tarjeta del 2 va debajo del primer p del libro, se ve pese a la regla del libro y la falsa no se toca.
+            bridge.show(2, Card.Text("Hola"), labels)
+            val real = "document.querySelectorAll('p')[1].nextElementSibling"
+            assertEquals("true", js(s, "String($real.matches('aside.lector-tarjeta[data-lector-i=\"2\"]'))"))
+            assertEquals("Hola", js(s, "$real.textContent"))
+            assertEquals("block", js(s, "getComputedStyle($real).display"))
+            assertEquals("visible", js(s, "getComputedStyle($real).visibility"))
+            assertEquals("falsa", js(s, "document.getElementById('falsa').textContent"))
+            val (rx, ry) = centerOf(s, real)
+            assertEquals(2, bridge.indexAt((rx * density).toFloat(), (ry * density).toFloat(), density))
+
+            // 3. Quitar la 2 quita la de verdad y deja la falsa; quitar otra vez no encuentra nada.
+            bridge.hide(2)
+            assertEquals("false", js(s, "String(!!$real && $real.matches('aside'))"))
+            assertEquals("falsa", js(s, "document.getElementById('falsa').textContent"))
+
+            // 4. Un punto que no es finito no llega a la página.
+            assertEquals(emptyList(), bridge.paragraphsAt(Float.NaN, 10f, density))
+            assertEquals(null, bridge.indexAt(10f, 10f, 0f))
+        }
+    }
+
+    private fun centerOf(s: ActivityScenario<ReaderActivity>, element: String): Pair<Double, Double> {
+        val c = JSONObject(js(s, "var r = $element.getBoundingClientRect(); JSON.stringify({x: r.left + r.width / 2, y: r.top + r.height / 2})")!!)
+        return c.getDouble("x") to c.getDouble("y")
+    }
+
     private fun topOfFirstP(s: ActivityScenario<ReaderActivity>): Double =
         js(s, "String(document.querySelectorAll('p')[0].getBoundingClientRect().top)")!!.toDouble()
 

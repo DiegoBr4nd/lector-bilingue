@@ -285,6 +285,37 @@ class HtmlSanitizerTest {
         assertTrue(out.contains("<h:link rel=\"stylesheet\" href=\"${HtmlSanitizer.CARD_STYLESHEET}\""), out)
     }
 
+    // Ruling G: el libro no puede hacerse pasar por una tarjeta nuestra (ni ocultarla tocando sus marcas).
+    @Test fun `quita del libro la clase lector-tarjeta y los atributos data-lector`() {
+        for (kind in listOf(HtmlSanitizer.Kind.XHTML, HtmlSanitizer.Kind.HTML)) {
+            val markup = xhtml(
+                """<aside class="nota lector-tarjeta  x" data-lector-i="1" data-lector-estado="error" data-otro="y">a</aside>""" +
+                    """<p class="LECTOR-TARJETA">b</p><p class=" lector-tarjeta ">c</p><p class="lector-tarjetas">d</p>""" +
+                    """<p DATA-LECTOR-I="2">e</p>""",
+            )
+            val doc = Jsoup.parse(HtmlSanitizer.sanitize(markup.toByteArray(), kind).toString(Charsets.UTF_8), "", if (kind == HtmlSanitizer.Kind.HTML) Parser.htmlParser() else Parser.xmlParser())
+            val aside = doc.select("aside").single()
+            assertEquals("nota x", aside.attr("class"), kind.name)
+            assertEquals("y", aside.attr("data-otro"), kind.name) // los demás data- se quedan
+            assertFalse(aside.hasAttr("data-lector-i") || aside.hasAttr("data-lector-estado"), kind.name)
+            val ps = doc.select("p")
+            assertFalse(ps[0].hasAttr("class"), kind.name) // sin otras clases: el atributo se va entero
+            assertFalse(ps[1].hasAttr("class"), kind.name)
+            assertEquals("lector-tarjetas", ps[2].attr("class"), kind.name) // otra clase, aunque se parezca
+            assertTrue(ps[3].attributes().none { it.key.lowercase().startsWith("data-lector-") }, kind.name)
+            assertTrue(doc.select(".lector-tarjeta, [data-lector-i]").isEmpty(), kind.name)
+        }
+    }
+
+    @Test fun `con prefijo o dos pasadas tampoco quedan marcas de tarjeta`() {
+        val out = HtmlSanitizer.sanitize(
+            """<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>t</h:title></h:head><h:body>""" +
+                """<h:aside h:class="lector-tarjeta" h:data-lector-i="0">a</h:aside></h:body></h:html>""",
+        )
+        assertFalse(out.contains("lector-tarjeta\""), out); assertFalse(out.contains("data-lector-"), out)
+        assertEquals(out, HtmlSanitizer.sanitize(out))
+    }
+
     @Test fun `SVG no lleva la hoja`() {
         val out = HtmlSanitizer.sanitize("""<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>""", HtmlSanitizer.Kind.SVG)
         assertEquals(0, linkCount(out))

@@ -42,13 +42,23 @@ object ParagraphScripts {
 
     private const val CARD_CLASS = "lector-tarjeta"
 
-    /** Párrafos del recurso, sin los que estén dentro de una tarjeta nuestra. Lo usan todos los scripts. */
+    /**
+     * Párrafos del recurso: solo hojas (un `blockquote` o `li` que contiene un `p` no cuenta, sí su `p`: así el texto no
+     * se repite) y sin los que estén dentro de una tarjeta nuestra. Lo usan todos los scripts.
+     */
     private const val PARAGRAPHS =
         "var all = Array.prototype.filter.call(document.querySelectorAll(a.sel), " +
-            "function (e) { return !e.closest('.$CARD_CLASS'); });"
+            "function (e) { return !e.closest('.$CARD_CLASS') && !e.querySelector(a.sel); });"
 
-    /** La tarjeta del párrafo `a.i`, si existe (a.i es un entero que pone la app). */
-    private const val FIND_CARD = "var card = document.querySelector('aside.$CARD_CLASS[data-lector-i=\"' + a.i + '\"]');"
+    /** El selector de la tarjeta del párrafo [n] (una expresión JS que da un entero puesto por la app). */
+    private fun cardSelector(n: String) = "'aside.$CARD_CLASS[data-lector-i=\"' + $n + '\"]'"
+
+    /**
+     * La tarjeta del párrafo `p` (= `all[a.i]`), si existe: SOLO su hermano siguiente con nuestra clase y su índice.
+     * Un `aside` en otro sitio no cuenta (el saneado ya quita esas marcas del libro; esto es la segunda barrera).
+     */
+    private val FIND_CARD =
+        "var card = p.nextElementSibling; if (!(card && card.matches(${cardSelector("a.i")}))) card = null;"
 
     /**
      * El párrafo bajo el punto (en px CSS) y los [following] siguientes con texto.
@@ -148,8 +158,11 @@ object ParagraphScripts {
 
     /** Quita la tarjeta del párrafo [index] si existe. Responde true si había una. */
     fun remove(index: Int): String = script(
-        JSONObject().put("i", index),
+        JSONObject().put("sel", SELECTOR).put("i", index),
         """
+        $PARAGRAPHS
+        var p = all[a.i];
+        if (!p) return false;
         $FIND_CARD
         if (!card) return false;
         card.remove();
@@ -163,14 +176,29 @@ object ParagraphScripts {
         """
         var hit = document.elementFromPoint(a.x, a.y);
         if (!hit || !hit.closest) return -1;
+        $PARAGRAPHS
         var card = hit.closest('aside.$CARD_CLASS');
-        if (card) { var n = parseInt(card.dataset.lectorI, 10); return isNaN(n) ? -1 : n; }
+        if (card) {
+          var n = parseInt(card.dataset.lectorI, 10);
+          // Solo si de verdad es la tarjeta de ese párrafo (su hermano siguiente con el mismo índice).
+          return !isNaN(n) && all[n] && all[n].nextElementSibling === card && card.matches(${cardSelector("n")}) ? n : -1;
+        }
         var el = hit.closest(a.sel);
         if (!el) return -1;
-        $PARAGRAPHS
         return all.indexOf(el);
         """,
     )
+
+    /**
+     * Pasa el punto tocado (px del aparato) a px CSS. null si algo no es un número finito o la densidad no es positiva:
+     * org.json no admite NaN ni infinitos y el script no tendría sentido.
+     */
+    fun cssPoint(xPx: Float, yPx: Float, density: Float): Pair<Double, Double>? {
+        if (!density.isFinite() || density <= 0f) return null
+        val x = xPx.toDouble() / density
+        val y = yPx.toDouble() / density
+        return if (x.isFinite() && y.isFinite()) x to y else null
+    }
 
     /** Lee la respuesta de [indexAt]: el índice, o null si no hay párrafo (o la respuesta no es un entero). */
     fun parseIndex(json: String?): Int? = (parse(json) as? Int)?.takeIf { it >= 0 }

@@ -71,10 +71,16 @@ object HtmlSanitizer {
 
     /**
      * Hoja de la app para las tarjetas de traducción (Fase 3b). Readium la sirve desde los assets de la app
-     * (`servedAssets = lector/.*` en ReaderActivity), en el mismo origen que su propio CSS: el libro no puede taparla.
+     * (`servedAssets = lector/.*` en ReaderActivity), en el mismo origen que su propio CSS: el libro no puede cambiar
+     * el archivo. Sí puede competir en la cascada con su propio CSS; por eso la hoja marca `display` y `visibility`
+     * con `!important` y aquí se quitan del libro las marcas de la tarjeta ([removeCardClass]).
      * Va justo después de la CSP; la CSP no cambia (ya permite estilos `https:`). Spec 3b §12, T2 vía B.
      */
     const val CARD_STYLESHEET = "https://readium_assets/lector/tarjeta.css"
+
+    /** Clase y prefijo de atributos de las tarjetas de la app (ParagraphScripts en :app). El libro no puede usarlos. */
+    private const val CARD_CLASS = "lector-tarjeta"
+    private const val CARD_DATA_PREFIX = "data-lector-"
 
     private const val XHTML_NS = "http://www.w3.org/1999/xhtml"
 
@@ -189,9 +195,25 @@ object HtmlSanitizer {
     private fun cleanAttributes(el: Element) {
         val toRemove = el.attributes().asList().filter { attr ->
             localName(attr.key).startsWith("on") || localName(attr.key) in REMOVE_ATTRIBUTES ||
+                localName(attr.key).startsWith(CARD_DATA_PREFIX) ||
                 attr.key.lowercase() == "xml:base" || isDangerousUrl(attr.value)
         }
         for (attr in toRemove) el.removeAttr(attr.key)
+        removeCardClass(el)
+    }
+
+    /**
+     * Las marcas de nuestras tarjetas (clase [CARD_CLASS] y atributos `data-lector-…`) son solo de la app: el libro no
+     * puede hacerse pasar por una tarjeta ni esconder una tocando esas marcas. Las demás clases se quedan.
+     * Sin distinguir mayúsculas: en modo "quirks" el navegador compara las clases así.
+     */
+    private fun removeCardClass(el: Element) {
+        for (attr in el.attributes().asList().filter { localName(it.key) == "class" }) {
+            val tokens = attr.value.split(' ', '\t', '\n', '\r', '\u000C').filter { it.isNotEmpty() }
+            if (tokens.none { it.equals(CARD_CLASS, ignoreCase = true) }) continue
+            val kept = tokens.filterNot { it.equals(CARD_CLASS, ignoreCase = true) }
+            if (kept.isEmpty()) el.removeAttr(attr.key) else el.attr(attr.key, kept.joinToString(" "))
+        }
     }
 
     /**

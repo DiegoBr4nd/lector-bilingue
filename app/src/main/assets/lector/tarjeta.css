@@ -4,7 +4,9 @@
  * Colores con contraste AA sobre la página blanca (hasta la 3c); diseno los fija en la Tarea 6.
  */
 aside.lector-tarjeta {
-  display: block;
+  /* Muchos EPUB3 ocultan los aside (notas emergentes): !important para que la tarjeta se vea igual. */
+  display: block !important;
+  visibility: visible !important;
   margin: 0.4em 0 1em;
   padding: 0.6em 0.8em;
   border-left: 4px solid #3b5bdb; /* 5,7:1 sobre blanco; 5,1:1 sobre el fondo */

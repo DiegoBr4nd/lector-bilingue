@@ -12,13 +12,17 @@ import org.readium.r2.navigator.epub.EpubNavigatorFragment
  * [navigator] se pide en cada llamada porque el fragmento de Readium puede crearse o recrearse después.
  */
 class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
-    /** Párrafo bajo el punto tocado (en px del aparato, como llega a `onTap`) y los siguientes. */
-    suspend fun paragraphsAt(xPx: Float, yPx: Float, density: Float): List<PageParagraph> =
-        ParagraphScripts.parseFind(run(ParagraphScripts.find(xPx.toDouble() / density, yPx.toDouble() / density)))
+    /** Párrafo bajo el punto tocado (en px del aparato, como llega a `onTap`) y los siguientes. Punto no finito → vacío. */
+    suspend fun paragraphsAt(xPx: Float, yPx: Float, density: Float): List<PageParagraph> {
+        val (x, y) = ParagraphScripts.cssPoint(xPx, yPx, density) ?: return emptyList()
+        return ParagraphScripts.parseFind(run(ParagraphScripts.find(x, y)))
+    }
 
-    /** Índice del párrafo o de la tarjeta bajo el punto (px del aparato), o null. */
-    suspend fun indexAt(xPx: Float, yPx: Float, density: Float): Int? =
-        ParagraphScripts.parseIndex(run(ParagraphScripts.indexAt(xPx.toDouble() / density, yPx.toDouble() / density)))
+    /** Índice del párrafo o de la tarjeta bajo el punto (px del aparato), o null (también si el punto no es finito). */
+    suspend fun indexAt(xPx: Float, yPx: Float, density: Float): Int? {
+        val (x, y) = ParagraphScripts.cssPoint(xPx, yPx, density) ?: return null
+        return ParagraphScripts.parseIndex(run(ParagraphScripts.indexAt(x, y)))
+    }
 
     suspend fun show(index: Int, card: Card, labels: CardLabels) {
         run(ParagraphScripts.insert(index, card, labels))
