@@ -10,15 +10,25 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class Priority { TAP, PREFETCH }
+
+/**
+ * El ámbito del servicio: vive lo que el proceso (SupervisorJob: un fallo no lo apaga). Un fallo inesperado se
+ * descarta en silencio: sin el manejador iría al del hilo, que cierra la app y deja el mensaje (que podría llevar texto
+ * del libro) en el registro.
+ */
+fun translationScope(worker: CoroutineDispatcher): CoroutineScope =
+    CoroutineScope(SupervisorJob() + worker + CoroutineExceptionHandler { _, _ -> })
 
 data class TranslateRequest(val pair: LanguagePair, val text: String, val priority: Priority, val resource: String)
 

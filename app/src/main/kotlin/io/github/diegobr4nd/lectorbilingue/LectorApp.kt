@@ -14,8 +14,7 @@ import io.github.diegobr4nd.lectorbilingue.data.BookOpener
 import io.github.diegobr4nd.lectorbilingue.data.ModelHub
 import io.github.diegobr4nd.lectorbilingue.data.OpenBooks
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
+import io.github.diegobr4nd.lectorbilingue.data.translationScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
@@ -60,7 +59,7 @@ class LectorApp : Application() {
 
     /**
      * Traducción de párrafos con un hilo propio ("motor-traduccion"): el motor nunca corre dos veces a la vez
-     * ni ocupa los hilos compartidos. El ámbito vive lo que el proceso (SupervisorJob: un fallo no lo apaga).
+     * ni ocupa los hilos compartidos. El ámbito vive lo que el proceso (ver [translationScope]).
      */
     val translations: TranslationService by lazy {
         val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-traduccion") }.asCoroutineDispatcher()
@@ -68,7 +67,7 @@ class LectorApp : Application() {
             AndroidEngineProvider(this, worker),
             db.translations(),
             worker = worker,
-            scope = CoroutineScope(SupervisorJob() + worker),
+            scope = translationScope(worker),
         )
     }
 
