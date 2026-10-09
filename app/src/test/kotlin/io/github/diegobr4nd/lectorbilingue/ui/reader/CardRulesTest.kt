@@ -52,8 +52,8 @@ class CardRulesTest {
         assertEquals(Card.Preparing, CardRules.card(CardState.Preparing, texts))
         assertEquals(Card.Text("Hola"), CardRules.card(CardState.Text("Hola"), texts))
         assertEquals(Card.MissingModel("Falta OPUS", "Descargar", "Falta OPUS, dicho"), CardRules.card(CardState.MissingModel(EngineId.OPUS), texts))
-        assertEquals(Card.Failed("No se pudo traducir este párrafo", "Reintentar"), CardRules.card(CardState.Failed(prepare = false), texts))
-        assertEquals(Card.Failed("No se pudo preparar el traductor", "Reintentar"), CardRules.card(CardState.Failed(prepare = true), texts))
+        assertEquals(Card.Failed("No se pudo traducir este párrafo", "Reintentar", "No se pudo traducir este párrafo. Reintentar"), CardRules.card(CardState.Failed(prepare = false), texts))
+        assertEquals(Card.Failed("No se pudo preparar el traductor", "Reintentar", "No se pudo preparar el traductor. Reintentar"), CardRules.card(CardState.Failed(prepare = true), texts))
         // Sin enlace: reintentar daría lo mismo.
         assertEquals(Card.TooLong("Este párrafo es demasiado largo para traducirlo"), CardRules.card(CardState.TooLong, texts))
     }

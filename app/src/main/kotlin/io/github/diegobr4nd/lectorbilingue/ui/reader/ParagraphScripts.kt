@@ -24,7 +24,8 @@ sealed interface Card {
      */
     data class MissingModel(val label: String, val action: String, val spoken: String) : Card
 
-    data class Failed(val label: String, val retry: String) : Card
+    /** [spoken]: el nombre de la tarjeta para TalkBack ("No se pudo traducir este párrafo. Reintentar"). */
+    data class Failed(val label: String, val retry: String, val spoken: String) : Card
 
     /** "Este párrafo es demasiado largo…": estilo de error, sin enlace (reintentar daría lo mismo). */
     data class TooLong(val label: String) : Card
@@ -132,7 +133,7 @@ object ParagraphScripts {
             Card.Preparing -> data.put("kind", "preparando").put("text", labels.preparing)
             is Card.Text -> data.put("kind", "texto").put("text", card.translation)
             is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action).put("spoken", card.spoken)
-            is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry)
+            is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry).put("spoken", card.spoken)
             is Card.TooLong -> data.put("kind", "error").put("text", card.label).put("spoken", card.label)
         }
         return script(

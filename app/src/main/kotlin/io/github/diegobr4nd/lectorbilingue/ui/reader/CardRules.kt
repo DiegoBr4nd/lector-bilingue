@@ -72,7 +72,7 @@ object CardRules {
         CardState.Preparing -> Card.Preparing
         is CardState.Text -> Card.Text(state.translation)
         is CardState.MissingModel -> Card.MissingModel(texts.missing(state.engine), texts.download, texts.missingSpoken(state.engine))
-        is CardState.Failed -> Card.Failed(if (state.prepare) texts.prepareFailed else texts.paragraphFailed, texts.retry)
+        is CardState.Failed -> Card.Failed(failedLabel(state, texts), texts.retry, spoken(state, texts)!!)
         CardState.TooLong -> Card.TooLong(texts.tooLong)
     }
 
@@ -84,9 +84,12 @@ object CardRules {
         CardState.Skeleton, CardState.Preparing -> null
         is CardState.Text -> state.translation
         is CardState.MissingModel -> texts.missingSpoken(state.engine)
-        is CardState.Failed -> "${if (state.prepare) texts.prepareFailed else texts.paragraphFailed}. ${texts.retry}"
+        is CardState.Failed -> "${failedLabel(state, texts)}. ${texts.retry}"
         CardState.TooLong -> texts.tooLong
     }
+
+    private fun failedLabel(state: CardState.Failed, texts: CardTexts) =
+        if (state.prepare) texts.prepareFailed else texts.paragraphFailed
 
     /** MB del modelo de [engine] para [pair] según el catálogo, o null si el catálogo aún no lo trae. */
     fun modelMegabytes(pairs: List<PairStatus>, pair: String, engine: EngineId): Long? =

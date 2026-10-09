@@ -28,7 +28,7 @@ class ParagraphScriptsTest {
             ParagraphScripts.insert(0, Card.Skeleton, labels),
             ParagraphScripts.insert(0, Card.Preparing, labels),
             ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar", "Falta el modelo, 40 megabytes. Descargar"), labels),
-            ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar"), labels),
+            ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar", "No se pudo traducir. Reintentar"), labels),
         )
         for (js in all) {
             forbidden.forEach { assertFalse(js.contains(it), "usa $it: $js") }
@@ -37,7 +37,7 @@ class ParagraphScriptsTest {
     }
 
     @Test fun `los separadores de linea y parrafo van escapados en todos los datos`() {
-        val js = ParagraphScripts.insert(1, Card.Failed("a b", "c d"), CardLabels("x ", "y", "z"))
+        val js = ParagraphScripts.insert(1, Card.Failed("a b", "c d", "e f"), CardLabels("x ", "y", "z"))
         assertFalse(js.contains(" ")); assertFalse(js.contains(" "))
         assertTrue(js.contains("\\u2028")); assertTrue(js.contains("\\u2029"))
     }
@@ -196,5 +196,12 @@ class ParagraphScriptsTest {
         assertTrue(js.contains("\"kind\":\"error\""), js)
         assertTrue(js.contains("\"spoken\":\"Este párrafo es demasiado largo para traducirlo\""), js)
         assertFalse(js.contains("\"retry\""), js)
+    }
+
+    // Revisión final 3b (M3): la tarjeta de error lleva su propio nombre hablado, no "Traducción".
+    @Test fun `la tarjeta de error lleva su texto hablado como nombre`() {
+        val js = ParagraphScripts.insert(0, Card.Failed("No se pudo traducir", "Reintentar", "No se pudo traducir. Reintentar"), labels)
+        assertTrue(js.contains("\"spoken\":\"No se pudo traducir. Reintentar\""), js)
+        assertTrue(js.contains("\"kind\":\"error\""), js)
     }
 }
