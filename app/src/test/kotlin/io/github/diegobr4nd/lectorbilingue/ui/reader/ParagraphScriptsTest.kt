@@ -180,6 +180,14 @@ class ParagraphScriptsTest {
         assertTrue(js.contains("out.push({ i: k, t: clip(t) })"), js)
     }
 
+    // Diseño 3b (M1): la tarjeta con texto no lleva aria-label (taparía la traducción al deslizar con TalkBack).
+    @Test fun `la tarjeta con texto no lleva nombre propio y las demas si`() {
+        val js = ParagraphScripts.insert(0, Card.Text("Hola"), labels)
+        assertTrue(js.contains("if (a.kind === 'texto') card.removeAttribute('aria-label');"), js)
+        assertTrue(js.contains("else card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);"), js)
+        assertTrue(js.contains("setAttribute('role', 'note')"), js)
+    }
+
     @Test fun `la tarjeta de parrafo demasiado largo es de error sin enlace`() {
         val js = ParagraphScripts.insert(0, Card.TooLong("Este párrafo es demasiado largo para traducirlo"), labels)
         assertTrue(js.contains("\"kind\":\"error\""), js)

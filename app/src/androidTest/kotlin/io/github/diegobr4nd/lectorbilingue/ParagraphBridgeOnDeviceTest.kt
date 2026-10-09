@@ -69,7 +69,8 @@ class ParagraphBridgeOnDeviceTest {
             assertEquals("true", js(s, "var c = document.querySelectorAll('p')[0].nextElementSibling; String(!!c && c.matches('aside.lector-tarjeta[data-lector-i=\"1\"]'))"))
             assertEquals("Hola", js(s, CARD + ".textContent"))
             assertEquals("note", js(s, CARD + ".getAttribute('role')"))
-            assertEquals("Traducción", js(s, CARD + ".getAttribute('aria-label')"))
+            // Con texto, sin nombre propio (diseño M1): TalkBack, al deslizar, lee la traducción.
+            assertEquals("false", js(s, "String($CARD.hasAttribute('aria-label'))"))
             assertTrue(abs(topOfFirstP(s) - topBefore) <= 1.0, "el párrafo se movió")
             val border = js(s, "getComputedStyle($CARD).borderLeftWidth")!!.removeSuffix("px").toDouble()
             assertTrue(border in 3.0..5.0, "borde de la hoja: $border")
@@ -86,8 +87,14 @@ class ParagraphBridgeOnDeviceTest {
             assertEquals("Falta el idioma inglés a español", js(s, "$CARD.getAttribute('aria-label')"))
             assertEquals("Descargar", js(s, "$CARD.querySelector('span.lector-reintentar').textContent"))
             assertTrue(js(s, "String($CARD.querySelector('span.lector-reintentar').getBoundingClientRect().height)")!!.toDouble() >= 47.0)
+            // Demasiado largo: estilo de error, sin enlace, con su texto como nombre.
+            bridge.show(1, Card.TooLong("Este párrafo es demasiado largo para traducirlo"), labels)
+            assertEquals("error", js(s, "$CARD.getAttribute('data-lector-estado')"))
+            assertEquals("Este párrafo es demasiado largo para traducirlo", js(s, "$CARD.getAttribute('aria-label')"))
+            assertEquals("0", js(s, "String($CARD.querySelectorAll('span.lector-reintentar').length)"))
+            assertEquals("rgb(254, 243, 242)", js(s, "getComputedStyle($CARD).backgroundColor"))
             bridge.show(1, Card.Text("Hola"), labels)
-            assertEquals("Traducción", js(s, "$CARD.getAttribute('aria-label')"))
+            assertEquals("false", js(s, "String($CARD.hasAttribute('aria-label'))"))
 
             // 4. Texto hostil: entra como texto; nada se ejecuta ni se crea marcado.
             val evil = "\"); alert(1); (\" </script><img src=x onerror=alert(2)>   fin <img src=x onerror=\"window.__lectorXss=1\">"

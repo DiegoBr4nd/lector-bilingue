@@ -145,7 +145,9 @@ object ParagraphScripts {
               card.setAttribute('role', 'note');
               p.after(card);
             }
-            card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);
+            // Con texto, sin nombre propio: TalkBack, al deslizar, lee la traducción (un nombre la taparía).
+            if (a.kind === 'texto') card.removeAttribute('aria-label');
+            else card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);
             card.dataset.lectorEstado = a.kind;
             card.textContent = '';
             if (a.kind === 'esqueleto' || a.kind === 'preparando') {
