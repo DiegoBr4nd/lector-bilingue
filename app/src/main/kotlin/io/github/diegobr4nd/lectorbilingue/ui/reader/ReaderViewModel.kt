@@ -114,7 +114,15 @@ class ReaderViewModel(
             _cardOps.tryEmit(CardOp.Hide(resource, tapped.index))
             return
         }
-        if (TranslationRules.normalize(tapped.text).isEmpty()) return
+        val normalized = TranslationRules.normalize(tapped.text)
+        if (normalized.isEmpty()) return
+        if (TranslationRules.tooLong(normalized)) {
+            // Directa, sin pasar por "Preparando…": el servicio lo rechazaría enseguida igual (y no se reintenta).
+            open[tapped.index] = OpenCard(tapped.text, CardState.TooLong, 0)
+            showIfVisible(resource, tapped.index, CardState.TooLong)
+            if (visible == resource) _announcements.tryEmit(CardOp.Show(resource, tapped.index, CardState.TooLong))
+            return
+        }
         val card = OpenCard(tapped.text, CardState.Skeleton, 0)
         open[tapped.index] = card
         request(resource, tapped.index, card, hit, announce = true)

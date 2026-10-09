@@ -523,4 +523,17 @@ class ReaderViewModelTest {
         assertEquals(listOf("A.", "Hola."), slow.translatedTexts)
         assertEquals(listOf(enEs, esEn), slow.loadedPairs)
     }
+
+    // Revisión final 3b (M2): el párrafo demasiado largo no pasa por "Preparando…": su tarjeta sale directa y se anuncia.
+    @Test fun parrafoDemasiadoLargoNoPasaPorPreparando() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps()
+        val said = mutableListOf<CardOp.Show>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.announcements.toList(said) }
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Ab. ".repeat(6_000))))
+        advanceUntilIdle()
+        assertEquals(listOf<CardOp>(CardOp.Show("c1.xhtml", 0, CardState.TooLong)), ops)
+        assertEquals(listOf(CardOp.Show("c1.xhtml", 0, CardState.TooLong)), said)
+        assertEquals(CardState.TooLong, vm.cardState("c1.xhtml", 0))
+        assertEquals(0, provider.installedCalls)
+    }
 }
