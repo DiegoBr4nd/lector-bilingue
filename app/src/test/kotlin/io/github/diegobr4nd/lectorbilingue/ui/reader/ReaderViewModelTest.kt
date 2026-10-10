@@ -9,9 +9,13 @@ import io.github.diegobr4nd.lectorbilingue.books.BookMetadata
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.BookEntity
+import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.FakeEngine
 import io.github.diegobr4nd.lectorbilingue.data.FakeEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.FakeTranslationDao
+import io.github.diegobr4nd.lectorbilingue.data.MemoryPrefs
+import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
@@ -51,6 +55,8 @@ class ReaderViewModelTest {
     private val enEs = LanguagePair("en", "es")
     private val esEn = LanguagePair("es", "en")
     private lateinit var service: TranslationService
+    private val prefs = MemoryPrefs()
+    private val settings = AppSettings(prefs)
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
     @After fun tearDown() = Dispatchers.resetMain()
@@ -66,7 +72,7 @@ class ReaderViewModelTest {
         val importer = BookImporter(files, dao, readMetadata = { MetadataRead.Ok(BookMetadata("T", null, null)) }, saveCover = { _, _ -> })
         val p = if (engine == null) provider else FakeEngineProvider(opus = engine, installedEngines = provider.installedEngines)
         service = TranslationService(p, cache, clock = { 1L }, worker = dispatcher, scope = this) // no backgroundScope: advanceUntilIdle no espera esas tareas
-        return ReaderViewModel(id, BookRepository(dao, files, importer), service, languages)
+        return ReaderViewModel(id, BookRepository(dao, files, importer), service, languages, settings)
     }
 
     /** El VM y la lista de todo lo que emite `cardOps` (se suscribe enseguida: no se pierde nada). */
@@ -552,5 +558,43 @@ class ReaderViewModelTest {
         assertEquals(listOf<CardOp>(CardOp.Show("c1.xhtml", 0, CardState.TooLong)), ops)
         assertEquals(0, engine.loadCount)
         assertTrue(engine.translatedTexts.isEmpty())
+    }
+
+    // ---------- Ajustes de lectura (3c-1) ----------
+
+    @Test fun `elegir un ajuste lo guarda en el telefono y lo publica`() = runTest(dispatcher) {
+        val vm = viewModel()
+        val sepia = ReadingSettings(theme = PageTheme.SEPIA, fontScale = 1.2)
+        vm.setReadingSettings(sepia)
+        assertEquals(sepia, vm.readingSettings.value)
+        assertEquals(sepia, AppSettings(prefs).readingSettings) // releído del archivo, no de la memoria
+    }
+
+    @Test fun `restablecer vuelve a los ajustes de fabrica`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.setReadingSettings(ReadingSettings(theme = PageTheme.BLACK, fontScale = 2.0))
+        vm.resetReadingSettings()
+        assertTrue(vm.readingSettings.value.isFactory)
+        assertTrue(AppSettings(prefs).readingSettings.isFactory)
+    }
+
+    @Test fun `A mas y A menos van de 10 en 10 y no pasan los topes`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.stepFontScale(up = true)
+        assertEquals(1.1, vm.readingSettings.value.fontScale)
+        vm.setReadingSettings(ReadingSettings(fontScale = 2.5))
+        vm.stepFontScale(up = true)
+        assertEquals(2.5, vm.readingSettings.value.fontScale)
+        vm.setReadingSettings(ReadingSettings(fontScale = 0.75))
+        vm.stepFontScale(up = false)
+        assertEquals(0.75, vm.readingSettings.value.fontScale)
+        assertEquals(0.75, AppSettings(prefs).readingSettings.fontScale)
+    }
+
+    @Test fun `cambiar el tamano conserva los demas ajustes`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.setReadingSettings(ReadingSettings(theme = PageTheme.SEPIA))
+        vm.stepFontScale(up = true); vm.stepFontScale(up = true)
+        assertEquals(ReadingSettings(theme = PageTheme.SEPIA, fontScale = 1.2), AppSettings(prefs).readingSettings)
     }
 }

@@ -34,10 +34,12 @@ object ReadingRules {
         MarginLevel.WIDE to 1.6,
     )
 
-    // "Oscuro" es un gris muy oscuro: el DARK de Readium ya es negro puro (el tema "Negro").
-    // Provisional; `diseno` fija la paleta final.
+    // Paletas finales (boceto 4a §3.1). "Oscuro" es un gris muy oscuro (12,63:1). "Negro" es negro puro con texto
+    // #E6E6E6 (16,83:1) en vez del blanco casi puro de Readium: deslumbra menos en pantallas OLED.
     private val DARK_BACKGROUND = Color(0xFF1E1E1E.toInt())
     private val DARK_TEXT = Color(0xFFE0E0E0.toInt())
+    private val BLACK_BACKGROUND = Color(0xFF000000.toInt())
+    private val BLACK_TEXT = Color(0xFFE6E6E6.toInt())
 
     /** Familias propias: ReaderActivity las declara en Readium con estos mismos nombres. */
     val LITERATA = FontFamily("Literata")
@@ -62,8 +64,16 @@ object ReadingRules {
                 PageTheme.SEPIA -> Theme.SEPIA
                 PageTheme.DARK, PageTheme.BLACK -> Theme.DARK
             },
-            backgroundColor = if (ownColors) DARK_BACKGROUND else null,
-            textColor = if (ownColors) DARK_TEXT else null,
+            backgroundColor = when {
+                ownColors -> DARK_BACKGROUND
+                s.theme == PageTheme.BLACK -> BLACK_BACKGROUND
+                else -> null
+            },
+            textColor = when {
+                ownColors -> DARK_TEXT
+                s.theme == PageTheme.BLACK -> BLACK_TEXT
+                else -> null
+            },
             fontFamily = FAMILIES[s.font], // ORIGINAL no está: null = la del libro
             fontSize = ReadingSettings.normalizeScale(s.fontScale),
             lineHeight = LINE_HEIGHT.getValue(s.lineHeight),

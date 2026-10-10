@@ -114,7 +114,7 @@ fun ReaderScreen(
     val vm: ReaderViewModel = viewModel(
         factory = viewModelFactory {
             // Idiomas del OPF (`dc:language`, p. ej. "en", "es-MX"): solo para la dirección automática.
-            initializer { ReaderViewModel(bookId, app.books, app.translations, publication.metadata.languages) }
+            initializer { ReaderViewModel(bookId, app.books, app.translations, publication.metadata.languages, app.settings) }
         },
     )
     val barsVisible by vm.barsVisible.collectAsStateWithLifecycle()
@@ -125,6 +125,7 @@ fun ReaderScreen(
     var currentHref by remember { mutableStateOf<String?>(null) }
     var tocOpen by rememberSaveable { mutableStateOf(false) }
     var directionOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var languagesOpen by rememberSaveable { mutableStateOf(false) }
     var resumes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
@@ -148,7 +149,7 @@ fun ReaderScreen(
     val announceHidden by rememberUpdatedState(stringResource(R.string.reader_card_hidden))
     val announceTranslation by rememberUpdatedState(stringResource(R.string.reader_card_announce))
     // Ajustes de lectura (iguales para todos los libros) y modo del sistema, para "Como el teléfono".
-    val readingSettings by app.settings.readingSettingsFlow.collectAsStateWithLifecycle()
+    val readingSettings by vm.readingSettings.collectAsStateWithLifecycle()
     val systemDark = isSystemInDarkTheme()
     val cardTheme by rememberUpdatedState(ReadingRules.cardTheme(readingSettings, systemDark))
     // Las últimas preferencias mandadas a Readium: si no cambian, no se vuelven a mandar (ni se mueve la página).
@@ -332,6 +333,7 @@ fun ReaderScreen(
                 title = title,
                 direction = direction,
                 onBack = onBack,
+                onSettings = { settingsOpen = true },
                 onDirection = { directionOpen = true },
                 onToc = { tocOpen = true },
             )
@@ -386,6 +388,20 @@ fun ReaderScreen(
         )
     }
 
+    if (settingsOpen) {
+        val resetDone = stringResource(R.string.reading_reset_done)
+        ReadingSettingsSheet(
+            settings = readingSettings,
+            onChange = vm::setReadingSettings, // el libro cambia enseguida (efecto de arriba)
+            onStepScale = vm::stepFontScale,
+            onReset = {
+                vm.resetReadingSettings()
+                view.announce(resetDone) // sin snackbar: no tapa la hoja
+            },
+            onDismiss = { settingsOpen = false },
+        )
+    }
+
     // Mientras Idiomas tapa el libro, TalkBack no debe entrar en la página de debajo.
     LaunchedEffect(languagesOpen, navigator) {
         navigator?.view?.importantForAccessibility =
@@ -411,8 +427,9 @@ fun ReaderScreen(
 }
 
 /**
- * Barra superior: volver, título del libro (una línea), dirección de traducción ("EN → ES") e Índice.
- * Con letra grande el título cede espacio: el botón de dirección nunca se recorta. Sin estado: se previsualiza sola.
+ * Barra superior: volver, título del libro (una línea), "Aa" (ajustes de lectura), dirección de traducción
+ * ("EN → ES") e Índice. Con letra grande el título cede espacio: los botones nunca se recortan ni se esconden.
+ * Sin estado: se previsualiza sola.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -420,6 +437,7 @@ fun ReaderTopBar(
     title: String?,
     direction: LanguagePair,
     onBack: () -> Unit,
+    onSettings: () -> Unit,
     onDirection: () -> Unit,
     onToc: () -> Unit,
     modifier: Modifier = Modifier,
@@ -440,6 +458,7 @@ fun ReaderTopBar(
             }
         },
         actions = {
+            ReadingSettingsButton(onSettings)
             DirectionButton(direction, onDirection)
             IconButton(onClick = onToc, modifier = Modifier.size(48.dp)) {
                 Icon(painterResource(LectorIcons.Toc), contentDescription = stringResource(R.string.reader_toc))

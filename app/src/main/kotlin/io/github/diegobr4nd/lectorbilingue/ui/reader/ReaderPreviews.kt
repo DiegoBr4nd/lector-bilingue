@@ -35,6 +35,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
+import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
+import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
+import io.github.diegobr4nd.lectorbilingue.data.TextAlignChoice
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 
 /** Claro y oscuro, letra normal y al 200 %, teléfono (360 dp) y tableta (840 dp). */
@@ -104,6 +110,7 @@ private fun BarsOverPage(
             title = title,
             direction = direction,
             onBack = {},
+            onSettings = {},
             onDirection = {},
             onToc = {},
             modifier = Modifier.align(Alignment.TopCenter),
@@ -158,6 +165,59 @@ private fun DireccionInglesEspanol() = DirectionSample(ReaderDirections[0])
 @ReaderPreviewSet
 @Composable
 private fun DireccionEspanolIngles() = DirectionSample(ReaderDirections[1])
+
+/**
+ * "Ajustes de lectura": claro y oscuro, 360 y 840 dp, letra 1 y 2. Alto de sobra para ver la hoja entera (en el
+ * teléfono se desplaza).
+ */
+@Preview(name = "Claro 360", widthDp = 360, heightDp = 1300, showBackground = true)
+@Preview(name = "Oscuro 360", widthDp = 360, heightDp = 1300, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "Claro 360 letra 200", widthDp = 360, heightDp = 2600, fontScale = 2f, showBackground = true)
+@Preview(
+    name = "Oscuro 360 letra 200",
+    widthDp = 360,
+    heightDp = 2600,
+    fontScale = 2f,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    showBackground = true,
+)
+@Preview(name = "Claro 840", widthDp = 840, heightDp = 1300, showBackground = true)
+@Preview(name = "Oscuro 840", widthDp = 840, heightDp = 1300, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Preview(name = "Claro 840 letra 200", widthDp = 840, heightDp = 2200, fontScale = 2f, showBackground = true)
+private annotation class SettingsPreviewSet
+
+@Composable
+private fun SettingsSample(settings: ReadingSettings) = LectorTheme {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.extraLarge) {
+        Column(Modifier.widthIn(max = 560.dp).padding(top = Spacing.l)) {
+            ReadingSettingsContent(settings, onChange = {}, onStepScale = {}, onReset = {})
+        }
+    }
+}
+
+/** De fábrica: "Como el teléfono", 100 %, fuente del libro; "Restablecer" apagado. */
+@SettingsPreviewSet
+@Composable
+private fun AjustesDeFabrica() = SettingsSample(ReadingSettings())
+
+/** Todo cambiado: sepia, 120 %, Literata, amplio, anchos y justificado. */
+@SettingsPreviewSet
+@Composable
+private fun AjustesCambiados() = SettingsSample(
+    ReadingSettings(
+        theme = PageTheme.SEPIA,
+        fontScale = 1.2,
+        font = ReadingFont.LITERATA,
+        lineHeight = LineHeightLevel.WIDE,
+        margins = MarginLevel.WIDE,
+        align = TextAlignChoice.JUSTIFY,
+    ),
+)
+
+/** En los topes: negro y 250 % (A+ apagado); con 75 % se apaga A−. */
+@SettingsPreviewSet
+@Composable
+private fun AjustesEnElTope() = SettingsSample(ReadingSettings(theme = PageTheme.BLACK, fontScale = 2.5, font = ReadingFont.ATKINSON))
 
 /*
  * Simulación en Compose de la tarjeta de tarjeta.css (la página real es un WebView). Mismos colores: la página es

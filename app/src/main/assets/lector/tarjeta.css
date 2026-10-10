@@ -4,7 +4,7 @@
  *
  * Colores por tema (3c-1): la app pone `data-lector-tema` en <html> (ParagraphScripts.setTheme) y cada tema define
  * las variables de abajo. "claro" es la paleta aprobada en la 3b (AA sobre la página blanca); sepia, oscuro y negro
- * son provisionales (AA calculado) hasta que `diseno` las fije. Sin atributo valen las de claro.
+ * son las finales del boceto 4a §3.2 (AA calculado en los cuatro temas). Sin atributo valen las de claro.
  */
 :root {
   --lector-fondo: #eef2ff;        /* texto 13,1:1; la línea 5,1:1 */

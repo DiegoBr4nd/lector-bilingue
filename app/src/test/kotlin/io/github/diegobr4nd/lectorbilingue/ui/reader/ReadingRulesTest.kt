@@ -31,11 +31,13 @@ class ReadingRulesTest {
         assertEquals("claro", ReadingRules.cardTheme(f, systemDark = false))
     }
 
-    @Test fun `negro es el oscuro de Readium con sus colores de fabrica`() {
+    @Test fun `negro es el oscuro de Readium con fondo negro puro y texto E6E6E6`() {
         val b = f.copy(theme = PageTheme.BLACK)
         val p = ReadingRules.preferences(b, systemDark = false)
         assertEquals(Theme.DARK, p.theme)
-        assertNull(p.backgroundColor); assertNull(p.textColor)
+        assertEquals(0xFF000000.toInt(), p.backgroundColor!!.int)
+        // Menos brillo que el blanco casi puro de Readium sobre negro (boceto 4a §3.1): 16,83:1.
+        assertEquals(0xFFE6E6E6.toInt(), p.textColor!!.int)
         assertEquals("negro", ReadingRules.cardTheme(b, systemDark = false))
     }
 
