@@ -122,4 +122,39 @@ Resultado en §11. Si C1 exige cambiar la CSP, se decide con `seguridad` antes d
 | Paleta de la tarjeta poco legible en sepia/negro | `diseno` calcula contrastes; capturas en los 4 temas |
 
 ## 11. Resultado de la comprobación
-(Se completa en la Tarea 1 del plan.)
+
+Pixel 7 (`2A261FDH200L5R`), 2026-10-10, Readium 3.4.0, libro inventado de `ReaderTestBook` (70 párrafos por capítulo), rama local `spike/3c1-ajustes` (borrada). Prueba `SpikeAjustesOnDeviceTest` con `am instrument`: 6 pruebas, todas en verde; los números salen de `getComputedStyle`/`getBoundingClientRect` por `evaluateJavascript`. `HtmlSanitizer.kt` sin cambios (`git diff` vacío): **la CSP no cambia**.
+
+| # | Resultado | Evidencia |
+|---|---|---|
+| C1 · Fuentes propias | ✅ | Original: `fontFamily` = `"Iowan Old Style", "Sitka Text", Palatino, "Book Antiqua", serif`, ancho de la frase de prueba 248,05 px. Con `fontFamily = FontFamily("Literata")`: `Literata`, 245,73 px, `FontFace` en estado `loaded`, `document.fonts.check('16px Literata')` = true. `Inter`: 237,61 px. Igual con `publisherStyles = false` y como `initialPreferences` al abrir (245,73 px). Readium mete los `@font-face` en un `<style>` en línea (la CSP ya permite `'unsafe-inline'` en `style-src` y `https:` en `font-src`). |
+| C2 · Negro puro | ✅ | `theme = DARK` + `backgroundColor = #000000` + `textColor = #E6E6E6` → `:root` `rgb(0, 0, 0)`, `p` `rgb(230, 230, 230)`, `window.__marca` sigue (sin recarga). **Ojo:** `Theme.DARK` solo ya da `#000000`/`#FEFEFE`; SEPIA = `#FAF4E8`/`#121212`; LIGHT = `#FFFFFF`/`#121212`. |
+| C3 · Al instante | ⚠️ ✅ con arreglo | Sin recarga en todos los casos (`window.__marca` sigue). Cambiar el tema no mueve la página (primer párrafo visible 17 → 17). **Cambiar el tamaño sí pierde la posición:** Readium deja el `scrollY` en píxeles (2749 px; alto 6284 → 11596) y el primer párrafo visible pasa de 31 a 17 (proporción 0,437 → 0,237); además `currentLocator` **no se actualiza** (sigue en 0,437 hasta el próximo desplazamiento), así que medirlo solo engaña. **Arreglo comprobado:** guardar `navigator.currentLocator.value` antes de `submitPreferences` y llamar `navigator.go(guardado, animated = false)` justo después (incluso en la misma corrutina del hilo principal, sin esperar): primer párrafo visible 31 → 31 en 1,0 → 1,5 → 1,0 y con 2,0 + interlineado + márgenes a la vez; progresión 0,43744 → 0,43743. |
+| C4 · Tema de la tarjeta | ✅ con `!important` | `data-lector-tema="oscuro"` puesto por script en `<html>` → la tarjeta recibe la variable (`--lector-prueba` = `7px`) y su fondo cambia; el atributo **sigue** tras cada `submitPreferences`. Pero ReadiumCSS-after pisa colores con `!important`: en DARK `:root[style*=readium-night-on] :not(a){color:inherit;background-color:transparent;border-color:currentColor}` (fondo de la tarjeta → `rgba(0, 0, 0, 0)`), en SEPIA lo mismo sin el borde, y con `backgroundColor`/`textColor` `:root[style*="--USER__backgroundColor"] *` y `:root[style*="--USER__textColor"] :not(h1)…:not(pre)` (especificidad 0,2,7). Con `html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta { background-color/color/border-left-color: var(--…) !important }` (especificidad 0,3,2) la tarjeta queda `rgb(30, 42, 74)` / `rgb(230, 230, 230)` / línea `rgb(142, 162, 255)` en DARK, SEPIA, DARK + negro y LIGHT + `publisherStyles = false`. |
+
+### API exacta de Readium 3.4.0 (para las tareas siguientes)
+
+- **Declarar fuentes** en `EpubNavigatorFragment.Configuration` (la que ya se pasa a `createFragmentFactory(configuration = …)`; `EpubNavigatorFactory.Configuration` solo tiene `defaults`). `addFontFamilyDeclaration` es `@ExperimentalReadiumApi` (pide `@OptIn(ExperimentalReadiumApi::class)`):
+  ```kotlin
+  EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*")).apply {
+      disablePageTurnsWhileScrolling = true
+      addFontFamilyDeclaration(FontFamily("Literata")) {          // org.readium.r2.navigator.preferences.FontFamily
+          addFontFace {                                           // MutableFontFaceDeclaration
+              addSource("lector/fuentes/literata_regular.ttf")   // relativa a assets/ → https://readium_assets/lector/fuentes/…
+              setFontStyle(FontStyle.NORMAL)                      // org.readium.r2.navigator.epub.css.FontStyle { NORMAL, ITALIC }
+              setFontWeight(FontWeight.NORMAL)                    // org.readium.r2.navigator.epub.css.FontWeight (THIN…BLACK) o un rango 100..900
+          }
+      }
+  }
+  ```
+  Firma: `addFontFamilyDeclaration(fontFamily: FontFamily, alternates: List<FontFamily> = emptyList(), builder: MutableFontFamilyDeclaration.() -> Unit)`. `addSource(path: String, preload: Boolean = false)` (también acepta `Url`); la ruta se resuelve contra `https://readium_assets/`, así que la sirve `servedAssets = listOf("lector/.*")` sin cambios. Una `addFontFace` por archivo (regular, itálica, negrita); para una fuente variable, `setFontWeight(100..900)`. Nombres de familia probados: `"Literata"`, `"Inter"` (Atkinson: `"Atkinson Hyperlegible"`, misma forma). Readium ya declara por su cuenta AccessibleDfA, IA Writer Duospace y OpenDyslexic (no se descargan si no se eligen).
+- **`EpubPreferences`** (`org.readium.r2.navigator.epub`), todos nulables: `fontFamily: FontFamily?`, `theme: Theme?`, `backgroundColor: Color?`, `textColor: Color?`, `fontSize: Double?` (1,0 = 100 %; el editor de Readium admite 0,1–5,0; 1,5 → 24 px), `lineHeight: Double?` (1,0–2,0), `pageMargins: Double?` (0,0–4,0; **multiplica** `--RS__pageGutter`, que en el Pixel 7 vale 20 px: 0,5 → 10 px, 1,5 → 30 px, 2,0 → 40 px de relleno a cada lado; la línea sigue limitada a 40rem = 640 px), `textAlign: TextAlign?`, `hyphens: Boolean?`, `publisherStyles: Boolean?`, `scroll: Boolean?`. Los valores del plan (`MARGINS` 0,5/1,0/1,6, `LINE_HEIGHT` 1,3/1,5/1,8) caben en estas escalas.
+- **Qué pide `publisherStyles = false`:** `lineHeight`, `textAlign` y `hyphens` (sin él: interlineado 24,21 px y `text-align: start`, o sea, ignorados; con él: 28,8 px, `justify`, `hyphens: auto`). `fontFamily`, `fontSize`, `pageMargins` (1,5 → 30 px), `theme` y los colores funcionan también con `publisherStyles = true`.
+- **Tipos:** `Color` = `org.readium.r2.navigator.preferences.Color` (clase de valor, `Color(0xFF000000.toInt())`, se lee con `.int`); `Theme` = `org.readium.r2.navigator.preferences.Theme { LIGHT, DARK, SEPIA }`; `TextAlign` = `org.readium.r2.navigator.preferences.TextAlign { CENTER, JUSTIFY, START, END, LEFT, RIGHT }` (no confundir con `org.readium.r2.navigator.epub.css.TextAlign` ni con `Color` de Compose); `FontFamily` = `org.readium.r2.navigator.preferences.FontFamily` (clase de valor, `FontFamily("Literata")`).
+- **Aplicar:** `EpubNavigatorFragment.submitPreferences(preferences: EpubPreferences)` (hilo principal). **Reemplaza** todas las preferencias (no las suma): mandar siempre `scroll = true`. `go(locator: Locator, animated: Boolean): Boolean` no es `suspend` en 3.4.0. `initialPreferences` de `createFragmentFactory` acepta las mismas preferencias (fuentes propias incluidas).
+
+### Consecuencias para el plan
+1. **Oscuro ≠ Negro:** como `Theme.DARK` ya es `#000000`, "Oscuro" necesita su propio `backgroundColor` (un gris muy oscuro) y `textColor`, que fija `diseno`; "Negro" = DARK + `#000000`.
+2. **Posición al cambiar ajustes:** el efecto que llama `submitPreferences` guarda antes `currentLocator.value` y llama `go(guardado, animated = false)` después (C3). Abrir el Lector con `initialPreferences = ReadingRules.preferences(…)` evita un reajuste al entrar.
+3. **Hoja de la tarjeta:** en los temas, los colores (`background-color`, `color`, `border-left-color` y el color de `.lector-reintentar`) van con `!important` bajo `html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta` (o más específico) para ganar a ReadiumCSS. Falta comprobar en la tarea de la hoja el esqueleto (`::after`; `*` no toca pseudoelementos) y los estados de error.
+4. **CSP sin cambios:** C1 no la toca; no hace falta decisión de `seguridad` por esto (sí su revisión normal de los archivos servidos).
