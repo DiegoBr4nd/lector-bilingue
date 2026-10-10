@@ -234,6 +234,25 @@ object ParagraphScripts {
     )
 
     /**
+     * Bordes de la página visible, como número: 1 = arriba del todo, 2 = abajo del todo (3 = los dos: el capítulo cabe
+     * entero). Con 2 px de tolerancia por el redondeo del desplazamiento. Solo lee posiciones, nunca texto.
+     */
+    fun edges(): String = script(
+        JSONObject(),
+        """
+        var e = document.scrollingElement || document.documentElement;
+        var y = window.scrollY, h = window.innerHeight;
+        return (y <= 2 ? 1 : 0) + (y + h >= e.scrollHeight - 2 ? 2 : 0);
+        """,
+    )
+
+    /** Lee la respuesta de [edges], o null si no es un entero entre 0 y 3 (página no lista, respuesta rara). */
+    fun parseEdges(json: String?): PageEdges? {
+        val n = (parse(json) as? Int)?.takeIf { it in 0..3 } ?: return null
+        return PageEdges(atTop = n and 1 != 0, atBottom = n and 2 != 0)
+    }
+
+    /**
      * Pasa el punto tocado (px del aparato) a px CSS. null si algo no es un número finito o la densidad no es positiva:
      * org.json no admite NaN ni infinitos y el script no tendría sentido.
      */

@@ -31,6 +31,78 @@ class ReaderRulesTest {
     @Test fun `con TalkBack siempre se ven`() =
         assertTrue(ReaderRules.barsVisible(-40.0, atEnd = false, wasVisible = false, touchExploration = true))
 
+    // Paso de capítulo al llegar al borde (fix/cambio-de-capitulo). dragDy < 0 = el dedo sube = leer hacia adelante.
+    private val bottom = PageEdges(atTop = false, atBottom = true)
+    private val top = PageEdges(atTop = true, atBottom = false)
+    private val middle = PageEdges(atTop = false, atBottom = false)
+    private val min = ReaderRules.CHAPTER_TURN_MIN_DP * 2.625 // px del Pixel 7
+
+    @Test fun `abajo del todo y seguir subiendo pasa al siguiente`() = assertEquals(1, ReaderRules.chapterStep(bottom, -200.0, min))
+
+    @Test fun `arriba del todo y bajar vuelve al anterior`() = assertEquals(-1, ReaderRules.chapterStep(top, 200.0, min))
+
+    @Test fun `a mitad de capitulo nunca cambia`() {
+        assertEquals(0, ReaderRules.chapterStep(middle, -500.0, min))
+        assertEquals(0, ReaderRules.chapterStep(middle, 500.0, min))
+    }
+
+    @Test fun `gesto corto en el borde no cambia`() {
+        assertEquals(0, ReaderRules.chapterStep(bottom, -(min - 1), min))
+        assertEquals(0, ReaderRules.chapterStep(top, min - 1, min))
+        assertEquals(1, ReaderRules.chapterStep(bottom, -min, min))
+    }
+
+    @Test fun `en el borde pero hacia el otro lado solo desplaza`() {
+        assertEquals(0, ReaderRules.chapterStep(bottom, 200.0, min))
+        assertEquals(0, ReaderRules.chapterStep(top, -200.0, min))
+    }
+
+    @Test fun `capitulo que cabe en la pantalla va a los dos lados`() {
+        val both = PageEdges(atTop = true, atBottom = true)
+        assertEquals(1, ReaderRules.chapterStep(both, -200.0, min))
+        assertEquals(-1, ReaderRules.chapterStep(both, 200.0, min))
+    }
+
+    @Test fun `sin bordes conocidos o sin gesto no cambia`() {
+        assertEquals(0, ReaderRules.chapterStep(null, -200.0, min))
+        assertEquals(0, ReaderRules.chapterStep(bottom, Double.NaN, min))
+        assertEquals(0, ReaderRules.chapterStep(bottom, 0.0, min))
+    }
+
+    // Tras un paso de capítulo nuestro, los gestos esperan a que el capítulo nuevo esté en su sitio (revisión M1).
+    @Test fun `sin paso pendiente el gesto vale`() = assertTrue(ReaderRules.dragAllowed(null, "OEBPS/c1.xhtml", 0))
+
+    @Test fun `recien pasado y aun en el capitulo viejo no vale`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c2.xhtml", 100))
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c2.xhtml", ReaderRules.TURN_SETTLE_MS))
+    }
+
+    @Test fun `ya en el capitulo nuevo vale tras asentarse`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c3.xhtml", ReaderRules.TURN_SETTLE_MS - 1))
+        assertTrue(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c3.xhtml", ReaderRules.TURN_SETTLE_MS))
+    }
+
+    @Test fun `si el capitulo nuevo nunca llega se vuelve a permitir`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", null, ReaderRules.TURN_TIMEOUT_MS - 1))
+        assertTrue(ReaderRules.dragAllowed("OEBPS/c3.xhtml", null, ReaderRules.TURN_TIMEOUT_MS))
+    }
+
+    private val order = listOf("OEBPS/c1.xhtml", "OEBPS/c2.xhtml", "OEBPS/c3.xhtml")
+
+    @Test fun `capitulo vecino en el orden de lectura`() {
+        assertEquals(2, ReaderRules.neighborChapter(order, "OEBPS/c2.xhtml", 1))
+        assertEquals(0, ReaderRules.neighborChapter(order, "OEBPS/c2.xhtml", -1))
+        assertEquals(1, ReaderRules.neighborChapter(order, "OEBPS/c1.xhtml#parte", 1))
+    }
+
+    @Test fun `sin vecino en los extremos o con href desconocido`() {
+        assertNull(ReaderRules.neighborChapter(order, "OEBPS/c3.xhtml", 1))
+        assertNull(ReaderRules.neighborChapter(order, "OEBPS/c1.xhtml", -1))
+        assertNull(ReaderRules.neighborChapter(order, "OEBPS/otro.xhtml", 1))
+        assertNull(ReaderRules.neighborChapter(order, null, 1))
+        assertNull(ReaderRules.neighborChapter(order, "OEBPS/c2.xhtml", 0))
+    }
+
     @Test fun `fin del libro desde 0,999`() {
         assertTrue(ReaderRules.atEnd(1.0))
         assertTrue(ReaderRules.atEnd(0.999))

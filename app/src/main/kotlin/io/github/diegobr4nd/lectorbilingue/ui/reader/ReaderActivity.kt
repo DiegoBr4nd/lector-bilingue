@@ -58,7 +58,12 @@ class ReaderActivity : FragmentActivity() {
             listener = linkListener,
             // Readium sirve también assets/lector/ de la app en https://readium_assets/lector/ (se suma a su readium/):
             // ahí está la hoja de las tarjetas de traducción, que HtmlSanitizer enlaza tras la CSP (spec 3b §12, T2).
-            configuration = EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*")),
+            // disablePageTurnsWhileScrolling: en el modo desplazamiento Readium cambia de capítulo con un gesto CORTO
+            // (< ~200 px en vertical) que se desvíe > 42 px en horizontal, en cualquier punto del capítulo (al volver,
+            // además, abre el anterior por el final). Se apaga, y el paso de capítulo al llegar al borde lo hace
+            // ReaderScreen (ReaderRules.chapterStep). Ver fix/cambio-de-capitulo.
+            configuration = EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*"))
+                .apply { disablePageTurnsWhileScrolling = true },
         )
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.os.SystemClock
 import android.view.View
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.compose.BackHandler
@@ -74,6 +75,9 @@ import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -82,6 +86,7 @@ import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
@@ -124,6 +129,7 @@ fun ReaderScreen(
     val scope = rememberCoroutineScope()
     val touchExploration = rememberTouchExploration()
     val reduceMotion = rememberReduceMotion()
+    val fixedLayout = remember(publication) { publication.metadata.layout == Layout.FIXED }
     val toc = remember(publication) { ReaderRules.flattenToc(publication.tableOfContents.map { it.toSource() }) }
     // El navegador se lee en cada llamada: el fragmento de Readium llega (o se recrea) después.
     val bridge = remember { ParagraphBridge { navigator } }
@@ -184,8 +190,52 @@ fun ReaderScreen(
     DisposableEffect(navigator) {
         val nav = navigator
         val listener = object : InputListener {
+            /** Bordes de la página y capítulo visible al empezar el gesto (los bordes se leen enseguida). */
+            var edgesAtStart: Deferred<PageEdges?>? = null
+            var startHref: String? = null
+
+            /** Paso de capítulo nuestro aún sin asentar (ver ReaderRules.dragAllowed) y cuándo se pidió. */
+            var turningTo: String? = null
+            var turnedAt = 0L
+
             override fun onDrag(event: DragEvent): Boolean {
                 if (event.type != DragEvent.Type.Start) vm.onDrag(event.offset.y.toDouble())
+                // Paso de capítulo SOLO en el borde: Readium ya no lo hace por su cuenta (ReaderActivity enciende
+                // disablePageTurnsWhileScrolling); si la página ya estaba abajo del todo y el dedo sigue subiendo,
+                // se pasa al siguiente; arriba del todo y bajando, al final del anterior. Solo en libros que se
+                // desplazan: en los de diseño fijo cada página cabe entera y cualquier gesto pasaría de capítulo.
+                if (fixedLayout) return false
+                when (event.type) {
+                    DragEvent.Type.Start -> {
+                        val now = SystemClock.uptimeMillis()
+                        if (!ReaderRules.dragAllowed(turningTo, currentHref, now - turnedAt)) {
+                            edgesAtStart = null
+                            return false
+                        }
+                        turningTo = null
+                        startHref = currentHref
+                        // Sin esperar al despachador: los bordes se leen antes de que la página se mueva más.
+                        edgesAtStart = scope.async(start = CoroutineStart.UNDISPATCHED) { bridge.edges() }
+                    }
+                    DragEvent.Type.End -> {
+                        val edges = edgesAtStart ?: return false
+                        edgesAtStart = null
+                        val href = startHref ?: return false
+                        val dy = event.offset.y.toDouble()
+                        val minDy = ReaderRules.CHAPTER_TURN_MIN_DP * pageDensity.density
+                        scope.launch {
+                            val step = ReaderRules.chapterStep(edges.await(), dy, minDy)
+                            if (step == 0 || href != currentHref) return@launch
+                            // El navegador de ahora (no el de cuando se puso el oyente) y con su vista viva.
+                            val current = navigator?.takeIf { it.view != null } ?: return@launch
+                            current.turnChapter(publication, href, step)?.let {
+                                turningTo = it
+                                turnedAt = SystemClock.uptimeMillis()
+                            }
+                        }
+                    }
+                    else -> Unit
+                }
                 return false // Readium sigue desplazando el texto.
             }
 
@@ -450,6 +500,17 @@ private fun rememberTouchExploration(): Boolean {
 private fun Locator.toPosition() = ReaderPosition(toJSON().toString(), locations.totalProgression, title)
 
 private fun Link.toSource(): TocEntrySource = TocEntrySource(title, url().toString(), children.map { it.toSource() })
+
+/**
+ * Pasa al capítulo vecino en el orden de lectura: al principio del siguiente o al FINAL del anterior (se cruzó el
+ * borde de arriba). Devuelve el href del capítulo pedido, o null si no hay vecino (primer o último capítulo).
+ */
+private fun EpubNavigatorFragment.turnChapter(publication: Publication, href: String, step: Int): String? {
+    val order = publication.readingOrder.map { it.url().toString() }
+    val i = ReaderRules.neighborChapter(order, href, step) ?: return null
+    val start = publication.locatorFromLink(publication.readingOrder[i]) ?: return null
+    return if (go(if (step > 0) start else start.copyWithLocations(progression = 1.0))) order[i] else null
+}
 
 /** El enlace original del índice (con su `#fragmento`), para saltar justo al punto del capítulo. */
 private fun List<Link>.findByHref(href: String): Link? {

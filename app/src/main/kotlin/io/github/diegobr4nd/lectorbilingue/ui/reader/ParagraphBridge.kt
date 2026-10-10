@@ -38,6 +38,9 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
      */
     suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
 
+    /** Bordes de la página visible (arriba / abajo del todo), o null si aún no hay página o no respondió. */
+    suspend fun edges(): PageEdges? = ParagraphScripts.parseEdges(run(ParagraphScripts.edges()))
+
     // El WebView solo se usa en el hilo principal.
     private suspend fun run(script: String): String? = withContext(Dispatchers.Main.immediate) {
         navigator()?.evaluateJavascript(script)
