@@ -188,7 +188,9 @@ fun LanguagesContent(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.m),
         ) {
-            if (ui.message != null) MessageText(ui.message)
+            // Los avisos de borrar traducciones salen junto a su fila (abajo, donde está el dedo); los demás, arriba.
+            val cacheMessage = ui.message?.takeIf { it.isCacheMessage }
+            if (ui.message != null && cacheMessage == null) MessageText(ui.message)
             when {
                 !loaded -> LoadingLine(stringResource(R.string.languages_searching))
                 else -> {
@@ -209,7 +211,15 @@ fun LanguagesContent(
                 }
             }
             // Al final, antes de Importar: lo que ocupan las traducciones guardadas (se apaga si no hay nada).
-            if (loaded) CacheRow(ui.cacheBytes, enabled = !ui.busy, onClear = onClearCache)
+            if (loaded) {
+                // La fila y su aviso juntos (sin el espacio de la columna entre ellos).
+                Column {
+                    CacheRow(ui.cacheBytes, enabled = !ui.busy, onClear = onClearCache)
+                    cacheMessage?.let { MessageText(it) }
+                }
+            } else {
+                cacheMessage?.let { MessageText(it) }
+            }
             if (ui.busy) LoadingLine(stringResource(R.string.languages_working))
             // Importar se ve siempre, aunque no haya catálogo o esté buscando.
             TextButton(
@@ -259,6 +269,10 @@ private fun CacheRow(bytes: Long, enabled: Boolean, onClear: () -> Unit) {
         ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }
     }
 }
+
+/** Avisos de borrar las traducciones guardadas: se muestran bajo su fila. */
+private val ModelMessage.isCacheMessage: Boolean
+    get() = this == ModelMessage.CACHE_CLEARED || this == ModelMessage.CACHE_CLEAR_FAILED
 
 /** Aviso fijo en lenguaje sencillo; los errores van en el color de error y se anuncian solos. */
 @Composable
