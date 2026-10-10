@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
+import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
@@ -24,6 +26,7 @@ import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import java.io.File
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -153,6 +156,44 @@ class ReadingSettingsOnDeviceTest {
         }
     }
 
+    /**
+     * Ruling K: tema, tamaño, fuente y márgenes se aplican con publisherStyles = true (el libro conserva su
+     * interlineado); el interlineado propio sí lo pasa a false ("readium-advanced-on").
+     */
+    @Test fun conElEstiloDelLibroSeAplicanTemaTamanoFuenteYMargenes() = runBlocking<Unit> {
+        app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT)
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            waitFor("página lista") { js(s, PAGE_READY) == "70" }
+            settle()
+            js(s, "window.__marca = 7; 'ok'")
+            val padBefore = px(js(s, BODY_PAD))
+            val lineBefore = js(s, P_LINE)
+            val elegidos = ReadingSettings(
+                theme = PageTheme.SEPIA, fontScale = 1.25, font = ReadingFont.LITERATA, margins = MarginLevel.WIDE,
+            )
+            app.settings.readingSettings = elegidos
+            waitFor("letra al 125 %") { js(s, P_SIZE) == "20px" }
+            waitFor("Literata") { js(s, "getComputedStyle(document.querySelectorAll('p')[0]).fontFamily")!!.contains("Literata") }
+            waitFor("fondo sepia") { js(s, "getComputedStyle(document.documentElement).backgroundColor") == "rgb(250, 244, 232)" }
+            waitFor("márgenes anchos") { px(js(s, BODY_PAD)) > padBefore * 1.4 }
+            assertFalse(js(s, ROOT_STYLE).orEmpty().contains("readium-advanced-on"), "publisherStyles debería seguir en true")
+            val lineWithBook = js(s, P_LINE)
+            Log.i(TAG, "relleno $padBefore → ${px(js(s, BODY_PAD))}; interlineado $lineBefore → $lineWithBook (libro)")
+
+            // Interlineado "Amplio": ahora sí se sobrescribe el estilo del libro (1,8 × 20 px).
+            app.settings.readingSettings = elegidos.copy(lineHeight = LineHeightLevel.WIDE)
+            waitFor("interlineado 1,8") { js(s, P_LINE) == "36px" }
+            assertTrue(js(s, ROOT_STYLE).orEmpty().contains("readium-advanced-on"))
+            // Lo demás sigue.
+            assertEquals("20px", js(s, P_SIZE))
+            assertEquals("rgb(250, 244, 232)", js(s, "getComputedStyle(document.documentElement).backgroundColor"))
+            assertEquals("7", js(s, "String(window.__marca)"), "la página no se recargó")
+        }
+    }
+
+    private fun px(v: String?): Double = v?.removeSuffix("px")?.toDoubleOrNull() ?: 0.0
+
     @Test fun negroEsNegro() = runBlocking<Unit> {
         app.settings.readingSettings = ReadingSettings(theme = PageTheme.BLACK)
         val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
@@ -225,6 +266,10 @@ class ReadingSettingsOnDeviceTest {
         const val TAG = "AjustesLecturaTest"
         const val PAGE_READY = "document.readyState === 'complete' && !!window.readium && document.querySelectorAll('p').length"
         const val THEME_ATTR = "document.documentElement.getAttribute('data-lector-tema')"
+        const val ROOT_STYLE = "document.documentElement.getAttribute('style')"
+        const val BODY_PAD = "getComputedStyle(document.body).paddingLeft"
+        const val P_SIZE = "getComputedStyle(document.querySelectorAll('p')[0]).fontSize"
+        const val P_LINE = "getComputedStyle(document.querySelectorAll('p')[0]).lineHeight"
 
         /** Posición del primer <p> que asoma arriba (su borde de abajo ya pasó el tope de la página visible). */
         const val FIRST_VISIBLE = "(function () { var ps = document.querySelectorAll('p');" +

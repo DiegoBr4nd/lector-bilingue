@@ -80,8 +80,9 @@ object ReadingRules {
             pageMargins = MARGINS.getValue(s.margins),
             textAlign = if (justify) TextAlign.JUSTIFY else null,
             hyphens = if (justify) true else null,
-            // Interlineado, alineación y guiones solo se aplican con esto en false; en fábrica se respeta el libro.
-            publisherStyles = s.isFactory,
+            // Ruling K (spec §11): solo interlineado, alineación y guiones necesitan false. Tema, tamaño, fuente y
+            // márgenes se aplican igual con true, y así el libro conserva su interlineado ("Normal" = el del libro).
+            publisherStyles = s.lineHeight == LineHeightLevel.NORMAL && s.align == TextAlignChoice.START,
         )
     }
 

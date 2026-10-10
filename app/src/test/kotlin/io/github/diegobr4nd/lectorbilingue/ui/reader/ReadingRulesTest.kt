@@ -67,9 +67,13 @@ class ReadingRulesTest {
         assertNull(p.backgroundColor); assertNull(p.textColor)
     }
 
-    @Test fun `cambiar solo el tema tambien sobrescribe el estilo del libro`() {
-        // Intencional (spec 5.1): cualquier ajuste distinto de fabrica pone publisherStyles = false.
-        assertEquals(false, ReadingRules.preferences(f.copy(theme = PageTheme.SEPIA), false).publisherStyles)
+    @Test fun `tema, tamaño, fuente y margenes respetan el estilo del libro`() {
+        // Ruling K (spec §11): con publisherStyles = true siguen aplicándose; el libro conserva su interlineado.
+        assertEquals(true, ReadingRules.preferences(f.copy(theme = PageTheme.SEPIA), false).publisherStyles)
+        assertEquals(true, ReadingRules.preferences(f.copy(theme = PageTheme.BLACK), false).publisherStyles)
+        assertEquals(true, ReadingRules.preferences(f.copy(fontScale = 1.2), false).publisherStyles)
+        assertEquals(true, ReadingRules.preferences(f.copy(font = ReadingFont.ATKINSON), false).publisherStyles)
+        assertEquals(true, ReadingRules.preferences(f.copy(margins = MarginLevel.WIDE), false).publisherStyles)
     }
 
     @Test fun `sepia y claro elegidos ignoran el sistema`() {
@@ -79,12 +83,23 @@ class ReadingRulesTest {
         assertEquals("claro", ReadingRules.cardTheme(f.copy(theme = PageTheme.LIGHT), true))
     }
 
-    @Test fun `cualquier ajuste distinto de fabrica sobrescribe el estilo del libro`() {
-        assertEquals(false, ReadingRules.preferences(f.copy(fontScale = 1.2), false).publisherStyles)
-        assertEquals(false, ReadingRules.preferences(f.copy(font = ReadingFont.ATKINSON), false).publisherStyles)
+    @Test fun `solo interlineado o justificado sobrescriben el estilo del libro`() {
+        // Solo estos dos lo necesitan (spec §11): Readium no los aplica con publisherStyles = true.
         assertEquals(false, ReadingRules.preferences(f.copy(lineHeight = LineHeightLevel.COMPACT), false).publisherStyles)
-        assertEquals(false, ReadingRules.preferences(f.copy(margins = MarginLevel.WIDE), false).publisherStyles)
+        assertEquals(false, ReadingRules.preferences(f.copy(lineHeight = LineHeightLevel.WIDE), false).publisherStyles)
         assertEquals(false, ReadingRules.preferences(f.copy(align = TextAlignChoice.JUSTIFY), false).publisherStyles)
+        assertEquals(
+            false,
+            ReadingRules.preferences(f.copy(theme = PageTheme.DARK, align = TextAlignChoice.JUSTIFY), true).publisherStyles,
+        )
+    }
+
+    @Test fun `el tema del sistema en modo oscuro y Oscuro dan las mismas preferencias`() {
+        // Antes "Oscuro" quitaba el interlineado del libro y "Como el teléfono" no: ahora son idénticos.
+        assertEquals(
+            ReadingRules.preferences(f.copy(theme = PageTheme.DARK), systemDark = true),
+            ReadingRules.preferences(f, systemDark = true),
+        )
     }
 
     @Test fun `el tamaño se acota y va en pasos de 10`() {
