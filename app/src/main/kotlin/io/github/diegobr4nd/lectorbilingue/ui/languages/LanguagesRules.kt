@@ -75,4 +75,12 @@ object LanguagesRules {
                 null
             }
     }
+
+    /** "3,2" (MB con un decimal, nunca "0,0" si hay algo guardado) o null si no hay nada: la fila se apaga. */
+    fun cacheSizeMb(bytes: Long, locale: Locale = Locale.getDefault()): String? {
+        if (!cacheVisible(bytes)) return null
+        return String.format(locale, "%.1f", maxOf(0.1, bytes / 1_048_576.0))
+    }
+
+    fun cacheVisible(bytes: Long): Boolean = bytes > 0
 }

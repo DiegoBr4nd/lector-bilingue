@@ -16,4 +16,14 @@ interface TranslationDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(row: TranslationEntity)
+
+    @Query("SELECT COUNT(*) FROM translations")
+    suspend fun count(): Int
+
+    /** Tamaño aproximado: caracteres de clave y traducción × 2 (UTF-16). Solo para mostrar "aprox.". */
+    @Query("SELECT COALESCE(SUM(LENGTH(`key`) + LENGTH(translation)), 0) * 2 FROM translations")
+    suspend fun approxBytes(): Long
+
+    @Query("DELETE FROM translations")
+    suspend fun deleteAll()
 }

@@ -261,4 +261,43 @@ class TranslationServiceTest {
         assertEquals(TranslateResult.Done("T(B.)"), s.translate(req("B.")))
         assertTrue(dao.rows.keys.none { it == key("A.") })
     }
+
+    // --- Borrar las traducciones guardadas ---
+
+    @Test fun borrarConTraduccionEnCursoNoDejaFilas() = runTest(dispatcher) {
+        val engine = FakeEngine(gate = true)
+        val s = service(engine)
+        dao.rows[key("Vieja.")] = TranslationEntity(key("Vieja."), "T(Vieja.)", 1L)
+        s.prefetch(listOf(req("pre1.", Priority.PREFETCH), req("pre2.", Priority.PREFETCH)))
+        val tap = async { runCatching { s.translate(req("toque.", Priority.TAP)) } }
+        runCurrent() // una traducción en curso, detenida en la compuerta
+        s.clearCache()
+        engine.releaseAll()
+        advanceUntilIdle()
+        assertTrue(dao.rows.isEmpty(), "no debe quedar ninguna fila")
+        assertTrue(tap.await().exceptionOrNull() is CancellationException, "el pedido en curso recibe cancelación")
+        assertEquals(0L, s.cacheBytes())
+    }
+
+    @Test fun borrarConLaFilaVaciaNoFalla() = runTest(dispatcher) {
+        val s = service()
+        s.clearCache()
+        advanceUntilIdle()
+        assertEquals(0L, s.cacheBytes())
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun despuesDeBorrarSeSigueTraduciendo() = runTest(dispatcher) {
+        val s = service()
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        s.clearCache()
+        advanceUntilIdle()
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test fun cacheBytesDaElTamanoAproximadoDelDao() = runTest(dispatcher) {
+        dao.rows["ab"] = TranslationEntity("ab", "cde", 1L)
+        assertEquals(10L, service().cacheBytes())
+    }
 }

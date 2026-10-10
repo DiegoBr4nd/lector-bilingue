@@ -147,6 +147,13 @@
     <string name="languages_redownload_title">¿Descargar %1$s otra vez?</string>
     <string name="languages_redownload_body">Modelo %2$s. Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
     <string name="languages_redownload_confirm">Descargar</string>
+    <string name="languages_cache_label">Traducciones guardadas: aprox. %1$s MB</string>
+    <string name="languages_cache_delete">Borrar</string>
+    <string name="languages_cache_delete_description">Borrar las traducciones guardadas, aprox. %1$s MB</string>
+    <string name="languages_cache_confirm_title">¿Borrar las traducciones guardadas?</string>
+    <string name="languages_cache_confirm_body">Se volverán a traducir cuando toques los párrafos.</string>
+    <string name="languages_cache_cleared">Traducciones borradas</string>
+    <string name="languages_cache_clear_failed">No se pudieron borrar las traducciones</string>
     <!-- 3c-1 · Ajustes de lectura -->
     <string name="reading_title">Ajustes de lectura</string>
     <string name="reading_open_action">Abrir ajustes de lectura</string>

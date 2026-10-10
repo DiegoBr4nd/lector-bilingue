@@ -20,6 +20,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Lo que Idiomas necesita del caché de traducciones (una interfaz para poder probar la pantalla sin Room). */
+interface TranslationCacheApi {
+    suspend fun cacheBytes(): Long
+    suspend fun clearCache()
+}
+
 enum class Priority { TAP, PREFETCH }
 
 /**
@@ -70,7 +76,7 @@ class TranslationService(
     private val worker: CoroutineDispatcher,          // un solo hilo
     private val scope: CoroutineScope,                // vive lo que la app
     private val idleUnloadMillis: Long = 120_000,
-) {
+) : TranslationCacheApi {
     /** Un párrafo en la fila o en curso. [key] usa la etiqueta del modelo que se esperaba usar al pedirlo. */
     private class Entry(
         val key: String,
@@ -167,6 +173,20 @@ class TranslationService(
             idle = null
         }
         scope.launch(worker) { unloadEngine() }
+    }
+
+    /** Tamaño aproximado de las traducciones guardadas, en bytes. */
+    override suspend fun cacheBytes(): Long = cache.approxBytes()
+
+    /**
+     * Borra todas las traducciones guardadas. Primero [release] (vacía la fila y cancela lo que está en curso) y se
+     * espera a que el bucle termine de verdad: así nada en curso puede guardar una fila justo después de borrar.
+     */
+    override suspend fun clearCache() {
+        val runningLoop = synchronized(lock) { loop }
+        release()
+        runningLoop?.join()
+        cache.deleteAll()
     }
 
     /** true si hay un motor cargado para [pair] (la tarjeta muestra "Traduciendo…" en vez de "Preparando el traductor…"). */

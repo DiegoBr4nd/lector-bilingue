@@ -379,7 +379,7 @@ fun ReaderScreen(
                 vm.onLanguagesClosed() // suelta el motor y vuelve a pedir las tarjetas sin modelo
             }
             BackHandler(onBack = close)
-            LanguagesScreen(app.hub, app.settings, onBack = close)
+            LanguagesScreen(app.hub, app.settings, onBack = close, cache = app.translations)
         }
     }
 

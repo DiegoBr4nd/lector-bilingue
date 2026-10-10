@@ -82,6 +82,11 @@ class FakeTranslationDao : TranslationDao {
     override suspend fun put(row: TranslationEntity) {
         rows[row.key] = row
     }
+    override suspend fun count(): Int = rows.size
+    override suspend fun approxBytes(): Long = rows.values.sumOf { (it.key.length + it.translation.length) * 2L }
+    override suspend fun deleteAll() {
+        rows.clear()
+    }
 }
 
 /** Disco y motores de mentira. [installed] se puede cambiar entre cargas. */
