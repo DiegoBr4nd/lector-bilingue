@@ -241,7 +241,6 @@ fun ReaderScreen(
     /** Toque en "Capítulo anterior/siguiente": ignorado mientras un paso nuestro aún no se asienta (no saltar dos). */
     fun onChapterButton(step: Int) {
         val href = currentHref ?: return
-        if (fixedLayout) return
         if (!ReaderRules.dragAllowed(chapterTurn.turningTo, href, SystemClock.uptimeMillis() - chapterTurn.turnedAt)) return
         chapterTurn.turningTo = null
         stepChapter(href, step, toEnd = false)
