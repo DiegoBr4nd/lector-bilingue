@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -82,6 +83,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
@@ -101,6 +103,8 @@ fun ReaderScreen(
     app: LectorApp,
     bookId: String,
     publication: Publication,
+    /** Las preferencias con que se creó el navegador de Readium (los ajustes de lectura al abrir). */
+    startPreferences: EpubPreferences,
     /** El título guardado en la Biblioteca (no el del OPF): así las dos pantallas muestran el mismo. */
     title: String?,
     externalLink: StateFlow<String?>,
@@ -143,8 +147,30 @@ fun ReaderScreen(
     val announceTranslating by rememberUpdatedState(stringResource(R.string.reader_card_skeleton))
     val announceHidden by rememberUpdatedState(stringResource(R.string.reader_card_hidden))
     val announceTranslation by rememberUpdatedState(stringResource(R.string.reader_card_announce))
+    // Ajustes de lectura (iguales para todos los libros) y modo del sistema, para "Como el teléfono".
+    val readingSettings by app.settings.readingSettingsFlow.collectAsStateWithLifecycle()
+    val systemDark = isSystemInDarkTheme()
+    val cardTheme by rememberUpdatedState(ReadingRules.cardTheme(readingSettings, systemDark))
+    // Las últimas preferencias mandadas a Readium: si no cambian, no se vuelven a mandar (ni se mueve la página).
+    var appliedPreferences by remember { mutableStateOf(startPreferences) }
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
+    // Por si se abrió el Lector antes de que la Biblioteca leyera los ajustes (fuera del hilo principal).
+    LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
+    // Ajustes al instante, sin recargar la página. Readium deja la página en el mismo píxel al cambiar el tamaño (y el
+    // texto se corre), así que se guarda la posición antes y se vuelve a ella enseguida (spec §11, C3). La tarjeta
+    // cambia de paleta con el atributo del tema (también lo pone la página al quedar lista, más abajo).
+    LaunchedEffect(readingSettings, systemDark, navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        val preferences = ReadingRules.preferences(readingSettings, systemDark)
+        if (preferences != appliedPreferences) {
+            val saved = nav.currentLocator.value
+            nav.submitPreferences(preferences)
+            nav.go(saved, animated = false)
+            appliedPreferences = preferences
+        }
+        bridge.setTheme(cardTheme)
+    }
     // Al pausar (antes de onStop): si la persona vuelve y reabre enseguida, la Biblioteca ya lee la última posición.
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { vm.flush() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.flush() }
@@ -176,6 +202,8 @@ fun ReaderScreen(
         val href = currentHref ?: return@LaunchedEffect
         var tries = 0
         while (!bridge.hideAll(href) && tries++ < PageReadyTries) delay(PageReadyDelayMs)
+        // El tema de la tarjeta va en cada página nueva, antes de reponer las tarjetas: así nunca salen con otro color.
+        bridge.setTheme(cardTheme)
         // Aun si la página nunca respondió, el ViewModel debe saber cuál es el recurso visible.
         vm.onResourceShown(href)
     }
@@ -285,7 +313,13 @@ fun ReaderScreen(
         AndroidFragment<EpubNavigatorFragment>(
             // El texto nunca queda bajo la barra de estado ni la de gestos.
             modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
-        ) { nav -> navigator = nav }
+        ) { nav ->
+            // Un fragmento nuevo nace con las preferencias de la fábrica (las del arranque).
+            if (nav !== navigator) {
+                navigator = nav
+                appliedPreferences = startPreferences
+            }
+        }
 
         AnimatedVisibility(
             visible = barsVisible,

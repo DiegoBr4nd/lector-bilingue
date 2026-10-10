@@ -4,6 +4,8 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
 import io.github.diegobr4nd.lectorbilingue.ui.reader.PageParagraph
@@ -38,7 +40,11 @@ class ParagraphBridgeOnDeviceTest {
     private val created = mutableListOf<String>()
     private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
 
+    // Los colores que se miden son los del tema claro: se fija y al final se devuelven los ajustes de la persona.
+    private val saved = app.settings.readingSettings.also { app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT) }
+
     @After fun cleanUp() = runBlocking<Unit> {
+        app.settings.readingSettings = saved
         for (id in created) {
             app.openBooks.close(id)
             app.books.delete(id)

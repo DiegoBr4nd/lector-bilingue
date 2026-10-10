@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,7 +12,9 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.epub.css.FontStyle
+import org.readium.r2.navigator.epub.css.FontWeight
+import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -51,10 +54,13 @@ class ReaderActivity : FragmentActivity() {
         }
         val id = decision.id
         shown = id to publication
+        val startPreferences = ReadingRules.preferences(app.settings.readingSettingsFlow.value, systemDark())
         // La posición guardada la leyó la Biblioteca (Room no se lee en el hilo principal).
         supportFragmentManager.fragmentFactory = EpubNavigatorFactory(publication).createFragmentFactory(
             initialLocator = app.openBooks.initialLocator(id),
-            initialPreferences = EpubPreferences(scroll = true),
+            // Los ajustes de lectura ya aplicados al abrir (la Biblioteca los leyó fuera del hilo principal; si aún no,
+            // son los de fábrica y ReaderScreen los aplica en cuanto llegan): así no hay un reajuste visible al entrar.
+            initialPreferences = startPreferences,
             listener = linkListener,
             // Readium sirve también assets/lector/ de la app en https://readium_assets/lector/ (se suma a su readium/):
             // ahí está la hoja de las tarjetas de traducción, que HtmlSanitizer enlaza tras la CSP (spec 3b §12, T2).
@@ -62,8 +68,10 @@ class ReaderActivity : FragmentActivity() {
             // (< ~200 px en vertical) que se desvíe > 42 px en horizontal, en cualquier punto del capítulo (al volver,
             // además, abre el anterior por el final). Se apaga, y el paso de capítulo al llegar al borde lo hace
             // ReaderScreen (ReaderRules.chapterStep). Ver fix/cambio-de-capitulo.
-            configuration = EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*"))
-                .apply { disablePageTurnsWhileScrolling = true },
+            configuration = EpubNavigatorFragment.Configuration(servedAssets = listOf("lector/.*")).apply {
+                disablePageTurnsWhileScrolling = true
+                declareReadingFonts()
+            },
         )
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -73,6 +81,7 @@ class ReaderActivity : FragmentActivity() {
                     app = app,
                     bookId = id,
                     publication = publication,
+                    startPreferences = startPreferences,
                     title = app.openBooks.title(id),
                     externalLink = externalLink,
                     onExternalDone = { externalLink.value = null },
@@ -92,8 +101,36 @@ class ReaderActivity : FragmentActivity() {
         if (finishing) shown?.let { (id, pub) -> (application as LectorApp).openBooks.close(id, pub) }
     }
 
+    private fun systemDark(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
     companion object {
         const val EXTRA_BOOK_ID = "book_id"
         fun intent(context: Context, id: String): Intent = Intent(context, ReaderActivity::class.java).putExtra(EXTRA_BOOK_ID, id)
     }
 }
+
+/**
+ * Las fuentes propias de los ajustes de lectura, con los nombres de familia que usa [ReadingRules]. Readium las sirve
+ * desde assets/lector/fuentes/ (https://readium_assets/lector/fuentes/…, dentro de `servedAssets`) y solo las descarga
+ * la página si se eligen. Una cara por archivo; Inter es variable (un archivo para todos los pesos).
+ */
+@OptIn(ExperimentalReadiumApi::class)
+private fun EpubNavigatorFragment.Configuration.declareReadingFonts() {
+    addFontFamilyDeclaration(FontFamily("Literata")) {
+        addFontFace { addSource(FONTS + "literata_regular.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.NORMAL) }
+        addFontFace { addSource(FONTS + "literata_italic.ttf"); setFontStyle(FontStyle.ITALIC); setFontWeight(FontWeight.NORMAL) }
+        addFontFace { addSource(FONTS + "literata_semibold.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.SEMI_BOLD) }
+    }
+    addFontFamilyDeclaration(FontFamily("Inter")) {
+        addFontFace { addSource(FONTS + "inter_variable.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(100..900) }
+    }
+    addFontFamilyDeclaration(FontFamily("Atkinson Hyperlegible")) {
+        addFontFace { addSource(FONTS + "atkinson_hyperlegible_regular.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.NORMAL) }
+        addFontFace { addSource(FONTS + "atkinson_hyperlegible_italic.ttf"); setFontStyle(FontStyle.ITALIC); setFontWeight(FontWeight.NORMAL) }
+        addFontFace { addSource(FONTS + "atkinson_hyperlegible_bold.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.BOLD) }
+    }
+}
+
+/** Relativa a assets/: Readium la resuelve contra https://readium_assets/. */
+private const val FONTS = "lector/fuentes/"

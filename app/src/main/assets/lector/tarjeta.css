@@ -1,9 +1,58 @@
 /*
  * Tarjeta de traducción bajo el párrafo tocado (Fase 3b). La sirve Readium desde los assets de la app
  * (https://readium_assets/lector/tarjeta.css); el <link> lo pone HtmlSanitizer tras la CSP.
- * Colores finales de la 3b (boceto aprobado por Juan), con contraste AA sobre la página blanca; la 3c los
- * redefine por tema.
+ *
+ * Colores por tema (3c-1): la app pone `data-lector-tema` en <html> (ParagraphScripts.setTheme) y cada tema define
+ * las variables de abajo. "claro" es la paleta aprobada en la 3b (AA sobre la página blanca); sepia, oscuro y negro
+ * son provisionales (AA calculado) hasta que `diseno` las fije. Sin atributo valen las de claro.
  */
+:root {
+  --lector-fondo: #eef2ff;        /* texto 13,1:1; la línea 5,1:1 */
+  --lector-linea: #3b5bdb;        /* 5,7:1 sobre la página */
+  --lector-texto: #1f2937;
+  --lector-enlace: #364fc7;       /* 6,1:1 sobre el fondo */
+  --lector-error-fondo: #fef3f2;  /* texto 13,5:1 */
+  --lector-error-linea: #b42318;  /* 6,6:1 sobre la página */
+  --lector-error-enlace: #912018; /* 8,0:1 sobre el fondo de error */
+  --lector-esqueleto: #c7d0ea;    /* rayas decorativas */
+}
+
+/* Sepia (página #faf4e8 de Readium): texto 12,5:1, enlace 6,8:1, línea 5,4:1 sobre la página. */
+html[data-lector-tema="sepia"] {
+  --lector-fondo: #f0e4cc;
+  --lector-linea: #8a5a1f;
+  --lector-texto: #2b2118;
+  --lector-enlace: #6e4211;
+  --lector-error-fondo: #f7dfd5;  /* texto 12,4:1, enlace 7,5:1 */
+  --lector-error-linea: #a8321e;  /* 6,1:1 sobre la página */
+  --lector-error-enlace: #842015;
+  --lector-esqueleto: #d8c7a3;
+}
+
+/* Oscuro (página #1e1e1e): texto 10,2:1, enlace 7,4:1, línea 7,0:1 sobre la página. */
+html[data-lector-tema="oscuro"] {
+  --lector-fondo: #2a3247;
+  --lector-linea: #8ea2ff;
+  --lector-texto: #e6e6e6;
+  --lector-enlace: #b4c3ff;
+  --lector-error-fondo: #3a2523;  /* texto 11,5:1, enlace 8,4:1 */
+  --lector-error-linea: #ff8a80;  /* 7,3:1 sobre la página */
+  --lector-error-enlace: #ffb4a9;
+  --lector-esqueleto: #4a5470;
+}
+
+/* Negro (página #000000): texto 13,7:1, enlace 9,9:1, línea 8,8:1 sobre la página. */
+html[data-lector-tema="negro"] {
+  --lector-fondo: #151b2c;
+  --lector-linea: #8ea2ff;
+  --lector-texto: #e6e6e6;
+  --lector-enlace: #b4c3ff;
+  --lector-error-fondo: #2a1715;  /* texto 13,7:1, enlace 10:1 */
+  --lector-error-linea: #ff8a80;  /* 9,2:1 sobre la página */
+  --lector-error-enlace: #ffb4a9;
+  --lector-esqueleto: #343d57;
+}
+
 aside.lector-tarjeta {
   /* Muchos EPUB3 ocultan los aside (notas emergentes). !important gana frente a reglas genéricas de `aside`;
      una regla del libro con !important y más específica (p. ej. `body aside[data-lector-i]`) aún podría taparla. */
@@ -11,10 +60,10 @@ aside.lector-tarjeta {
   visibility: visible !important;
   margin: 0.4em 0 1em;
   padding: 0.6em 0.8em;
-  border-left: 4px solid #3b5bdb; /* 5,7:1 sobre blanco; 5,1:1 sobre el fondo */
+  border-left: 4px solid var(--lector-linea);
   border-radius: 8px;
-  background: #eef2ff;
-  color: #1f2937; /* 13:1 sobre el fondo */
+  background: var(--lector-fondo);
+  color: var(--lector-texto);
   font-family: inherit;
   font-size: 0.92em;
   line-height: 1.45;
@@ -25,8 +74,8 @@ aside.lector-tarjeta {
 /* Error y falta de modelo: línea roja + fondo cálido + texto (nunca solo el color). */
 aside.lector-tarjeta[data-lector-estado="error"],
 aside.lector-tarjeta[data-lector-estado="falta-modelo"] {
-  border-left-color: #b42318; /* 6,6:1 sobre blanco */
-  background: #fef3f2; /* el texto #1f2937 queda a 13,5:1 */
+  border-left-color: var(--lector-error-linea);
+  background: var(--lector-error-fondo);
 }
 
 /* "Reintentar" / "Descargar": enlace subrayado de al menos 48 px de alto (toda la tarjeta es tocable). */
@@ -36,7 +85,7 @@ aside.lector-tarjeta .lector-reintentar {
   padding: 0.8em 0;
   box-sizing: border-box;
   vertical-align: middle;
-  color: #364fc7; /* 6,1:1 sobre #eef2ff */
+  color: var(--lector-enlace);
   text-decoration: underline;
 }
 
@@ -44,14 +93,51 @@ aside.lector-tarjeta .lector-reintentar {
 aside.lector-tarjeta .lector-reintentar::before {
   content: "\00b7\00a0" / "";
   display: inline-block;
-  color: #1f2937;
+  color: var(--lector-texto);
   text-decoration: none;
   margin-inline-end: 0.15em;
 }
 
 aside.lector-tarjeta[data-lector-estado="error"] .lector-reintentar,
 aside.lector-tarjeta[data-lector-estado="falta-modelo"] .lector-reintentar {
-  color: #912018; /* 8,0:1 sobre #fef3f2 */
+  color: var(--lector-error-enlace);
+}
+
+/*
+ * Con tema, los colores ganan a ReadiumCSS: en oscuro y sepia (y con colores propios) pone `color: inherit`,
+ * `background-color: transparent` y `border-color: currentColor` con !important en todo elemento (especificidad hasta
+ * 0,2,7). Estas reglas valen 0,3,2 o más y también llevan !important. Los pseudoelementos (`::before`, `::after`) no
+ * los toca Readium, pero van igual por claridad.
+ */
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta {
+  background-color: var(--lector-fondo) !important;
+  color: var(--lector-texto) !important;
+  border-left-color: var(--lector-linea) !important;
+}
+
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="error"],
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="falta-modelo"] {
+  background-color: var(--lector-error-fondo) !important;
+  border-left-color: var(--lector-error-linea) !important;
+}
+
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta .lector-esqueleto {
+  color: var(--lector-texto) !important;
+  background-color: transparent !important;
+}
+
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta .lector-reintentar {
+  color: var(--lector-enlace) !important;
+  background-color: transparent !important;
+}
+
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="error"] .lector-reintentar,
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="falta-modelo"] .lector-reintentar {
+  color: var(--lector-error-enlace) !important;
+}
+
+html[data-lector-tema] aside.lector-tarjeta.lector-tarjeta .lector-reintentar::before {
+  color: var(--lector-texto) !important;
 }
 
 /* Esqueleto y "Preparando…": dos rayas decorativas (TalkBack no las lee; el texto es la información). */
@@ -62,12 +148,13 @@ aside.lector-tarjeta[data-lector-estado="preparando"]::after {
   height: 2.1em;
   margin-top: 0.3em;
   background:
-    linear-gradient(#c7d0ea, #c7d0ea) 0 0.25em / 100% 0.6em no-repeat,
-    linear-gradient(#c7d0ea, #c7d0ea) 0 1.35em / 62% 0.6em no-repeat;
+    linear-gradient(var(--lector-esqueleto), var(--lector-esqueleto)) 0 0.25em / 100% 0.6em no-repeat,
+    linear-gradient(var(--lector-esqueleto), var(--lector-esqueleto)) 0 1.35em / 62% 0.6em no-repeat;
   border-radius: 4px;
 }
 
-/* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo (queda #5d6573, 5,3:1). */
+/* Late entre opacidad 1 y 0,7: el texto nunca baja de 4,5:1 (AA) sobre el fondo (en claro 5,3:1; sepia 5,2:1;
+   oscuro 5,9:1; negro 7,3:1). */
 aside.lector-tarjeta .lector-esqueleto,
 aside.lector-tarjeta[data-lector-estado="esqueleto"]::after,
 aside.lector-tarjeta[data-lector-estado="preparando"]::after {
