@@ -88,7 +88,7 @@ fun LanguagesScreen(
     settings: AppSettings,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Las traducciones guardadas; sin él no se muestra la fila de borrar. */
+    /** Las traducciones guardadas. La fila de borrar se ve siempre; sin él dice "ninguna" y Borrar queda apagado. */
     cache: TranslationCacheApi? = null,
 ) {
     val viewModel: LanguagesViewModel =
