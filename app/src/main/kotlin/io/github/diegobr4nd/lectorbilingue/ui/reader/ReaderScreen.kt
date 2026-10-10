@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +54,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -135,6 +137,8 @@ fun ReaderScreen(
     val touchExploration = rememberTouchExploration()
     val reduceMotion = rememberReduceMotion()
     val fixedLayout = remember(publication) { publication.metadata.layout == Layout.FIXED }
+    // Guardia del paso de capítulo, compartido por el gesto del borde y los botones (ver ReaderRules.dragAllowed).
+    val chapterTurn = remember { ChapterTurn() }
     val toc = remember(publication) { ReaderRules.flattenToc(publication.tableOfContents.map { it.toSource() }) }
     // El navegador se lee en cada llamada: el fragmento de Readium llega (o se recrea) después.
     val bridge = remember { ParagraphBridge { navigator } }
@@ -217,16 +221,37 @@ fun ReaderScreen(
             vm.onPosition(locator.toPosition())
         }
     }
+    val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
+    val readingOrder = remember(publication) { publication.readingOrder.map { it.url().toString() } }
+    /**
+     * Un paso de capítulo (+1 siguiente, -1 anterior) para el gesto del borde y para los botones: misma función de
+     * Readium, mismo guardia, mismo anuncio de TalkBack con el título del capítulo nuevo. [toEnd]: al final del
+     * capítulo anterior (gesto) o al principio (botón).
+     */
+    fun stepChapter(href: String, step: Int, toEnd: Boolean = step < 0) {
+        // El navegador de ahora (no el de cuando se puso el oyente) y con su vista viva.
+        val current = navigator?.takeIf { it.view != null } ?: return
+        current.turnChapter(publication, href, step, toEnd)?.let { newHref ->
+            chapterTurn.turningTo = newHref
+            chapterTurn.turnedAt = SystemClock.uptimeMillis()
+            view.announce(ReaderRules.chapterTitle(toc, newHref) ?: chapterUntitled)
+        }
+    }
+    val (hasPrevious, hasNext) = ReaderRules.chapterButtons(readingOrder, currentHref)
+    /** Toque en "Capítulo anterior/siguiente": ignorado mientras un paso nuestro aún no se asienta (no saltar dos). */
+    fun onChapterButton(step: Int) {
+        val href = currentHref ?: return
+        if (fixedLayout) return
+        if (!ReaderRules.dragAllowed(chapterTurn.turningTo, href, SystemClock.uptimeMillis() - chapterTurn.turnedAt)) return
+        chapterTurn.turningTo = null
+        stepChapter(href, step, toEnd = false)
+    }
     DisposableEffect(navigator) {
         val nav = navigator
         val listener = object : InputListener {
             /** Bordes de la página y capítulo visible al empezar el gesto (los bordes se leen enseguida). */
             var edgesAtStart: Deferred<PageEdges?>? = null
             var startHref: String? = null
-
-            /** Paso de capítulo nuestro aún sin asentar (ver ReaderRules.dragAllowed) y cuándo se pidió. */
-            var turningTo: String? = null
-            var turnedAt = 0L
 
             override fun onDrag(event: DragEvent): Boolean {
                 if (event.type != DragEvent.Type.Start) vm.onDrag(event.offset.y.toDouble())
@@ -238,11 +263,11 @@ fun ReaderScreen(
                 when (event.type) {
                     DragEvent.Type.Start -> {
                         val now = SystemClock.uptimeMillis()
-                        if (!ReaderRules.dragAllowed(turningTo, currentHref, now - turnedAt)) {
+                        if (!ReaderRules.dragAllowed(chapterTurn.turningTo, currentHref, now - chapterTurn.turnedAt)) {
                             edgesAtStart = null
                             return false
                         }
-                        turningTo = null
+                        chapterTurn.turningTo = null
                         startHref = currentHref
                         // Sin esperar al despachador: los bordes se leen antes de que la página se mueva más.
                         edgesAtStart = scope.async(start = CoroutineStart.UNDISPATCHED) { bridge.edges() }
@@ -256,12 +281,7 @@ fun ReaderScreen(
                         scope.launch {
                             val step = ReaderRules.chapterStep(edges.await(), dy, minDy)
                             if (step == 0 || href != currentHref) return@launch
-                            // El navegador de ahora (no el de cuando se puso el oyente) y con su vista viva.
-                            val current = navigator?.takeIf { it.view != null } ?: return@launch
-                            current.turnChapter(publication, href, step)?.let {
-                                turningTo = it
-                                turnedAt = SystemClock.uptimeMillis()
-                            }
+                            stepChapter(href, step)
                         }
                     }
                     else -> Unit
@@ -339,12 +359,18 @@ fun ReaderScreen(
             )
         }
         AnimatedVisibility(
-            visible = barsVisible && positionText(label) != null,
+            visible = barsVisible && (positionText(label) != null || hasPrevious || hasNext),
             enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
             exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            ReaderBottomBar(label)
+            ReaderBottomBar(
+                label = label,
+                hasPrevious = hasPrevious,
+                hasNext = hasNext,
+                onPrevious = { onChapterButton(-1) },
+                onNext = { onChapterButton(1) },
+            )
         }
 
         // Idiomas a pantalla completa sobre el Lector (desde una tarjeta "Falta el idioma"): el libro sigue abierto debajo.
@@ -504,29 +530,54 @@ private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardText
 @Suppress("DEPRECATION") // Sin alternativa para un aviso puntual dentro de un WebView (minSdk 26).
 private fun View.announce(text: String) = announceForAccessibility(text)
 
+/** Paso de capítulo nuestro aún sin asentar (ver ReaderRules.dragAllowed) y cuándo se pidió. */
+private class ChapterTurn {
+    var turningTo: String? = null
+    var turnedAt = 0L
+}
+
 /** Hasta ~5 s esperando a que la página del recurso nuevo esté lista. */
 private const val PageReadyTries = 50
 private const val PageReadyDelayMs = 100L
 
-/** Barra inferior: "La tormenta · 42 %", "42 %" o nada. Se lee como texto (TalkBack la anuncia tal cual). */
+/**
+ * Barra inferior: "[<] La tormenta · 42 % [>]". Los botones (48 dp) pasan al capítulo anterior/siguiente y se
+ * apagan en los extremos. El texto se lee tal cual (TalkBack lo anuncia).
+ */
 @Composable
-fun ReaderBottomBar(label: PositionLabel, modifier: Modifier = Modifier) {
-    val text = positionText(label) ?: return
+fun ReaderBottomBar(
+    label: PositionLabel,
+    hasPrevious: Boolean,
+    hasNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val text = positionText(label)
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth()) {
-        Box(
+        Row(
             Modifier
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .heightIn(min = 48.dp)
-                .padding(horizontal = Spacing.l, vertical = Spacing.s),
-            contentAlignment = Alignment.CenterStart,
+                .padding(horizontal = Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            IconButton(onClick = onPrevious, enabled = hasPrevious, modifier = Modifier.size(48.dp)) {
+                Icon(painterResource(LectorIcons.ChevronLeft), contentDescription = stringResource(R.string.reader_chapter_previous))
+            }
+            Box(Modifier.weight(1f).padding(vertical = Spacing.s), contentAlignment = Alignment.Center) {
+                if (text != null) Text(
+                    text,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onNext, enabled = hasNext, modifier = Modifier.size(48.dp)) {
+                Icon(painterResource(LectorIcons.ChevronRight), contentDescription = stringResource(R.string.reader_chapter_next))
+            }
         }
     }
 }
@@ -559,11 +610,11 @@ private fun Link.toSource(): TocEntrySource = TocEntrySource(title, url().toStri
  * Pasa al capítulo vecino en el orden de lectura: al principio del siguiente o al FINAL del anterior (se cruzó el
  * borde de arriba). Devuelve el href del capítulo pedido, o null si no hay vecino (primer o último capítulo).
  */
-private fun EpubNavigatorFragment.turnChapter(publication: Publication, href: String, step: Int): String? {
+private fun EpubNavigatorFragment.turnChapter(publication: Publication, href: String, step: Int, toEnd: Boolean = step < 0): String? {
     val order = publication.readingOrder.map { it.url().toString() }
     val i = ReaderRules.neighborChapter(order, href, step) ?: return null
     val start = publication.locatorFromLink(publication.readingOrder[i]) ?: return null
-    return if (go(if (step > 0) start else start.copyWithLocations(progression = 1.0))) order[i] else null
+    return if (go(if (toEnd) start.copyWithLocations(progression = 1.0) else start)) order[i] else null
 }
 
 /** El enlace original del índice (con su `#fragmento`), para saltar justo al punto del capítulo. */

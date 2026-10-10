@@ -103,6 +103,26 @@ class ReaderRulesTest {
         assertNull(ReaderRules.neighborChapter(order, "OEBPS/c2.xhtml", 0))
     }
 
+    @Test fun `botones de capitulo apagados en los extremos`() {
+        assertEquals(false to true, ReaderRules.chapterButtons(order, "OEBPS/c1.xhtml"))
+        assertEquals(true to true, ReaderRules.chapterButtons(order, "OEBPS/c2.xhtml"))
+        assertEquals(true to false, ReaderRules.chapterButtons(order, "OEBPS/c3.xhtml"))
+    }
+
+    @Test fun `botones de capitulo con fragmento y con href desconocido`() {
+        assertEquals(true to true, ReaderRules.chapterButtons(order, "OEBPS/c2.xhtml#parte"))
+        assertEquals(false to false, ReaderRules.chapterButtons(order, "OEBPS/otro.xhtml"))
+        assertEquals(false to false, ReaderRules.chapterButtons(order, null))
+        assertEquals(false to false, ReaderRules.chapterButtons(emptyList(), "OEBPS/c1.xhtml"))
+    }
+
+    @Test fun `titulo del capitulo para el anuncio`() {
+        val toc = listOf(TocEntry("Uno", 0, "OEBPS/c1.xhtml"), TocEntry(null, 0, "OEBPS/c2.xhtml#a"))
+        assertEquals("Uno", ReaderRules.chapterTitle(toc, "OEBPS/c1.xhtml"))
+        assertNull(ReaderRules.chapterTitle(toc, "OEBPS/c2.xhtml")) // sin título: la pantalla pone "Sección sin título"
+        assertNull(ReaderRules.chapterTitle(toc, "OEBPS/c3.xhtml")) // fuera del Índice
+    }
+
     @Test fun `fin del libro desde 0,999`() {
         assertTrue(ReaderRules.atEnd(1.0))
         assertTrue(ReaderRules.atEnd(0.999))

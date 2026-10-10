@@ -98,6 +98,8 @@ private fun BarsOverPage(
     label: PositionLabel,
     title: String? = SampleTitle,
     direction: LanguagePair = ReaderDirections[0],
+    hasPrevious: Boolean = true,
+    hasNext: Boolean = true,
 ) = LectorTheme {
     Box(Modifier.fillMaxSize()) {
         Text(
@@ -115,13 +117,22 @@ private fun BarsOverPage(
             onToc = {},
             modifier = Modifier.align(Alignment.TopCenter),
         )
-        ReaderBottomBar(label, Modifier.align(Alignment.BottomCenter))
+        ReaderBottomBar(label, hasPrevious, hasNext, onPrevious = {}, onNext = {}, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @ReaderPreviewSet
 @Composable
 private fun BarrasConCapitulo() = BarsOverPage(PositionLabel("La tormenta", 42))
+
+/** Primer capítulo: "anterior" apagado; último: "siguiente" apagado. */
+@ReaderPreviewSet
+@Composable
+private fun BarrasPrimerCapitulo() = BarsOverPage(PositionLabel("Prólogo", 2), hasPrevious = false)
+
+@ReaderPreviewSet
+@Composable
+private fun BarrasUltimoCapitulo() = BarsOverPage(PositionLabel("Epílogo", 100), hasNext = false)
 
 @ReaderPreviewSet
 @Composable

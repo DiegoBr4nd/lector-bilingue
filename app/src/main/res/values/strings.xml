@@ -91,6 +91,8 @@
     <string name="reader_toc_empty">Este libro no trae índice</string>
     <!-- Entrada del Índice cuyo capítulo no trae título (en vez del nombre del archivo). -->
     <string name="reader_toc_untitled">Sección sin título</string>
+    <string name="reader_chapter_previous">Capítulo anterior</string>
+    <string name="reader_chapter_next">Capítulo siguiente</string>
     <string name="reader_current_chapter">Capítulo actual</string>
     <!-- Lo que TalkBack dice tras "doble toque para…". -->
     <string name="reader_toc_action">ir al capítulo</string>
