@@ -11,6 +11,11 @@ Descargadas de los repos oficiales, versión fija. Sumas SHA-256 del archivo ya 
 | `literata_regular.ttf` | https://github.com/googlefonts/literata/releases/download/3.103/3.103.zip (`fonts/ttf/Literata-Regular.ttf`, 3.103) | `0390890de9bb9d5862a6ba4125b82c61792ccc3d66b63e73eee75c1a16fcd208` |
 | `literata_semibold.ttf` | idem (`Literata-SemiBold.ttf`) | `ee8f9413ebc974e1c1cfc76f6bdb9d08ddaadc66eeddd7320a65f8c581284d6d` |
 | `literata_italic.ttf` | idem (`Literata-Italic.ttf`) | `198f70cc9a17bab578553fa274b81984d58c440efe26bc06f1d841c194b6691a` |
+| `atkinson_regular.ttf` | google/fonts `ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf` (commit 95f4904) | `7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669` |
+| `atkinson_italic.ttf` | idem (`AtkinsonHyperlegible-Italic.ttf`) | `021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514` |
+| `atkinson_bold.ttf` | idem (`AtkinsonHyperlegible-Bold.ttf`) | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
+
+Lista completa (también las copias que sirve Readium): `docs/licencias/fuentes.md`.
 
 Zips originales: Inter-4.1.zip `9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e`; 3.103.zip `f7fb973cafb26cf785cbebaeaf51c18f87c15a3bcf4d82a7d4857564db5b056d`.
 

@@ -14,7 +14,6 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.epub.css.FontWeight
-import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -117,15 +116,15 @@ class ReaderActivity : FragmentActivity() {
  */
 @OptIn(ExperimentalReadiumApi::class)
 private fun EpubNavigatorFragment.Configuration.declareReadingFonts() {
-    addFontFamilyDeclaration(FontFamily("Literata")) {
+    addFontFamilyDeclaration(ReadingRules.LITERATA) {
         addFontFace { addSource(FONTS + "literata_regular.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.NORMAL) }
         addFontFace { addSource(FONTS + "literata_italic.ttf"); setFontStyle(FontStyle.ITALIC); setFontWeight(FontWeight.NORMAL) }
         addFontFace { addSource(FONTS + "literata_semibold.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.SEMI_BOLD) }
     }
-    addFontFamilyDeclaration(FontFamily("Inter")) {
+    addFontFamilyDeclaration(ReadingRules.INTER) {
         addFontFace { addSource(FONTS + "inter_variable.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(100..900) }
     }
-    addFontFamilyDeclaration(FontFamily("Atkinson Hyperlegible")) {
+    addFontFamilyDeclaration(ReadingRules.ATKINSON) {
         addFontFace { addSource(FONTS + "atkinson_hyperlegible_regular.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.NORMAL) }
         addFontFace { addSource(FONTS + "atkinson_hyperlegible_italic.ttf"); setFontStyle(FontStyle.ITALIC); setFontWeight(FontWeight.NORMAL) }
         addFontFace { addSource(FONTS + "atkinson_hyperlegible_bold.ttf"); setFontStyle(FontStyle.NORMAL); setFontWeight(FontWeight.BOLD) }

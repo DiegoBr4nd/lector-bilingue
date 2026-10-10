@@ -116,4 +116,16 @@ class ReadingRulesTest {
     }
 
     @Test fun `restablecer vuelve a fabrica`() = assertTrue(ReadingSettings().isFactory)
+
+    @Test fun `las familias declaradas son las mismas que usan las preferencias`() {
+        assertEquals(FontFamily("Literata"), ReadingRules.LITERATA)
+        assertEquals(FontFamily("Inter"), ReadingRules.INTER)
+        assertEquals(FontFamily("Atkinson Hyperlegible"), ReadingRules.ATKINSON)
+    }
+
+    @Test fun `tras un ajuste se vuelve a la posicion solo si sigue en el mismo capitulo`() {
+        assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", "OEBPS/c2.xhtml"))
+        assertEquals(false, ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", "OEBPS/c3.xhtml")) // cambio de capítulo en curso
+        assertEquals(false, ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", null))
+    }
 }

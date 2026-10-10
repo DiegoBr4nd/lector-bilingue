@@ -39,11 +39,15 @@ object ReadingRules {
     private val DARK_BACKGROUND = Color(0xFF1E1E1E.toInt())
     private val DARK_TEXT = Color(0xFFE0E0E0.toInt())
 
-    // Nombres exactos con que la Tarea 3 declara las familias en Readium.
+    /** Familias propias: ReaderActivity las declara en Readium con estos mismos nombres. */
+    val LITERATA = FontFamily("Literata")
+    val INTER = FontFamily("Inter")
+    val ATKINSON = FontFamily("Atkinson Hyperlegible")
+
     private val FAMILIES = mapOf(
-        ReadingFont.LITERATA to FontFamily("Literata"),
-        ReadingFont.INTER to FontFamily("Inter"),
-        ReadingFont.ATKINSON to FontFamily("Atkinson Hyperlegible"),
+        ReadingFont.LITERATA to LITERATA,
+        ReadingFont.INTER to INTER,
+        ReadingFont.ATKINSON to ATKINSON,
     )
 
     fun preferences(s: ReadingSettings, systemDark: Boolean): EpubPreferences {
@@ -79,6 +83,12 @@ object ReadingRules {
         PageTheme.DARK -> "oscuro"
         PageTheme.BLACK -> "negro"
     }
+
+    /**
+     * Tras mandar ajustes a Readium, ¿se vuelve a la posición guardada antes? Solo si la página visible sigue siendo el
+     * capítulo de esa posición: si se está cambiando de capítulo, volver atrás desharía el cambio.
+     */
+    fun restoreAfterSubmit(savedHref: String, visibleHref: String?): Boolean = savedHref == visibleHref
 
     /** Un paso de tamaño (± 0,1), acotado a 0,75..2,5. */
     fun step(scale: Double, up: Boolean): Double = ReadingSettings.stepScale(scale, up)
