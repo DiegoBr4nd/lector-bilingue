@@ -170,10 +170,10 @@ class ReadingSettingsOnDeviceTest {
             val padBefore = px(js(s, BODY_PAD))
             val lineBefore = js(s, P_LINE)
             val elegidos = ReadingSettings(
-                theme = PageTheme.SEPIA, fontScale = 1.25, font = ReadingFont.LITERATA, margins = MarginLevel.WIDE,
+                theme = PageTheme.SEPIA, fontScale = 1.5, font = ReadingFont.LITERATA, margins = MarginLevel.WIDE,
             )
             app.settings.readingSettings = elegidos
-            waitFor("letra al 125 %") { js(s, P_SIZE) == "20px" }
+            waitFor("letra al 150 %") { js(s, P_SIZE) == "24px" }
             waitFor("Literata") { js(s, "getComputedStyle(document.querySelectorAll('p')[0]).fontFamily")!!.contains("Literata") }
             waitFor("fondo sepia") { js(s, "getComputedStyle(document.documentElement).backgroundColor") == "rgb(250, 244, 232)" }
             waitFor("márgenes anchos") { px(js(s, BODY_PAD)) > padBefore * 1.4 }
@@ -181,12 +181,12 @@ class ReadingSettingsOnDeviceTest {
             val lineWithBook = js(s, P_LINE)
             Log.i(TAG, "relleno $padBefore → ${px(js(s, BODY_PAD))}; interlineado $lineBefore → $lineWithBook (libro)")
 
-            // Interlineado "Amplio": ahora sí se sobrescribe el estilo del libro (1,8 × 20 px).
+            // Interlineado "Amplio": ahora sí se sobrescribe el estilo del libro (1,8 × 24 px).
             app.settings.readingSettings = elegidos.copy(lineHeight = LineHeightLevel.WIDE)
-            waitFor("interlineado 1,8") { js(s, P_LINE) == "36px" }
+            waitFor("interlineado 1,8") { abs(px(js(s, P_LINE)) - 43.2) < 0.5 }
             assertTrue(js(s, ROOT_STYLE).orEmpty().contains("readium-advanced-on"))
             // Lo demás sigue.
-            assertEquals("20px", js(s, P_SIZE))
+            assertEquals("24px", js(s, P_SIZE))
             assertEquals("rgb(250, 244, 232)", js(s, "getComputedStyle(document.documentElement).backgroundColor"))
             assertEquals("7", js(s, "String(window.__marca)"), "la página no se recargó")
         }
