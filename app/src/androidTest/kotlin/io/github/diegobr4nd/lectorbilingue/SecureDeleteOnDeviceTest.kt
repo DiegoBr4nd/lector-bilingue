@@ -34,6 +34,11 @@ class SecureDeleteOnDeviceTest {
         f.exists() && String(f.readBytes(), Charsets.ISO_8859_1).contains(frase) ||
             f.exists() && String(f.readBytes(), Charsets.UTF_16LE).contains(frase)
 
+    /** Los cursores son perezosos: hay que moveToFirst() para que el PRAGMA se ejecute de verdad. */
+    private fun checkpoint(db: LectorDatabase) {
+        db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+    }
+
     @Test
     fun tras_borrar_la_frase_no_queda_en_db_ni_wal() = runBlocking {
         val frase = "frase-unica-secure-delete-${System.nanoTime()}"
@@ -43,12 +48,12 @@ class SecureDeleteOnDeviceTest {
             dao.put(TranslationEntity("k1", frase, 1L))
             val archivo = context.getDatabasePath(nombre)
             // Control: antes de borrar, tras el checkpoint, la frase SI esta en el archivo.
-            db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
+            checkpoint(db)
             assertTrue(contiene(archivo, frase), "control: la frase debería estar antes de borrar")
 
             dao.deleteAll()
             assertEquals(0, dao.count())
-            db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
+            checkpoint(db)
 
             assertFalse(contiene(archivo, frase), "la frase quedó en el .db")
             assertFalse(contiene(File(archivo.path + "-wal"), frase), "la frase quedó en el -wal")

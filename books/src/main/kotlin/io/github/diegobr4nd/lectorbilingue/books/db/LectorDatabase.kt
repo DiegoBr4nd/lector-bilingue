@@ -24,8 +24,9 @@ abstract class LectorDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_1_2)
                 .addCallback(object : Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
-                        // PRAGMA devuelve una fila: se usa query (no execSQL) y se cierra el cursor.
-                        db.query("PRAGMA secure_delete = ON").close()
+                        // PRAGMA devuelve una fila: se usa query (no execSQL). El cursor es perezoso: sin moveToFirst()
+                        // la sentencia no se ejecuta.
+                        db.query("PRAGMA secure_delete = ON").use { it.moveToFirst() }
                     }
                 })
                 .build()
