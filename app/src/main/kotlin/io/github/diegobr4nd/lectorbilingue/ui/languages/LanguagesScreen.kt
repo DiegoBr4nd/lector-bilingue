@@ -238,23 +238,24 @@ fun LanguagesContent(
     }
 }
 
-/** "Traducciones guardadas: aprox. 3,2 MB" y el botón Borrar. No se dibuja si no hay nada guardado. */
+/** "Traducciones guardadas: aprox. 3,2 MB" y el botón Borrar (apagado si no hay nada guardado). */
 @Composable
 private fun CacheRow(bytes: Long, enabled: Boolean, onClear: () -> Unit) {
-    val size = LanguagesRules.cacheSizeMb(bytes) ?: return
+    // Siempre visible; sin nada guardado dice "ninguna" y Borrar queda apagado.
+    val size = LanguagesRules.cacheSizeMb(bytes)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            stringResource(R.string.languages_cache_label, size),
+            if (size == null) stringResource(R.string.languages_cache_none) else stringResource(R.string.languages_cache_label, size),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(Spacing.s))
-        val description = stringResource(R.string.languages_cache_delete_description, size)
+        val description = if (size == null) null else stringResource(R.string.languages_cache_delete_description, size)
         TextButton(
             onClick = onClear,
-            enabled = enabled,
+            enabled = enabled && size != null,
             shape = ButtonShape,
-            modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
+            modifier = Modifier.heightIn(min = 48.dp).semantics { description?.let { contentDescription = it } },
         ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }
     }
 }

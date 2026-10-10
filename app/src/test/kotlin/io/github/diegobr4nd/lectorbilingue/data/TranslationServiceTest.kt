@@ -7,6 +7,7 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -299,5 +300,47 @@ class TranslationServiceTest {
     @Test fun cacheBytesDaElTamanoAproximadoDelDao() = runTest(dispatcher) {
         dao.rows["ab"] = TranslationEntity("ab", "cde", 1L)
         assertEquals(10L, service().cacheBytes())
+    }
+
+    // Un motor nativo bloquea el hilo sin suspender: cancelar no lo detiene hasta que vuelve.
+    @Test fun borrarEsperaAUnMotorQueBloqueaSinSuspender() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val blocking = object : io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine {
+            override val id = EngineId.OPUS.wire
+            override suspend fun load(pair: LanguagePair, config: io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig) {}
+            override suspend fun translate(sentences: List<String>): List<String> {
+                started.countDown()
+                latch.await() // bloquea el hilo (sin suspender), como el código nativo
+                return sentences.map { "T($it)" }
+            }
+            override fun unload() {}
+        }
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val real = executor.asCoroutineDispatcher()
+        val realDao = FakeTranslationDao()
+        val s = TranslationService(
+            FakeEngineProvider(opus = FakeEngine()).let { p ->
+                object : EngineProvider by p {
+                    override fun engine(id: EngineId) = blocking
+                }
+            },
+            realDao, clock = { 42L }, worker = real, scope = translationScope(real),
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                val tap = async(kotlinx.coroutines.Dispatchers.Default) { runCatching { s.translate(req("Toque.")) } }
+                assertTrue(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                val clear = async(kotlinx.coroutines.Dispatchers.Default) { s.clearCache() }
+                kotlinx.coroutines.delay(300) // clearCache ya esperando al bucle bloqueado
+                assertFalse(clear.isCompleted, "debe esperar a que el motor vuelva")
+                latch.countDown()
+                clear.await()
+                tap.await()
+                assertTrue(realDao.rows.isEmpty(), "el guardado del motor bloqueado cayó antes del borrado")
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

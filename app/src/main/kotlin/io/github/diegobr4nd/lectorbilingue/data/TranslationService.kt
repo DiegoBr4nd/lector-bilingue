@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -158,21 +159,26 @@ class TranslationService(
 
     /** Al salir del Lector: cancela la fila (también lo que está en curso) y descarga el motor. */
     fun release() {
-        synchronized(lock) {
-            prefetchEpoch++
-            keepResource = null
-            (taps + prefetches).forEach { it.result.cancel() }
-            running?.result?.cancel()
-            taps.clear()
-            prefetches.clear()
-            pending.clear()
-            running = null
-            loop?.cancel()
-            loop = null
-            idle?.cancel()
-            idle = null
-        }
+        synchronized(lock) { releaseLocked() }
         scope.launch(worker) { unloadEngine() }
+    }
+
+    /** Con el candado tomado. Devuelve el bucle que cancela (o null) para poder esperarlo sin que se escape otro. */
+    private fun releaseLocked(): Job? {
+        prefetchEpoch++
+        keepResource = null
+        (taps + prefetches).forEach { it.result.cancel() }
+        running?.result?.cancel()
+        taps.clear()
+        prefetches.clear()
+        pending.clear()
+        running = null
+        val cancelled = loop
+        cancelled?.cancel()
+        loop = null
+        idle?.cancel()
+        idle = null
+        return cancelled
     }
 
     /** Tamaño aproximado de las traducciones guardadas, en bytes. */
@@ -183,10 +189,13 @@ class TranslationService(
      * espera a que el bucle termine de verdad: así nada en curso puede guardar una fila justo después de borrar.
      */
     override suspend fun clearCache() {
-        val runningLoop = synchronized(lock) { loop }
-        release()
-        runningLoop?.join()
-        cache.deleteAll()
+        val cancelled = synchronized(lock) { releaseLocked() }
+        scope.launch(worker) { unloadEngine() }
+        // Aunque se salga de Idiomas a mitad, el borrado termina: si no, quedaría a medias.
+        withContext(NonCancellable) {
+            cancelled?.join()
+            cache.deleteAll()
+        }
     }
 
     /** true si hay un motor cargado para [pair] (la tarjeta muestra "Traduciendo…" en vez de "Preparando el traductor…"). */

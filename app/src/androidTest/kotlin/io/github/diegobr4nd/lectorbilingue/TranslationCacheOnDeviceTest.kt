@@ -89,11 +89,13 @@ class TranslationCacheOnDeviceTest {
         val engine = GateEngine(gate = true)
         val s = service(engine)
         dao.put(TranslationEntity("prueba-vieja", "T(vieja)", 1L))
-        s.prefetch(listOf(TranslateRequest(pair, "Uno.", Priority.PREFETCH, "c1")))
+        // Primero el toque: cuando el motor arranca, el toque es lo que está en curso y detenido en la compuerta.
         val tap = async(Dispatchers.Default) {
             runCatching { s.translate(TranslateRequest(pair, "Toque.", Priority.TAP, "c1")) }
         }
-        withTimeout(10_000) { engine.started.await() } // ya hay una traducción en curso, detenida en la compuerta
+        withTimeout(10_000) { engine.started.await() }
+        // Una pretraducción espera en la fila detrás del toque.
+        s.prefetch(listOf(TranslateRequest(pair, "Uno.", Priority.PREFETCH, "c1")))
         s.clearCache()
         engine.opened.complete(Unit) // soltar la compuerta tarde no debe guardar nada
         withTimeout(10_000) { tap.await() }
