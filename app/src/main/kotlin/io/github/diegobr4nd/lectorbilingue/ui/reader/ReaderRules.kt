@@ -9,6 +9,9 @@ data class PositionLabel(val chapter: String?, val percent: Int?)
 data class TocEntry(val title: String?, val depth: Int, val href: String)
 data class TocEntrySource(val title: String?, val href: String, val children: List<TocEntrySource>)
 
+/** Bordes de la página al empezar un gesto. Un capítulo que cabe entero en la pantalla está en los dos. */
+data class PageEdges(val atTop: Boolean, val atBottom: Boolean)
+
 /** Reglas puras del Lector (sin Android): se prueban en la JVM. */
 object ReaderRules {
     /**
@@ -28,6 +31,31 @@ object ReaderRules {
         dragDy == null || dragDy == 0.0 || dragDy.isNaN() -> wasVisible
         dragDy < 0 -> false
         else -> true
+    }
+
+    /** Recorrido mínimo del dedo (en dp) para pasar de capítulo en el borde: un toque o un temblor no cuentan. */
+    const val CHAPTER_TURN_MIN_DP = 48.0
+
+    /**
+     * Paso de capítulo al soltar el dedo: +1 siguiente, -1 anterior, 0 nada. Solo si la página YA estaba en el
+     * borde al empezar el gesto ([edges]) y el dedo siguió hacia fuera al menos [CHAPTER_TURN_MIN_DY]: abajo del
+     * todo y subir → siguiente; arriba del todo y bajar → anterior. A mitad de capítulo nunca cambia (fix del
+     * cambio de capítulo por un gesto algo diagonal). [dragDy] es `DragEvent.offset.y` del final del gesto, en px del
+     * aparato (el script de Readium multiplica por `devicePixelRatio`), y [minDy] el mínimo en esos mismos px.
+     */
+    fun chapterStep(edges: PageEdges?, dragDy: Double, minDy: Double): Int = when {
+        edges == null || dragDy.isNaN() -> 0
+        edges.atBottom && dragDy <= -minDy -> 1
+        edges.atTop && dragDy >= minDy -> -1
+        else -> 0
+    }
+
+    /** Índice del capítulo a [step] del actual en el orden de lectura (sin `#fragmento`), o null si no hay. */
+    fun neighborChapter(readingOrder: List<String>, current: String?, step: Int): Int? {
+        if (current == null || step == 0) return null
+        val i = readingOrder.indexOf(current.substringBefore('#'))
+        if (i < 0) return null
+        return (i + step).takeIf { it in readingOrder.indices }
     }
 
     /** Final del libro: Readium da 1.0 o casi (redondeo de la última posición). */

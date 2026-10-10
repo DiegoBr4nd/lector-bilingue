@@ -27,6 +27,7 @@ class ParagraphScriptsTest {
             ParagraphScripts.remove(1),
             ParagraphScripts.indexAt(1.0, 2.0),
             ParagraphScripts.removeAll("OEBPS/c1.xhtml"),
+            ParagraphScripts.edges(),
             ParagraphScripts.insert(0, Card.Skeleton, labels),
             ParagraphScripts.insert(0, Card.Preparing, labels),
             ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar", "Falta el modelo, 40 megabytes. Descargar"), labels),
@@ -220,5 +221,17 @@ class ParagraphScriptsTest {
             listOf(PageParagraph(0, "a".repeat(20_000), cut = true), PageParagraph(1, "b"), PageParagraph(2, "c")),
             ParagraphScripts.parseFind(json),
         )
+    }
+
+    // Bordes de la página (fix/cambio-de-capitulo): 1 = arriba del todo, 2 = abajo del todo, 3 = los dos.
+    @Test fun `lee los bordes de la pagina`() {
+        assertEquals(PageEdges(atTop = false, atBottom = false), ParagraphScripts.parseEdges("0"))
+        assertEquals(PageEdges(atTop = true, atBottom = false), ParagraphScripts.parseEdges("1"))
+        assertEquals(PageEdges(atTop = false, atBottom = true), ParagraphScripts.parseEdges("2"))
+        assertEquals(PageEdges(atTop = true, atBottom = true), ParagraphScripts.parseEdges("3"))
+    }
+
+    @Test fun `bordes desconocidos si la respuesta no sirve`() {
+        for (bad in listOf(null, "null", "4", "-1", "\"2\"", "1.5", "true", "{}")) assertNull(ParagraphScripts.parseEdges(bad), "con $bad")
     }
 }
