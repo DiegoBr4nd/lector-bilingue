@@ -111,6 +111,14 @@ class AppSettings(private val prefs: SharedPreferences) {
             readingLoaded.value = true
         }
 
+    /**
+     * Cambia los ajustes a partir de los últimos publicados (no de una copia vieja): dos cambios seguidos se conservan
+     * los dos. [change] recibe los de ahora y devuelve los nuevos.
+     */
+    fun updateReadingSettings(change: (ReadingSettings) -> ReadingSettings) {
+        synchronized(readingState) { readingSettings = change(readingState.value) }
+    }
+
     // Cada campo se lee por separado: uno corrupto vuelve a su valor de fábrica y los demás se conservan.
     private fun readReading() = ReadingSettings(
         theme = PageTheme.fromWire(safeString(KEY_READING_THEME)),

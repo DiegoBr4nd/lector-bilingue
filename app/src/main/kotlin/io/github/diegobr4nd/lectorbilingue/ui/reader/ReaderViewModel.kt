@@ -171,11 +171,11 @@ class ReaderViewModel(
         settings.readingSettings = new
     }
 
+    /** Un cambio de la hoja ("qué cambiar"): se aplica sobre los últimos ajustes, así dos toques seguidos no se pisan. */
+    fun updateReadingSettings(change: (ReadingSettings) -> ReadingSettings) = settings.updateReadingSettings(change)
+
     /** A+ / A−: un paso de 10 %, sin pasar de 75 % ni de 250 %. */
-    fun stepFontScale(up: Boolean) {
-        val current = settings.readingSettingsFlow.value
-        setReadingSettings(current.copy(fontScale = ReadingRules.step(current.fontScale, up)))
-    }
+    fun stepFontScale(up: Boolean) = updateReadingSettings { it.copy(fontScale = ReadingRules.step(it.fontScale, up)) }
 
     /** "Restablecer": vuelve a los de fábrica (respetan el estilo del libro). */
     fun resetReadingSettings() = setReadingSettings(ReadingSettings())

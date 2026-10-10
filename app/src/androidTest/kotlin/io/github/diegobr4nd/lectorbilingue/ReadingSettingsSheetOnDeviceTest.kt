@@ -157,6 +157,21 @@ class ReadingSettingsSheetOnDeviceTest {
         rule.onNodeWithContentDescription("Letra más grande").assertIsEnabled()
     }
 
+    /**
+     * M3: dos toques antes de que la hoja se vuelva a dibujar no se pisan. La hoja recibe siempre la misma foto vieja
+     * (nunca se redibuja con lo nuevo) y cada toque se aplica sobre lo guardado, como hace AppSettings.
+     */
+    @Test fun dosToquesSeguidosSeConservanLosDos() {
+        var stored = ReadingSettings()
+        show(fontScale = 1f, widthDp = 360) {
+            ReadingSettingsContent(ReadingSettings(), onChange = { change -> stored = change(stored) }, {}, {})
+        }
+        rule.onNodeWithContentDescription("Tema Sepia").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Fuente Inter").performScrollTo().performClick()
+        rule.waitForIdle()
+        assertEquals(ReadingSettings(theme = PageTheme.SEPIA, font = ReadingFont.INTER), stored)
+    }
+
     /** [start] distinto de fábrica para que "Restablecer" esté encendido. [segmented]: se exige la fila segmentada. */
     /** TalkBack: la fila "Original del libro" dice también su ayuda; "Restablecer" dice qué hace al tocarlo. */
     @Test fun talkBackOyeLaAyudaDeOriginalYLaAccionDeRestablecer() {
@@ -180,7 +195,7 @@ class ReadingSettingsSheetOnDeviceTest {
         show(fontScale, widthDp) {
             ReadingSettingsContent(
                 settings,
-                onChange = { settings = it },
+                onChange = { change -> settings = change(settings) },
                 onStepScale = { up -> settings = settings.copy(fontScale = ReadingRules.step(settings.fontScale, up)) },
                 onReset = { settings = ReadingSettings() },
             )

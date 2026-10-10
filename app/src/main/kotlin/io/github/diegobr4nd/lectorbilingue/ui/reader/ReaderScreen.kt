@@ -420,7 +420,7 @@ fun ReaderScreen(
         val resetDone = stringResource(R.string.reading_reset_done)
         ReadingSettingsSheet(
             settings = readingSettings,
-            onChange = vm::setReadingSettings, // el libro cambia enseguida (efecto de arriba)
+            onChange = vm::updateReadingSettings, // el libro cambia enseguida (efecto de arriba)
             onStepScale = vm::stepFontScale,
             onReset = {
                 vm.resetReadingSettings()

@@ -93,12 +93,18 @@ internal fun ReadingSettingsButton(onClick: () -> Unit) {
     }
 }
 
+/**
+ * Un cambio de la hoja: recibe los ajustes de ahora y devuelve los nuevos (p. ej. `{ it.copy(theme = SEPIA) }`). Así
+ * se aplica sobre los últimos guardados y no sobre lo que la hoja dibujó: dos toques seguidos no se pisan.
+ */
+typealias ReadingChange = ((ReadingSettings) -> ReadingSettings) -> Unit
+
 /** "Ajustes de lectura" en una hoja inferior. Cada cambio se aplica y se guarda al instante: no hay "Aplicar". */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingSettingsSheet(
     settings: ReadingSettings,
-    onChange: (ReadingSettings) -> Unit,
+    onChange: ReadingChange,
     onStepScale: (up: Boolean) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
@@ -129,7 +135,7 @@ internal val ThemeSwatches = listOf(
 @Composable
 fun ReadingSettingsContent(
     settings: ReadingSettings,
-    onChange: (ReadingSettings) -> Unit,
+    onChange: ReadingChange,
     onStepScale: (up: Boolean) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
@@ -158,7 +164,7 @@ fun ReadingSettingsContent(
                     help = stringResource(R.string.reading_theme_system_help),
                     selected = settings.theme == PageTheme.SYSTEM,
                     stateLabel = if (settings.theme == PageTheme.SYSTEM) chosenM else notChosenM,
-                    onClick = { onChange(settings.copy(theme = PageTheme.SYSTEM)) },
+                    onClick = { onChange { it.copy(theme = PageTheme.SYSTEM) } },
                 )
                 FlowRow(
                     maxItemsInEachRow = swatchesPerRow,
@@ -174,7 +180,7 @@ fun ReadingSettingsContent(
                             ink = colors.second,
                             selected = selected,
                             stateLabel = if (selected) chosenM else notChosenM,
-                            onClick = { onChange(settings.copy(theme = theme)) },
+                            onClick = { onChange { it.copy(theme = theme) } },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -202,7 +208,7 @@ fun ReadingSettingsContent(
                         stateLabel = if (selected) chosenF else notChosenF,
                         fontFamily = fontFamilyOf(font),
                         spoken = if (help != null) stringResource(R.string.reading_spoken_with_help, spoken, help) else spoken,
-                        onClick = { onChange(settings.copy(font = font)) },
+                        onClick = { onChange { it.copy(font = font) } },
                     )
                 }
             }
@@ -220,7 +226,7 @@ fun ReadingSettingsContent(
                 selected = settings.lineHeight,
                 chosen = chosenM to notChosenM,
                 stacked = stacked,
-                onSelect = { onChange(settings.copy(lineHeight = it)) },
+                onSelect = { v -> onChange { it.copy(lineHeight = v) } },
             )
             val marginsHeading = stringResource(R.string.reading_margins)
             SectionHeading(marginsHeading)
@@ -234,7 +240,7 @@ fun ReadingSettingsContent(
                 selected = settings.margins,
                 chosen = chosenM to notChosenM,
                 stacked = stacked,
-                onSelect = { onChange(settings.copy(margins = it)) },
+                onSelect = { v -> onChange { it.copy(margins = v) } },
             )
             val alignHeading = stringResource(R.string.reading_align)
             SectionHeading(alignHeading)
@@ -247,7 +253,7 @@ fun ReadingSettingsContent(
                 selected = settings.align,
                 chosen = chosenF to notChosenF,
                 stacked = stacked,
-                onSelect = { onChange(settings.copy(align = it)) },
+                onSelect = { v -> onChange { it.copy(align = v) } },
             )
             HelpText(stringResource(R.string.reading_align_help))
 

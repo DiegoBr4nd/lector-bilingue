@@ -15,6 +15,7 @@ import io.github.diegobr4nd.lectorbilingue.data.FakeEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.FakeTranslationDao
 import io.github.diegobr4nd.lectorbilingue.data.MemoryPrefs
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
@@ -568,6 +569,16 @@ class ReaderViewModelTest {
         vm.setReadingSettings(sepia)
         assertEquals(sepia, vm.readingSettings.value)
         assertEquals(sepia, AppSettings(prefs).readingSettings) // releído del archivo, no de la memoria
+    }
+
+    // M3: la hoja manda "qué cambiar", no una copia de lo último que dibujó: dos toques antes de redibujar no se pisan.
+    @Test fun `dos cambios seguidos de la hoja se conservan los dos`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.updateReadingSettings { it.copy(theme = PageTheme.SEPIA) }
+        vm.updateReadingSettings { it.copy(font = ReadingFont.INTER) }
+        val both = ReadingSettings(theme = PageTheme.SEPIA, font = ReadingFont.INTER)
+        assertEquals(both, vm.readingSettings.value)
+        assertEquals(both, AppSettings(prefs).readingSettings)
     }
 
     @Test fun `restablecer vuelve a los ajustes de fabrica`() = runTest(dispatcher) {
