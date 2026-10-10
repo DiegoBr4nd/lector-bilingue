@@ -48,9 +48,26 @@ class ReadingRulesTest {
         assertEquals("oscuro", ReadingRules.cardTheme(d, systemDark = false))
     }
 
-    @Test fun `el tema del sistema oscuro no pone colores propios`() {
-        val p = ReadingRules.preferences(f, systemDark = true)
+    @Test fun `el tema del sistema con modo oscuro es igual a Oscuro`() {
+        val sys = ReadingRules.preferences(f, systemDark = true)
+        val dark = ReadingRules.preferences(f.copy(theme = PageTheme.DARK), systemDark = true)
+        assertEquals(Theme.DARK, sys.theme)
+        assertEquals(0xFF1E1E1E.toInt(), sys.backgroundColor!!.int)
+        assertEquals(0xFFE0E0E0.toInt(), sys.textColor!!.int)
+        assertEquals(dark.backgroundColor, sys.backgroundColor)
+        assertEquals(dark.textColor, sys.textColor)
+        assertEquals("oscuro", ReadingRules.cardTheme(f, systemDark = true))
+    }
+
+    @Test fun `el tema del sistema con modo claro es Claro sin colores propios`() {
+        val p = ReadingRules.preferences(f, systemDark = false)
+        assertEquals(Theme.LIGHT, p.theme)
         assertNull(p.backgroundColor); assertNull(p.textColor)
+    }
+
+    @Test fun `cambiar solo el tema tambien sobrescribe el estilo del libro`() {
+        // Intencional (spec 5.1): cualquier ajuste distinto de fabrica pone publisherStyles = false.
+        assertEquals(false, ReadingRules.preferences(f.copy(theme = PageTheme.SEPIA), false).publisherStyles)
     }
 
     @Test fun `sepia y claro elegidos ignoran el sistema`() {

@@ -43,6 +43,7 @@ android {
     // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
     sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }
     // Readium (Theme) llama a android.graphics.Color.parseColor al cargarse; en la JVM devuelve 0 en vez de fallar.
+    // Las pruebas nuevas no deben depender del fallo "Method ... not mocked": con esto ya no ocurre.
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 

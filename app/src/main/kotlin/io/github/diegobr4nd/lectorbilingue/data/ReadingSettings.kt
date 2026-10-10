@@ -70,6 +70,7 @@ data class ReadingSettings(
 
         /** Acota a [MIN_SCALE]..[MAX_SCALE] y redondea a pasos de [STEP] (los topes se conservan tal cual). */
         fun normalizeScale(scale: Double): Double = when {
+            scale.isNaN() -> 1.0
             scale <= MIN_SCALE -> MIN_SCALE
             scale >= MAX_SCALE -> MAX_SCALE
             else -> Math.round(scale * 10) / 10.0

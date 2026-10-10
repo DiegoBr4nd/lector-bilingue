@@ -14,7 +14,8 @@ import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 /**
- * Traduce los ajustes de la persona a preferencias de Readium. Puro (sin Android): se prueba en la JVM.
+ * Traduce los ajustes de la persona a preferencias de Readium. Sin lógica de Android propia: se prueba en la JVM
+ * (los tipos de Readium cargan `android.graphics.Color`, ver `isReturnDefaultValues` en build.gradle.kts).
  * Ojo: `Color`, `TextAlign` y `Theme` son los de Readium, no los de Compose.
  */
 @OptIn(ExperimentalReadiumApi::class) // EpubPreferences usa API experimental de Readium
@@ -47,7 +48,8 @@ object ReadingRules {
 
     fun preferences(s: ReadingSettings, systemDark: Boolean): EpubPreferences {
         val justify = s.align == TextAlignChoice.JUSTIFY
-        val ownColors = s.theme == PageTheme.DARK
+        // "Como el teléfono" en modo oscuro es exactamente "Oscuro", para que página y tarjeta coincidan.
+        val ownColors = s.theme == PageTheme.DARK || (s.theme == PageTheme.SYSTEM && systemDark)
         return EpubPreferences(
             scroll = true,
             theme = when (s.theme) {

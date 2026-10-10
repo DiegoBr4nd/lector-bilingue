@@ -87,6 +87,14 @@ class ReadingSettingsTest {
         assertTrue(fresh.readingSettingsFlow.value.isFactory)
     }
 
+    @Test fun `normalizar una escala NaN da la de fabrica`() {
+        assertEquals(1.0, ReadingSettings.normalizeScale(Double.NaN))
+        val s = AppSettings(MemoryPrefs())
+        s.readingSettings = ReadingSettings(fontScale = Double.NaN)
+        assertEquals(1.0, s.readingSettings.fontScale)
+        assertEquals(1.0, s.readingSettingsFlow.value.fontScale)
+    }
+
     @Test fun `solo la fabrica es fabrica`() {
         assertTrue(ReadingSettings().isFactory)
         assertFalse(ReadingSettings(fontScale = 1.1).isFactory)
