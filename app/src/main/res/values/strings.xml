@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Lector bilingüe</string>
 
     <!-- Bienvenida -->
@@ -162,7 +162,8 @@
     <string name="reading_size_bigger">Letra más grande</string>
     <string name="reading_size_glyph" translatable="false">A</string>
     <string name="reading_size_value">%1$d %%</string>
-    <string name="reading_size_spoken">Tamaño de letra, %1$d por ciento</string>
+    <!-- "por ciento" no cambia con el número: no hace falta plural. -->
+    <string name="reading_size_spoken" tools:ignore="PluralsCandidate">Tamaño de letra, %1$d por ciento</string>
     <string name="reading_size_help">Se suma al tamaño de letra del teléfono.</string>
     <string name="reading_font">Fuente</string>
     <string name="reading_font_original">Original del libro</string>
@@ -183,9 +184,10 @@
     <string name="reading_align_start">Izquierda</string>
     <string name="reading_align_justify">Justificado</string>
     <string name="reading_align_help">Justificado separa las palabras con guiones al final de la línea.</string>
+    <string name="reading_spoken_with_help">%1$s. %2$s</string>
     <string name="reading_option">%1$s %2$s</string>
     <string name="reading_reset">Restablecer</string>
-    <string name="reading_reset_action">Vuelve al tema, tamaño y fuente de fábrica.</string>
+    <string name="reading_reset_action">restablecer los ajustes de fábrica</string>
     <string name="reading_reset_done">Ajustes restablecidos</string>
     <string name="reading_chosen_m">Elegido</string>
     <string name="reading_chosen_f">Elegida</string>

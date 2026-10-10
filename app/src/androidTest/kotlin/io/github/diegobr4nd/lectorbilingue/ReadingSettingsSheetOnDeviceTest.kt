@@ -132,6 +132,20 @@ class ReadingSettingsSheetOnDeviceTest {
 
     @Test fun conLetraNormalTodosLosControlesSeVenYMiden48() = assertControls(fontScale = 1f, widthDp = 360)
 
+    /**
+     * Junto al corte de los segmentados (SegmentedRowMin): con las opciones largas elegidas (llevan ✓ y negrita),
+     * al 100 % y al 109 % en 360 dp siguen en fila y ningún nombre se corta.
+     */
+    @Test fun segmentadosElegidosLargosNoSeCortanAl100() = assertControls(1f, 360, longSegments, segmentLabels, segmented = true)
+
+    @Test fun segmentadosElegidosLargosNoSeCortanAl109() = assertControls(1.09f, 360, longSegments, segmentLabels, segmented = true)
+
+    private val longSegments = ReadingSettings(
+        lineHeight = LineHeightLevel.COMPACT, margins = MarginLevel.NARROW, align = TextAlignChoice.JUSTIFY,
+    )
+    private val segmentLabels =
+        listOf("Compacto", "Normal", "Amplio", "Estrechos", "Normales", "Anchos", "Izquierda", "Justificado")
+
     @Test fun enLosTopesSeApaganAMenosYAMas() {
         var settings by mutableStateOf(ReadingSettings(fontScale = ReadingSettings.MAX_SCALE))
         show(fontScale = 1f, widthDp = 360) { ReadingSettingsContent(settings, {}, {}, {}) }
@@ -143,9 +157,26 @@ class ReadingSettingsSheetOnDeviceTest {
         rule.onNodeWithContentDescription("Letra más grande").assertIsEnabled()
     }
 
-    private fun assertControls(fontScale: Float, widthDp: Int) {
-        // Distinto de fábrica para que "Restablecer" esté encendido.
-        var settings by mutableStateOf(ReadingSettings(theme = PageTheme.SEPIA))
+    /** [start] distinto de fábrica para que "Restablecer" esté encendido. [segmented]: se exige la fila segmentada. */
+    /** TalkBack: la fila "Original del libro" dice también su ayuda; "Restablecer" dice qué hace al tocarlo. */
+    @Test fun talkBackOyeLaAyudaDeOriginalYLaAccionDeRestablecer() {
+        show(fontScale = 1f, widthDp = 360) { ReadingSettingsContent(ReadingSettings(theme = PageTheme.SEPIA), {}, {}, {}) }
+        rule.onNodeWithContentDescription("Fuente Original del libro. Respeta la letra del libro").assertExists()
+        rule.onNodeWithText("Restablecer").assert(
+            SemanticsMatcher("acción con nombre") {
+                it.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.OnClick) { null }?.label == "restablecer los ajustes de fábrica"
+            },
+        )
+    }
+
+    private fun assertControls(
+        fontScale: Float,
+        widthDp: Int,
+        start: ReadingSettings = ReadingSettings(theme = PageTheme.SEPIA),
+        labels: List<String> = listOf("Claro", "Sepia", "Oscuro", "Negro", "Estrechos", "Justificado", "Atkinson Hyperlegible"),
+        segmented: Boolean = false,
+    ) {
+        var settings by mutableStateOf(start)
         show(fontScale, widthDp) {
             ReadingSettingsContent(
                 settings,
@@ -163,7 +194,12 @@ class ReadingSettingsSheetOnDeviceTest {
             nodes[i].performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
         }
         // Los nombres de las muestras y de las opciones no se cortan (ninguno queda con elipsis ni fuera).
-        for (text in listOf("Claro", "Sepia", "Oscuro", "Negro", "Estrechos", "Justificado", "Atkinson Hyperlegible")) {
+        if (segmented) {
+            // En fila, cada segmento es un tercio del ancho (en lista, cada fila ocupa el ancho entero).
+            val w = with(rule.density) { rule.onNode(hasContentDescription("Márgenes Estrechos")).fetchSemanticsNode().size.width.toDp() }
+            assertTrue(w < (widthDp / 2).dp, "$where: los segmentados pasaron a lista ($w)")
+        }
+        for (text in labels) {
             rule.onNode(hasText(text), useUnmergedTree = true).performScrollTo().assertIsDisplayed()
             val layout = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
             rule.onNode(hasText(text), useUnmergedTree = true).fetchSemanticsNode()
@@ -176,6 +212,7 @@ class ReadingSettingsSheetOnDeviceTest {
         }
     }
 
+    // Uso: am instrument -w -e shots true -e class …ReadingSettingsSheetOnDeviceTest#capturas (y luego -e shots clean).
     /**
      * Capturas para el informe (solo con `-e shots true`; con `-e shots clean` se borran): claro/oscuro, 360/840,
      * letra 1 y 2, de fábrica y con todo cambiado. Se dibujan con menos px por dp para que la hoja entera quepa.

@@ -192,13 +192,16 @@ fun ReadingSettingsContent(
                 for (font in ReadingFont.entries) {
                     val selected = settings.font == font
                     val name = fontName(font)
+                    val help = if (font == ReadingFont.ORIGINAL) stringResource(R.string.reading_font_original_help) else null
+                    // La descripción reemplaza los textos de la fila: la ayuda va dentro para que TalkBack también la diga.
+                    val spoken = stringResource(R.string.reading_font_option, name)
                     ChoiceRow(
                         label = name,
-                        help = if (font == ReadingFont.ORIGINAL) stringResource(R.string.reading_font_original_help) else null,
+                        help = help,
                         selected = selected,
                         stateLabel = if (selected) chosenF else notChosenF,
                         fontFamily = fontFamilyOf(font),
-                        spoken = stringResource(R.string.reading_font_option, name),
+                        spoken = if (help != null) stringResource(R.string.reading_spoken_with_help, spoken, help) else spoken,
                         onClick = { onChange(settings.copy(font = font)) },
                     )
                 }

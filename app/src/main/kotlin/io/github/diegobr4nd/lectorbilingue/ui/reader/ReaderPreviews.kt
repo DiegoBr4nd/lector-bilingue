@@ -184,6 +184,14 @@ private fun DireccionEspanolIngles() = DirectionSample(ReaderDirections[1])
 @Preview(name = "Claro 840", widthDp = 840, heightDp = 1300, showBackground = true)
 @Preview(name = "Oscuro 840", widthDp = 840, heightDp = 1300, uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Preview(name = "Claro 840 letra 200", widthDp = 840, heightDp = 2200, fontScale = 2f, showBackground = true)
+@Preview(
+    name = "Oscuro 840 letra 200",
+    widthDp = 840,
+    heightDp = 2200,
+    fontScale = 2f,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+    showBackground = true,
+)
 private annotation class SettingsPreviewSet
 
 @Composable
