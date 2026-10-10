@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -256,5 +257,14 @@ class LanguagesOnDeviceTest {
         rule.onNodeWithContentDescription("Borrar las traducciones guardadas", substring = true).performClick()
         rule.onNode(inDialog("Borrar")).performClick()
         assertCacheMessageNextToRow("No se pudieron borrar las traducciones", "Traducciones guardadas: aprox.")
+    }
+
+    /** M4: si no se puede medir, no dice "ninguna" y Borrar sigue disponible. */
+    @Test
+    fun si_no_se_puede_medir_dice_tamano_desconocido_y_se_puede_borrar() {
+        showLanguagesWithCache(LangFakeCache(bytes = 3_355_443L, measureFails = true))
+        rule.onNodeWithText("Traducciones guardadas: tamaño desconocido").performScrollTo().assertExists()
+        rule.onNodeWithText("Traducciones guardadas: ninguna").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Borrar las traducciones guardadas").assertIsEnabled()
     }
 }

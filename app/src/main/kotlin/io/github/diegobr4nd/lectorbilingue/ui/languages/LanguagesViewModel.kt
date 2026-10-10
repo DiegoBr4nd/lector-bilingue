@@ -32,8 +32,11 @@ data class LanguagesUiState(
     val message: ModelMessage? = null,
     val busy: Boolean = false,
     val pending: PendingAction? = null,
-    /** Tamaño aproximado de las traducciones guardadas; 0 = nada que borrar (la fila se apaga). */
-    val cacheBytes: Long = 0,
+    /**
+     * Tamaño aproximado de las traducciones guardadas; 0 = nada que borrar (Borrar se apaga); null = no se pudo medir
+     * (se dice "tamaño desconocido" y Borrar sigue disponible: no se afirma que no hay nada).
+     */
+    val cacheBytes: Long? = 0,
     val confirmCache: Boolean = false,
 )
 
@@ -87,12 +90,12 @@ class LanguagesViewModel(
         }
     }
 
-    private suspend fun measureCache(c: TranslationCacheApi): Long = try {
+    private suspend fun measureCache(c: TranslationCacheApi): Long? = try {
         c.cacheBytes()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        0L // si no se puede medir, la fila se apaga
+        null // no se pudo medir: tamaño desconocido (nunca "ninguna")
     }
 
     /** Vuelve a medir las traducciones guardadas. */

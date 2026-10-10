@@ -83,4 +83,7 @@ object LanguagesRules {
     }
 
     fun cacheVisible(bytes: Long): Boolean = bytes > 0
+
+    /** Borrar disponible si hay algo guardado o si no se pudo medir (null): nunca se esconde lo que podría haber. */
+    fun canClearCache(bytes: Long?): Boolean = bytes == null || bytes > 0
 }

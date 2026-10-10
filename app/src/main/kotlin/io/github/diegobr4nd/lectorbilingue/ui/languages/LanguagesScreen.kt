@@ -248,22 +248,32 @@ fun LanguagesContent(
     }
 }
 
-/** "Traducciones guardadas: aprox. 3,2 MB" y el botón Borrar (apagado si no hay nada guardado). */
+/**
+ * "Traducciones guardadas: aprox. 3,2 MB" y el botón Borrar. Siempre visible: sin nada guardado dice "ninguna" y Borrar
+ * queda apagado; si no se pudo medir ([bytes] null) dice "tamaño desconocido" y Borrar sigue disponible.
+ */
 @Composable
-private fun CacheRow(bytes: Long, enabled: Boolean, onClear: () -> Unit) {
-    // Siempre visible; sin nada guardado dice "ninguna" y Borrar queda apagado.
-    val size = LanguagesRules.cacheSizeMb(bytes)
+private fun CacheRow(bytes: Long?, enabled: Boolean, onClear: () -> Unit) {
+    val size = bytes?.let { LanguagesRules.cacheSizeMb(it) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            if (size == null) stringResource(R.string.languages_cache_none) else stringResource(R.string.languages_cache_label, size),
+            when {
+                bytes == null -> stringResource(R.string.languages_cache_unknown)
+                size == null -> stringResource(R.string.languages_cache_none)
+                else -> stringResource(R.string.languages_cache_label, size)
+            },
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(Spacing.s))
-        val description = if (size == null) null else stringResource(R.string.languages_cache_delete_description, size)
+        val description = when {
+            bytes == null -> stringResource(R.string.languages_cache_delete_description_unknown)
+            size == null -> null
+            else -> stringResource(R.string.languages_cache_delete_description, size)
+        }
         TextButton(
             onClick = onClear,
-            enabled = enabled && size != null,
+            enabled = enabled && LanguagesRules.canClearCache(bytes),
             shape = ButtonShape,
             modifier = Modifier.heightIn(min = 48.dp).semantics { description?.let { contentDescription = it } },
         ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }

@@ -149,6 +149,8 @@
     <string name="languages_redownload_confirm">Descargar</string>
     <string name="languages_cache_label">Traducciones guardadas: aprox. %1$s MB</string>
     <string name="languages_cache_none">Traducciones guardadas: ninguna</string>
+    <string name="languages_cache_unknown">Traducciones guardadas: tamaño desconocido</string>
+    <string name="languages_cache_delete_description_unknown">Borrar las traducciones guardadas</string>
     <string name="languages_cache_delete">Borrar</string>
     <string name="languages_cache_delete_description">Borrar las traducciones guardadas, aprox. %1$s MB</string>
     <string name="languages_cache_confirm_title">¿Borrar las traducciones guardadas?</string>

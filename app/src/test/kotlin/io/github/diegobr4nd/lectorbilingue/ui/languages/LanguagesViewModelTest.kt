@@ -45,10 +45,10 @@ class LanguagesViewModelTest {
         override fun totalRamBytes(): Long = 8L * 1024 * 1024 * 1024
     }
 
-    private class FakeCache(var bytes: Long, var fail: Boolean = false) : TranslationCacheApi {
+    private class FakeCache(var bytes: Long, var fail: Boolean = false, var measureFails: Boolean = false) : TranslationCacheApi {
         val gate = CompletableDeferred<Unit>()
         var holdClear = false
-        override suspend fun cacheBytes(): Long = bytes
+        override suspend fun cacheBytes(): Long = if (measureFails) throw IllegalStateException("no se pudo medir") else bytes
         override suspend fun clearCache() {
             if (holdClear) gate.await()
             if (fail) throw IllegalStateException("texto del libro que no debe verse")
@@ -100,5 +100,26 @@ class LanguagesViewModelTest {
         advanceUntilIdle()
         assertFalse(vm.state.value.confirmCache)
         assertEquals(1_000_000L, cache.bytes)
+    }
+
+    // M4: si no se puede medir, no se dice "ninguna": el tamaño queda desconocido (null) y Borrar sigue disponible.
+    @Test fun `si no se puede medir el tamano queda desconocido, no en cero`() = runTest(dispatcher) {
+        val cache = FakeCache(bytes = 2_000_000L, measureFails = true)
+        val vm = vm(cache)
+        vm.onEnter(true)
+        advanceUntilIdle()
+        assertNull(vm.state.value.cacheBytes)
+        // Se puede borrar igual; si después ya se puede medir, se ve el tamaño real.
+        cache.measureFails = false
+        vm.confirmClearCache()
+        advanceUntilIdle()
+        assertEquals(ModelMessage.CACHE_CLEARED, vm.state.value.message)
+        assertEquals(0L, vm.state.value.cacheBytes)
+    }
+
+    @Test fun `la fila sabe cuando Borrar esta disponible`() {
+        assertFalse(LanguagesRules.canClearCache(0L))
+        assertTrue(LanguagesRules.canClearCache(10L))
+        assertTrue(LanguagesRules.canClearCache(null)) // desconocido: no se esconde lo que podría haber
     }
 }
