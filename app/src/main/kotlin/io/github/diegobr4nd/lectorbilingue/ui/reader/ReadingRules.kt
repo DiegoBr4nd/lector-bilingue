@@ -95,10 +95,16 @@ object ReadingRules {
     }
 
     /**
-     * Tras mandar ajustes a Readium, ¿se vuelve a la posición guardada antes? Solo si la página visible sigue siendo el
-     * capítulo de esa posición: si se está cambiando de capítulo, volver atrás desharía el cambio.
+     * Tras mandar ajustes a Readium, ¿se vuelve a la posición guardada antes ([savedHref])? No mientras un paso de
+     * capítulo nuestro hacia [turningTo] está en curso (pedido pero la posición aún es del capítulo de antes): volver
+     * desharía el paso. La posición y el capítulo visible salen del mismo `currentLocator`, así que solo el paso pedido
+     * dice si se está cambiando. Tras [ReaderRules.TURN_TIMEOUT_MS] el paso que nunca llegó ya no cuenta.
      */
-    fun restoreAfterSubmit(savedHref: String, visibleHref: String?): Boolean = savedHref == visibleHref
+    fun restoreAfterSubmit(savedHref: String, turningTo: String?, msSinceTurn: Long): Boolean = when {
+        turningTo == null -> true
+        msSinceTurn >= ReaderRules.TURN_TIMEOUT_MS -> true
+        else -> savedHref.substringBefore('#') == turningTo.substringBefore('#')
+    }
 
     /** Un paso de tamaño (± 0,1), acotado a 0,75..2,5. */
     fun step(scale: Double, up: Boolean): Double = ReadingSettings.stepScale(scale, up)

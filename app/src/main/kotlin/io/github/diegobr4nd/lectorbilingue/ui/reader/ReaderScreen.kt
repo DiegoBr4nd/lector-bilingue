@@ -171,8 +171,11 @@ fun ReaderScreen(
         if (preferences != appliedPreferences) {
             val saved = nav.currentLocator.value
             nav.submitPreferences(preferences)
-            // Si ya se está pasando a otro capítulo (la posición guardada es de otro), no se vuelve atrás.
-            if (ReadingRules.restoreAfterSubmit(saved.href.toString(), currentHref)) nav.go(saved, animated = false)
+            // Si un paso de capítulo nuestro aún no llegó (la posición guardada es del de antes), no se vuelve atrás.
+            val sinceTurn = SystemClock.uptimeMillis() - chapterTurn.turnedAt
+            if (ReadingRules.restoreAfterSubmit(saved.href.toString(), chapterTurn.turningTo, sinceTurn)) {
+                nav.go(saved, animated = false)
+            }
             appliedPreferences = preferences
         }
         bridge.setTheme(cardTheme)

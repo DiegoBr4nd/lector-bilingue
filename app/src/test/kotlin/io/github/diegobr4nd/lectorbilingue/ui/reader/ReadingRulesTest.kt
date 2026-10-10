@@ -125,9 +125,14 @@ class ReadingRulesTest {
         assertEquals(FontFamily("Atkinson Hyperlegible"), ReadingRules.ATKINSON)
     }
 
-    @Test fun `tras un ajuste se vuelve a la posicion solo si sigue en el mismo capitulo`() {
-        assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", "OEBPS/c2.xhtml"))
-        assertEquals(false, ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", "OEBPS/c3.xhtml")) // cambio de capítulo en curso
-        assertEquals(false, ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", null))
+    @Test fun `tras un ajuste se vuelve a la posicion salvo con un paso de capitulo en curso`() {
+        // Sin paso de capítulo nuestro: siempre se vuelve.
+        assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", turningTo = null, msSinceTurn = 0))
+        // Paso a c3 pedido y la posición guardada aún es de c2: volver desharía el paso.
+        assertEquals(false, ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", turningTo = "OEBPS/c3.xhtml", msSinceTurn = 100))
+        // El paso ya llegó (la posición guardada es del capítulo nuevo, con o sin #fragmento): se vuelve.
+        assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c3.xhtml#p4", turningTo = "OEBPS/c3.xhtml", msSinceTurn = 100))
+        // El paso nunca llegó y pasó el tope: ya no cuenta como en curso.
+        assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", turningTo = "OEBPS/c3.xhtml", msSinceTurn = 5_000))
     }
 }
