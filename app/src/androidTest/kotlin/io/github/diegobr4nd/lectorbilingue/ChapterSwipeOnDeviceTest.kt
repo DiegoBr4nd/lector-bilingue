@@ -150,7 +150,9 @@ class ChapterSwipeOnDeviceTest {
         val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
         ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
             waitForText("Capítulo uno")
-            goToChapter2(s)
+            // Desde el 60 % (más de dos pantallas por encima del final): desde el 40 % este fling se quedaba a ~21 px
+            // CSS del final (scrollY 5477 de 5498 en el Pixel 7), sin llegar al borde.
+            goToChapter2(s, 0.6)
             swipe(s, Gesture("fling", -600, 0, 50))
             settle()
             assertEquals(true, edges(s)?.atBottom, "el fling no llegó al final: ${position(s)}")
