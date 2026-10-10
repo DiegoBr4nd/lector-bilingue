@@ -34,6 +34,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -124,6 +125,37 @@ class ReadingSettingsSheetOnDeviceTest {
             rule.onNodeWithText("Restablecer").assertIsNotEnabled()
             rule.onNodeWithText("Como el teléfono").performScrollTo().assertIsSelected()
             rule.onNodeWithContentDescription("Tamaño de letra, 100 por ciento").performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    /**
+     * I3 (spec §4, "el libro se ve detrás"): la hoja ocupa a lo sumo ~55 % de la pantalla y su título queda en la
+     * mitad de abajo; arriba se ve el libro. Con `-e shots true` guarda una captura de la pantalla entera.
+     */
+    @Test fun laHojaDejaVerElLibroArriba() = runBlocking<Unit> {
+        app.settings.readingSettings = ReadingSettings()
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            rule.waitUntil("botón Aa", 10_000) { exists(hasContentDescription("Ajustes de lectura")) }
+            rule.onNodeWithContentDescription("Ajustes de lectura").performClick()
+            rule.waitUntil("hoja abierta", 5_000) { exists(hasText("Tamaño de letra")) }
+            Thread.sleep(800) // la animación de la hoja termina
+            rule.waitForIdle()
+            var windowHeight = 0
+            s.onActivity { windowHeight = it.window.decorView.height }
+            val title = rule.onNode(hasText("Ajustes de lectura") and isHeading()).fetchSemanticsNode().boundsInWindow
+            assertTrue(title.top > windowHeight * 0.40f, "la hoja tapa el libro: título en ${title.top} de $windowHeight px")
+            // Se desplaza dentro de la hoja: lo de abajo se alcanza igual.
+            rule.onNodeWithText("Restablecer").performScrollTo().assertIsDisplayed()
+            if (InstrumentationRegistry.getArguments().getString("shots") == "true") {
+                rule.onNodeWithContentDescription("Tema Sepia").performScrollTo().performClick()
+                Thread.sleep(1_000)
+                rule.waitForIdle()
+                val out = File(app.cacheDir, "reading_sheet_shots").apply { mkdirs() }
+                File(out, "lector-con-hoja.png").outputStream().use {
+                    instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
         }
     }
 

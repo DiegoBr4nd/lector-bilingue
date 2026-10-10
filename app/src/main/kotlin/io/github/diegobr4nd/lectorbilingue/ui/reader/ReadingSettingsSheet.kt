@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -109,12 +110,19 @@ fun ReadingSettingsSheet(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // El libro se ve detrás (spec §4): la hoja ocupa a lo sumo [SheetMaxFraction] de la ventana y se desplaza por
+    // dentro; el velo es leve para que cada cambio (tema, tamaño…) se vea al instante con sus colores reales.
+    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         sheetMaxWidth = 560.dp, // En tableta, centrada y sin estirarse.
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = SheetScrimAlpha),
     ) {
-        ReadingSettingsContent(settings, onChange, onStepScale, onReset)
+        ReadingSettingsContent(
+            settings, onChange, onStepScale, onReset,
+            modifier = Modifier.heightIn(max = windowHeight * SheetMaxFraction),
+        )
     }
 }
 
@@ -274,6 +282,12 @@ fun ReadingSettingsContent(
         }
     }
 }
+
+/** Alto máximo de la hoja, en fracción de la ventana: arriba queda casi la mitad del libro a la vista. */
+private const val SheetMaxFraction = 0.55f
+
+/** Velo leve (el de M3 es 0,32): marca que tocar afuera cierra, sin oscurecer los colores del tema elegido. */
+private const val SheetScrimAlpha = 0.12f
 
 /** Debajo de esto (dp a letra normal) las cuatro muestras no caben con su nombre: pasan a 2 x 2. */
 private val SwatchRowMin = 260.dp
