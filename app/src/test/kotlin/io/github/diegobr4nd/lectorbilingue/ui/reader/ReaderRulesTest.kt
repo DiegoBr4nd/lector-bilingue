@@ -69,6 +69,24 @@ class ReaderRulesTest {
         assertEquals(0, ReaderRules.chapterStep(bottom, 0.0, min))
     }
 
+    // Tras un paso de capítulo nuestro, los gestos esperan a que el capítulo nuevo esté en su sitio (revisión M1).
+    @Test fun `sin paso pendiente el gesto vale`() = assertTrue(ReaderRules.dragAllowed(null, "OEBPS/c1.xhtml", 0))
+
+    @Test fun `recien pasado y aun en el capitulo viejo no vale`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c2.xhtml", 100))
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c2.xhtml", ReaderRules.TURN_SETTLE_MS))
+    }
+
+    @Test fun `ya en el capitulo nuevo vale tras asentarse`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c3.xhtml", ReaderRules.TURN_SETTLE_MS - 1))
+        assertTrue(ReaderRules.dragAllowed("OEBPS/c3.xhtml", "OEBPS/c3.xhtml", ReaderRules.TURN_SETTLE_MS))
+    }
+
+    @Test fun `si el capitulo nuevo nunca llega se vuelve a permitir`() {
+        assertFalse(ReaderRules.dragAllowed("OEBPS/c3.xhtml", null, ReaderRules.TURN_TIMEOUT_MS - 1))
+        assertTrue(ReaderRules.dragAllowed("OEBPS/c3.xhtml", null, ReaderRules.TURN_TIMEOUT_MS))
+    }
+
     private val order = listOf("OEBPS/c1.xhtml", "OEBPS/c2.xhtml", "OEBPS/c3.xhtml")
 
     @Test fun `capitulo vecino en el orden de lectura`() {

@@ -50,6 +50,24 @@ object ReaderRules {
         else -> 0
     }
 
+    /** Tras un paso de capítulo nuestro: tiempo mínimo en el capítulo nuevo antes de aceptar otro gesto. */
+    const val TURN_SETTLE_MS = 500L
+
+    /** Tras un paso de capítulo nuestro: si el capítulo nuevo nunca llega, se vuelven a aceptar gestos. */
+    const val TURN_TIMEOUT_MS = 2_000L
+
+    /**
+     * ¿Cuenta este gesto para pasar de capítulo? Justo después de un paso nuestro hacia [turningTo], no: la página
+     * nueva puede no estar aún en su sitio (al volver, Readium la lleva al final un poco después) y un gesto rápido
+     * leería mal los bordes y saltaría otro capítulo. Vale de nuevo cuando [currentHref] ya es el capítulo nuevo y
+     * pasaron [TURN_SETTLE_MS], o cuando pasaron [TURN_TIMEOUT_MS] pase lo que pase. [msSinceTurn]: desde el paso.
+     */
+    fun dragAllowed(turningTo: String?, currentHref: String?, msSinceTurn: Long): Boolean = when {
+        turningTo == null -> true
+        msSinceTurn >= TURN_TIMEOUT_MS -> true
+        else -> currentHref == turningTo && msSinceTurn >= TURN_SETTLE_MS
+    }
+
     /** Índice del capítulo a [step] del actual en el orden de lectura (sin `#fragmento`), o null si no hay. */
     fun neighborChapter(readingOrder: List<String>, current: String?, step: Int): Int? {
         if (current == null || step == 0) return null
