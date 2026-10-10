@@ -187,6 +187,11 @@ class TranslationService(
     /**
      * Borra todas las traducciones guardadas. Primero [release] (vacía la fila y cancela lo que está en curso) y se
      * espera a que el bucle termine de verdad: así nada en curso puede guardar una fila justo después de borrar.
+     *
+     * Privacidad: `secure_delete` (ver `LectorDatabase.open`) pone en ceros lo borrado, pero las copias de las páginas
+     * con el texto viejo siguen en el WAL ("lector.db-wal") hasta un checkpoint. Por eso, tras borrar, se hace un
+     * checkpoint que vacía el WAL: después el texto no queda ni en el .db ni en el -wal. Room lo corre fuera del hilo
+     * principal.
      */
     override suspend fun clearCache() {
         val cancelled = synchronized(lock) { releaseLocked() }
@@ -195,6 +200,7 @@ class TranslationService(
         withContext(NonCancellable) {
             cancelled?.join()
             cache.deleteAll()
+            cache.checkpointWal()
         }
     }
 

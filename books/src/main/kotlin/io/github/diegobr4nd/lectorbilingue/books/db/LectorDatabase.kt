@@ -16,8 +16,9 @@ abstract class LectorDatabase : RoomDatabase() {
         const val NAME = "lector.db"
 
         /**
-         * Al abrir: `secure_delete = ON` hace que SQLite ponga en ceros lo que borra (DELETE), para que
-         * el texto de las traducciones no quede en páginas libres ni en el WAL. [name] solo cambia en pruebas.
+         * Al abrir: `secure_delete = ON` hace que SQLite ponga en ceros lo que borra (DELETE), para que el texto de
+         * las traducciones no quede en páginas libres del .db. El WAL guarda copias viejas hasta un checkpoint: quien
+         * borra hace después [TranslationDao.checkpointWal]. [name] solo cambia en pruebas.
          */
         fun open(context: Context, name: String = NAME): LectorDatabase =
             Room.databaseBuilder(context.applicationContext, LectorDatabase::class.java, name)

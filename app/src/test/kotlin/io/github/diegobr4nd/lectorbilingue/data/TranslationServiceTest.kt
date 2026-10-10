@@ -280,6 +280,14 @@ class TranslationServiceTest {
         assertEquals(0L, s.cacheBytes())
     }
 
+    // I2: secure_delete pone en ceros las páginas del .db, pero las copias viejas siguen en el WAL hasta un checkpoint.
+    @Test fun borrarVaciaElWalDespuesDeBorrar() = runTest(dispatcher) {
+        dao.rows["k"] = TranslationEntity("k", "texto", 1L)
+        service().clearCache()
+        advanceUntilIdle()
+        assertEquals(listOf("deleteAll", "PRAGMA wal_checkpoint(TRUNCATE)"), dao.maintenance)
+    }
+
     @Test fun borrarConLaFilaVaciaNoFalla() = runTest(dispatcher) {
         val s = service()
         s.clearCache()
