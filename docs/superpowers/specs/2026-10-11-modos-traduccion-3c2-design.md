@@ -37,10 +37,10 @@ Además del modo actual (Tocar), dos modos de lectura: **Intercalado** (cada pá
 
 En una rama local que se borra al final:
 - **M1 · Párrafos visibles:** un script `visible(following)` devuelve los índices de los párrafos hoja (lista de la 3b, sin tarjetas) que intersectan el viewport más los N siguientes; se llama al quedar quieta la página (`currentLocator` nuevo) y responde en < 50 ms en un capítulo de 300 párrafos.
-- **M2 · Sin saltos:** insertar tarjetas en párrafos visibles y más abajo no mueve el primer párrafo visible (± 1 px). Insertar por encima (al volver hacia arriba) sí lo mueve; medir si guardar el localizador y `go(guardado)` (truco de la 3c-1) lo corrige sin parpadeo, o si conviene compensar `scrollBy` desde el script.
-- **M3 · Ocultar sin saltos:** en Solo traducción, ocultar el `<p>` original (`lector-oculto`) y mostrar la tarjeta con el estilo del texto del libro no mueve el primer párrafo visible más que la diferencia de alto entre original y traducción; medirlo y anotar.
+- **M2 · Sin saltos:** insertar tarjetas en párrafos visibles y más abajo no mueve el primer párrafo visible (± 1 px). Insertar por encima (al volver hacia arriba) sí lo mueve; medir si guardar el localizador y `go(guardado)` (truco de la 3c-1) lo corrige sin parpadeo, o si conviene compensar `scrollBy` desde el script (resultado: `scrollBy`; `go(guardado)` descartado).
+- **M3 · Ocultar sin saltos:** en Solo traducción, ocultar el original (cualquier hoja, `lector-oculto`) y mostrar la tarjeta con el estilo del texto del libro no mueve el primer párrafo visible más que la diferencia de alto entre original y traducción; medirlo y anotar.
 - **M4 · Libros con estructura:** citas (`blockquote`), listas (`li`) y encabezados ocultos/reemplazados se ven bien (capturas).
-Resultado en §11.
+Resultado en §11 (hecha el 2026-10-11). **Decidido allí:** no se usa `go(guardado)`; cada script de tarjeta (`insert`, `remove`, `showOriginal`) compensa con `scrollBy` anclado en el primer bloque que empieza en pantalla (técnica b); `lector-oculto` vale para toda hoja; en Solo traducción la tarjeta copia una lista fija de propiedades calculadas del original.
 
 ## 4. Qué ve el usuario
 
@@ -59,8 +59,10 @@ Resultado en §11.
 ### 5.2 Scripts (`ui/reader/ParagraphScripts.kt`, `ParagraphBridge.kt`)
 - `visible(following: Int = 10)` → JSON `[{i, t, cut}]` de los párrafos hoja que intersectan el viewport y los `following` siguientes (mismo recorte y marca `cut` de la 3b).
 - `setMode(mode)` → `data-lector-modo` en `<html>` desde una lista fija (`tocar | intercalado | solo`), como `setTheme`.
-- `insert` gana el estado "solo" (tarjeta con estilo de texto) y la clase `lector-oculto` para el párrafo original; `showOriginal(i, on)` alterna. Siempre `textContent`, JSON, sin `innerHTML`.
-- `tarjeta.css`: reglas por `data-lector-modo` (en `solo`, la tarjeta hereda fuente, tamaño y color del párrafo; `p.lector-oculto { display:none !important }` solo en `solo`); marca "Original"; gris claro para el original en espera (contraste AA).
+- `insert` gana el estado "solo": antes de ocultar el original, la tarjeta copia de él una **lista fija** de propiedades calculadas con `style.setProperty(…, 'important')` (`display, font-family, font-size, font-weight, font-style, line-height, text-indent, text-align, letter-spacing, margin-*, padding-*, list-style-type, list-style-position`; §11 M4), y el original recibe la clase `lector-oculto` (cualquier hoja: `p, li, blockquote, h1–h6, dd`). `showOriginal(i, on)` alterna. Al salir de "solo" se quita el estilo copiado. Siempre `textContent`, JSON, sin `innerHTML`; el `setProperty` pasa por `seguridad` (regla 8).
+- **Sin saltos (técnica b, §11 M2):** `insert`, `remove` y `showOriginal` miden, dentro del mismo script, el `top` del primer bloque hoja que empieza en pantalla (`top ≥ 0`, alto > 0), hacen el cambio y corrigen con `window.scrollBy(0, Δ)` antes de que se pinte. No se usa `go(guardado)`.
+- `visible()`: un original oculto se mide con el rectángulo de su tarjeta.
+- `tarjeta.css`: reglas por `data-lector-modo` (en `solo`, la tarjeta sin fondo ni borde y con `color: inherit`; el resto del estilo lo copia el script; `.lector-oculto { display:none !important }` para toda hoja, solo en `solo`); marca "Original"; gris claro para el original en espera (contraste AA).
 
 ### 5.3 Guía de modo (`ReaderViewModel`)
 - En INTERLEAVED y TRANSLATION_ONLY: al quedar lista la página y en cada `currentLocator` nuevo (página quieta), pide `visible(10)`; los visibles van con prioridad TAP en orden de arriba abajo; los siguientes, como PREFETCH. Tope: como máximo **15 pedidos** del modo en la fila a la vez; los que sobran se piden en la siguiente vuelta.
@@ -71,7 +73,7 @@ Resultado en §11.
 ### 5.4 Pantalla (`ReaderScreen`, `ReadingSettingsSheet`)
 - Sección "Modo de lectura" en la hoja.
 - El toque: en TAP como la 3b; en INTERLEAVED oculta/muestra; en TRANSLATION_ONLY alterna original.
-- Sin saltos: solo se insertan tarjetas en párrafos visibles o más abajo; al volver hacia arriba se aplica la corrección medida en M2.
+- Sin saltos: solo se insertan tarjetas en párrafos visibles o más abajo (límite de trabajo); la corrección es la de los scripts (técnica b, `scrollBy` anclado en el primer bloque que empieza en pantalla), también al volver hacia arriba. La pantalla no llama a `go(guardado)` por las tarjetas.
 
 ## 6. Errores
 - Motor que no carga o falta modelo → aviso único arriba; los párrafos quedan en original (Solo traducción) o sin tarjeta (Intercalado); "Reintentar" vuelve a pedir lo visible.
@@ -94,7 +96,7 @@ Resultado en §11.
 ## 10. Riesgos
 | Riesgo | Plan |
 |---|---|
-| Saltos al insertar por encima de lo visible | M2 primero; regla "solo visibles y más abajo" + corrección medida |
+| Saltos al insertar por encima de lo visible | Medido en M2 (§11): regla "solo visibles y más abajo" + técnica b (`scrollBy` en el mismo script, anclado en el primer bloque que empieza en pantalla); el *scroll anchoring* de Chrome ayuda arriba, pero depende de la versión del WebView; se confirma en la puerta con un libro real |
 | Libros con maquetación especial en Solo traducción | M4 con citas y listas; "Tocar" siempre disponible |
 | Batería y calor | Solo lo visible + 10; tope de 15 en la fila |
 | Mucho tráfico de scripts al desplazar | Se pide solo con la página quieta (`currentLocator` ya tiene antirrebote) |
@@ -106,11 +108,11 @@ Pixel 7, 2026-10-11, build de depuración (base e8dc241), tema claro, letra 100 
 
 | # | Qué | Resultado | ¿Pasa? |
 |---|---|---|---|
-| M1 | `visible(10)` (selector y filtro de la 3b, `getBoundingClientRect` vs `innerHeight`, mismo recorte y `cut`) | JS **0,8–8,4 ms** (1.ª llamada 7,3 ms); ida y vuelta Kotlin↔página **5,6–18,6 ms**. Peor caso, con una tarjeta bajo cada una de las 361 hojas: JS **9,9–13,7 ms**, ida y vuelta **21–45 ms**. Devuelve 15–19 párrafos (~3 KB). | Sí (< 50 ms) |
+| M1 | `visible(10)` (selector y filtro de la 3b, `getBoundingClientRect` vs `innerHeight`, mismo recorte y `cut`) | JS **0,8–8,4 ms** (1.ª llamada 7,3 ms); ida y vuelta Kotlin↔página **5,6–18,6 ms**. Peor caso, con una tarjeta bajo cada una de las 361 hojas: JS **9,9–13,7 ms**, ida y vuelta **21–45 ms**. Devuelve 15–19 párrafos (~3 KB). | Sí: la meta de 50 ms es la **ida y vuelta** (lo que espera la app); el peor caso, 45 ms, deja poco margen |
 | M2a | Tarjetas en visibles y más abajo (19 tarjetas, esqueleto → texto, una por llamada) | A: **0 px**. Pero B baja **166 px** (153 de 155 cuadros): la tarjeta del párrafo A, cortado arriba, empuja todo lo que se lee. | No, sin corrección |
 | M2a + (b) | Igual, con `scrollBy` en el mismo script anclado en **B** | B: **0,2 px**, 0 cuadros movidos (A sale por arriba, como se espera). Compensa 94,9 px en la 1.ª inserción; las demás, 0. | Sí |
 | M2b | 6 tarjetas **por encima** de la pantalla, sin corregir | A y B: **0,3 px**, 0 cuadros movidos. El WebView ya trae el *scroll anchoring* de Chrome (`overflow-anchor: auto` en `html` y `body`): corrige solo lo que cambia arriba (`scrollY` +761 px). | Sí |
-| M2b + (a) | Guardar `currentLocator` + `go(guardado, animated = false)` (truco de la 3c-1) | **Empeora:** salto final de **381 px** y 94 cuadros movidos. El localizador en modo continuo solo trae `progression` (claves `progression`, `position`, `totalProgression`, sin texto), y la progresión se recalcula sobre un capítulo ahora más alto. | **No** |
+| M2b + (a) | Guardar `currentLocator` + `go(guardado, animated = false)` (truco de la 3c-1) | **Empeora:** salto final de **381 px** (capítulo de 361 bloques) y 94 cuadros movidos. El localizador en modo continuo solo trae `progression` (claves `progression`, `position`, `totalProgression`, sin texto), y la progresión se recalcula sobre un capítulo ahora más alto. | **No** |
 | M2b + (b) | `scrollBy` en el mismo script | 0,7 px, 0 cuadros movidos; compensa ±0,2 px (el *anchoring* ya lo hizo; no se suman). | Sí |
 | M3 | Solo traducción: ocultar el original (`lector-oculto`) y poner la tarjeta en su lugar, en el mismo script | El reemplazo del primer párrafo queda en su sitio (A: 0 px) y B baja exactamente la diferencia de alto entre original y traducción (**96,8 px**; 48 → 145 px en ese párrafo), como preveía §3. Con la compensación (b) anclada en B: **0,1 px**, 0 cuadros movidos. | Sí, con (b) |
 | M4 | Citas, listas y encabezados en Solo traducción (capturas) | Con solo CSS heredado (`font-size: inherit`…) **se pierde la estructura**: el `h2` sale como párrafo, la cita sin sangría, los `li` sin viñeta. Copiando a la tarjeta el estilo calculado del original (lista fija, abajo) se ven como el libro: título grande, cita con sangría, viñetas; también en oscuro (`color: inherit`). | Sí, copiando estilo |
@@ -126,5 +128,15 @@ Pixel 7, 2026-10-11, build de depuración (base e8dc241), tema claro, letra 100 
 - En "solo", antes de ocultar el original, la tarjeta copia de él una **lista fija** de propiedades con `style.setProperty(…, 'important')` (CSSOM: la CSP no lo frena y no es marcado): `display, font-family, font-size, font-weight, font-style, line-height, text-indent, text-align, letter-spacing, margin-*, padding-*, list-style-type, list-style-position`. Fondo, borde y color salen de tarjeta.css (`transparent`, `0`, `inherit`). Al volver a otro modo se quita ese estilo.
 - `lector-oculto` vale para **toda hoja** (`p, li, blockquote, h1–h6, dd`), no solo `p`.
 - `visible()`: un original oculto se mide con el rectángulo de su tarjeta (oculto da 0×0).
+
+**Alcance / límites:**
+- Un solo libro inventado.
+- Un solo aparato y una sola versión del WebView.
+- Tema claro y letra al 100 % (M4 también se miró en oscuro).
+- Sin motor.
+- Las traducciones inventadas de `h2` y `li` son más largas que el original, así que los 96,8 px de M3 están exagerados.
+- El *scroll anchoring* de Chrome para lo que cambia arriba se vio en una sola corrida (6 tarjetas) y depende de la versión del WebView: por eso (b) se queda como red de seguridad, y la prueba con un libro real en la puerta lo confirma.
+- La meta de M1 (50 ms) es de ida y vuelta: el peor caso, con 361 tarjetas, dio 45 ms (poco margen).
+- El `setProperty` en los scripts pasa por `seguridad` (regla 8).
 
 Capturas (no van al repo), en `C:\Users\JUAN\AppData\Local\Temp\claude\C--Users-JUAN-Documents-lector-bilingue\7825bb96-c19c-4248-8529-7df99ae37d55\scratchpad\spike-3c2\`: `m4-s4-1-tocar.png`, `m4-s4-2-intercalado.png`, `m4-s4-3-solo-css.png` (estructura perdida), `m4-s4-3-solo-copia.png`, `m4-s4-4-solo-copia-oscuro.png`; números en `results-m1.txt`, `results-m2.txt`, `results-m3.txt`.
