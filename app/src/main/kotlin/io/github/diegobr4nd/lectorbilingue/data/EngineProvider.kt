@@ -25,15 +25,23 @@ interface EngineProvider {
 /**
  * Cuándo hay memoria para cargar un motor, con lo que informa Android (`ActivityManager.MemoryInfo`).
  *
- * Solo se niega si el sistema ya está en memoria baja ([lowMemory], o [availBytes] en su umbral [thresholdBytes]).
+ * Solo se niega si el sistema ya está en memoria baja ([lowMemory]) o si [availBytes] no pasa su umbral [thresholdBytes]
+ * más [CUSHION_BYTES].
  * "Memoria libre" (`availMem`) no cuenta lo que ocupan las apps de fondo: con muchas abiertas baja a 350-450 MB, pero
  * al cargar el motor Android las cierra para hacer sitio (la app al frente es la última que cierra). En el Pixel 7 con
  * 420 MB libres OPUS cargó y tradujo bien; la regla vieja (450 MB fijos) lo negaba y el Lector quedaba en "No se pudo
  * preparar el traductor" hasta que otras apps se cerraran.
  */
 object EngineMemory {
+    /**
+     * Colchón sobre el umbral de memoria baja del sistema. Es pequeño a propósito: el motor ocupa ~330 MB nativos y,
+     * en un teléfono con poca RAM, cargarlo justo en el umbral podría hacer que Android cierre la app misma. Con el
+     * colchón, el caso de Juan (376 MB libres, umbral 216 MB) sigue cargando.
+     */
+    const val CUSHION_BYTES = 100L * 1024 * 1024
+
     fun canLoad(availBytes: Long, thresholdBytes: Long, lowMemory: Boolean): Boolean =
-        !lowMemory && availBytes > thresholdBytes
+        !lowMemory && availBytes > thresholdBytes + CUSHION_BYTES
 }
 
 /**

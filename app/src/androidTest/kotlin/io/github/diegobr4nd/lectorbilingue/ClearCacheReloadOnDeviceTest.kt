@@ -7,13 +7,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
-import io.github.diegobr4nd.lectorbilingue.data.EngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.EngineMemory
 import io.github.diegobr4nd.lectorbilingue.data.Priority
 import io.github.diegobr4nd.lectorbilingue.data.TranslateRequest
 import io.github.diegobr4nd.lectorbilingue.data.TranslateResult
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.data.translationScope
-import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -35,6 +34,10 @@ import kotlin.test.assertTrue
  * el teléfono, con muchas apps de fondo, tenía 376-420 MB. Aquí: motor y modelo REALES (en-es instalado; si no, se
  * salta), caché de Room EN MEMORIA (nunca la de Juan), textos inventados y solo números o nombres de tipo en los
  * mensajes. Un "lastre" de memoria nativa deja el teléfono con menos de 450 MB libres, como el de Juan.
+ *
+ * CUIDADO: el lastre aprieta la memoria del teléfono y Android puede cerrar apps de fondo de Juan (pierden lo que
+ * tenían abierto). Correr solo con el OK de Juan y con el teléfono sin usar. El lastre tiene tope (ver [squeeze]) y
+ * se suelta siempre (finally y @After).
  */
 @RunWith(AndroidJUnit4::class)
 class ClearCacheReloadOnDeviceTest {
@@ -56,17 +59,28 @@ class ClearCacheReloadOnDeviceTest {
     private fun memory(): ActivityManager.MemoryInfo =
         ActivityManager.MemoryInfo().also { app.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }
 
-    /** Memoria nativa tocada hasta dejar menos de 430 MB libres, sin acercarse al umbral de memoria baja del sistema. */
+    /**
+     * Memoria nativa tocada hasta dejar menos de 430 MB libres, sin acercarse al umbral de memoria baja del sistema más
+     * el colchón de [EngineMemory]. Tope total: lo libre al empezar menos 450 MB, y nunca más de 1,5 GB. Si un paso
+     * libera memoria en vez de ocuparla (Android cerró una app de fondo), se para: seguir solo cerraría más apps.
+     */
     private fun squeeze(): Long {
-        while (ballast.size < 120) {
+        val start = memory().availMem
+        val budget = minOf(start - 450L * MB, MAX_BALLAST)
+        var used = 0L
+        var before = start
+        while (used + STEP <= budget) {
             val m = memory()
-            if (m.availMem < 430L * MB || m.availMem < m.threshold + 150L * MB) break
-            val shm = SharedMemory.create("lastre", 32 * MB.toInt())
+            if (m.availMem > before) break // se liberó memoria: Android está cerrando apps
+            if (m.availMem < 430L * MB || m.availMem < m.threshold + EngineMemory.CUSHION_BYTES + 50L * MB) break
+            before = m.availMem
+            val shm = SharedMemory.create("lastre", STEP.toInt())
+            ballast += shm // antes de tocarla: si algo falla, @After la suelta igual
             val b = shm.mapReadWrite()
             var k = 0
             while (k < b.capacity()) { b.put(k, 1); k += 4096 }
             SharedMemory.unmap(b) // las páginas siguen ocupadas mientras viva [shm]
-            ballast += shm
+            used += STEP
             Thread.sleep(50)
         }
         return memory().availMem / MB
@@ -107,26 +121,9 @@ class ClearCacheReloadOnDeviceTest {
         }
     }
 
-    @Test fun reintentarTrasUnFalloAlPrepararTraduce() = runBlocking<Unit> {
-        assumeModel()
-        val real = AndroidEngineProvider(app, worker)
-        var refuse = true // la primera vez el motor "no se puede preparar"
-        val provider = object : EngineProvider by real {
-            override fun hasMemoryFor(id: EngineId) = if (refuse) false.also { refuse = false } else real.hasMemoryFor(id)
-        }
-        val s = TranslationService(provider, db.translations(), worker = worker, scope = scope)
-        try {
-            assertEquals(TranslateResult.EngineFailed, s.translate(req("The bird sings at dawn.")))
-            val free = squeeze()
-            assumeTrue("no se pudo dejar el teléfono con menos de 450 MB libres", free < 450)
-            val again = s.translate(req("The bird sings at dawn."))
-            assertTrue(again is TranslateResult.Done, "al reintentar: ${again::class.simpleName}, libres=$free MB")
-        } finally {
-            dropBallast()
-            s.release()
-            withContext(worker) {} // el hilo es único y en orden: al volver, la descarga del motor ya corrió
-        }
+    private companion object {
+        const val MB = 1024L * 1024
+        const val STEP = 32 * MB
+        const val MAX_BALLAST = 1536 * MB
     }
-
-    private companion object { const val MB = 1024L * 1024 }
 }

@@ -224,7 +224,7 @@ class ReaderViewModel(
         card.state = if (translations.engineReady(_direction.value)) CardState.Skeleton else CardState.Preparing
         showIfVisible(resource, index, card.state)
         viewModelScope.launch {
-            // Reintentar: la cuenta del tiempo mínimo de "Preparando…" corre a la par del pedido.
+            // Reintentar: la cuenta del tiempo mínimo del estado de espera corre a la par del pedido.
             val minShown = if (retry) launch { delay(RETRY_MIN_MILLIS) } else null
             bookLoaded.await()
             val pair = _direction.value
@@ -235,7 +235,8 @@ class ReaderViewModel(
                 minShown?.cancel()
                 return@launch // release() vació la fila; onLanguagesClosed la vuelve a pedir
             }
-            // Reintentar que vuelve a fallar al instante: "Preparando…" se ve un momento, así se nota que se intentó.
+            // Reintentar que no traduce (falla al preparar, sin modelo o falla del párrafo): lo que se mostraba
+            // ("Preparando…" o, con el motor cargado, el esqueleto) se ve un momento, así se nota que se intentó.
             if (result is TranslateResult.Done) minShown?.cancel() else minShown?.join()
             // Cerrada, reabierta o vuelta a pedir mientras tanto: este resultado ya no es el suyo.
             if (card.token != token || cards[resource]?.get(index) !== card) return@launch
@@ -307,7 +308,10 @@ class ReaderViewModel(
     }
 
     companion object {
-        /** Lo mínimo que se ve "Preparando…" al reintentar si el pedido vuelve a fallar (ms). */
+        /**
+         * Lo mínimo (ms) que se ve el estado de espera al reintentar si el resultado no es una traducción: vale para
+         * EngineFailed y MissingModel ("Preparando…") y para ParagraphFailed (el esqueleto, con el motor ya cargado).
+         */
         const val RETRY_MIN_MILLIS = 700L
     }
 }
