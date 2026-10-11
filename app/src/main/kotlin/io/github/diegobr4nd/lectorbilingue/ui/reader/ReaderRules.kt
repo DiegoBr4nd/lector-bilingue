@@ -76,6 +76,17 @@ object ReaderRules {
         return (i + step).takeIf { it in readingOrder.indices }
     }
 
+    /**
+     * (hay anterior, hay siguiente) para los botones de la barra inferior. Con un href que no está en el orden de
+     * lectura (o sin href) los dos quedan apagados: no se sabe dónde se está.
+     */
+    fun chapterButtons(readingOrder: List<String>, currentHref: String?): Pair<Boolean, Boolean> =
+        (neighborChapter(readingOrder, currentHref, -1) != null) to (neighborChapter(readingOrder, currentHref, 1) != null)
+
+    /** Título del capítulo [href] en el Índice, o null (sin título o fuera del Índice): la pantalla pone "Sección sin título". */
+    fun chapterTitle(entries: List<TocEntry>, href: String?): String? =
+        currentTocIndex(entries, href)?.let { entries[it].title }
+
     /** Final del libro: Readium da 1.0 o casi (redondeo de la última posición). */
     fun atEnd(totalProgression: Double?): Boolean = totalProgression != null && totalProgression >= 0.999
 

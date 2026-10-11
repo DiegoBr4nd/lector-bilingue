@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
  * SharedPreferences falso en memoria: así la prueba corre sin teléfono. Como el real, lanza
  * ClassCastException si el valor guardado es de otro tipo.
  */
-private class MemoryPrefs : SharedPreferences {
+internal class MemoryPrefs : SharedPreferences {
     val values = HashMap<String, Any?>()
 
     override fun getAll(): Map<String, *> = HashMap(values)

@@ -72,7 +72,7 @@ Habla con la página con scripts propios vía `EpubNavigatorFragment.evaluateJav
 - Primero el caché; si falta, a la fila. La pretraducción de un recurso se cancela al cambiar de recurso (capítulo).
 - Un **solo hilo** dedicado (`Executors.newSingleThreadExecutor().asCoroutineDispatcher()`): nunca dos traducciones a la vez; los motores se crean con ese mismo hilo como despachador, así su `synchronized` ya no bloquea un hilo de `Dispatchers.Default` (pendiente de la 2c) y queda como protección barata.
 - Carga el motor con el primer pedido (`EngineSelector` con los motores instalados del par). Lo descarga al salir del Lector o tras **2 min** sin pedidos. Nunca cambia de motor en silencio.
-- Antes de cargar mira la memoria libre (`ActivityManager.MemoryInfo`); si no alcanza, error claro.
+- Antes de cargar mira la memoria (`ActivityManager.MemoryInfo`); si no alcanza, error claro. "No alcanza" (3c-1): el sistema en memoria baja, o `availMem` sin pasar su umbral + 100 MB de colchón (`EngineMemory`).
 - Parte en oraciones con `SentenceSplitter`, traduce y vuelve a unir con espacio. Párrafos de más de ~4000 caracteres: por tandas de oraciones.
 - Motor: beam 1, máximo 4 hilos.
 

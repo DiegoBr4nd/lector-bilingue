@@ -3,7 +3,9 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
+import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.Priority
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslateRequest
 import io.github.diegobr4nd.lectorbilingue.data.TranslateResult
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
@@ -13,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +54,8 @@ class ReaderViewModel(
     private val translations: TranslationService,
     /** Idiomas del EPUB (`publication.metadata.languages`), para la dirección automática. */
     private val languages: List<String>,
+    /** Ajustes del teléfono: de aquí salen y aquí se guardan los ajustes de lectura (iguales para todos los libros). */
+    private val settings: AppSettings,
 ) : ViewModel() {
     private val position = MutableStateFlow<ReaderPosition?>(null)
     private var lastSaved: ReaderPosition? = null
@@ -141,7 +146,9 @@ class ReaderViewModel(
     /** Tocar una tarjeta con error (o sin modelo) la vuelve a pedir. Cualquier otro estado: nada. */
     fun retry(resource: String, index: Int) {
         val card = cards[resource]?.get(index) ?: return
-        if (card.state is CardState.Failed || card.state is CardState.MissingModel) request(resource, index, card, null, announce = true)
+        if (card.state is CardState.Failed || card.state is CardState.MissingModel) {
+            request(resource, index, card, null, announce = true, retry = true)
+        }
     }
 
     /**
@@ -158,6 +165,23 @@ class ReaderViewModel(
             }
         }
     }
+
+    /** Ajustes de lectura de la hoja "Ajustes de lectura". Valen los de fábrica hasta que se leen del teléfono. */
+    val readingSettings: StateFlow<ReadingSettings> get() = settings.readingSettingsFlow
+
+    /** Guarda los ajustes (el tamaño ya acotado) y los publica en el mismo instante: el libro cambia enseguida. */
+    fun setReadingSettings(new: ReadingSettings) {
+        settings.readingSettings = new
+    }
+
+    /** Un cambio de la hoja ("qué cambiar"): se aplica sobre los últimos ajustes, así dos toques seguidos no se pisan. */
+    fun updateReadingSettings(change: (ReadingSettings) -> ReadingSettings) = settings.updateReadingSettings(change)
+
+    /** A+ / A−: un paso de 10 %, sin pasar de 75 % ni de 250 %. */
+    fun stepFontScale(up: Boolean) = updateReadingSettings { it.copy(fontScale = ReadingRules.step(it.fontScale, up)) }
+
+    /** "Restablecer": vuelve a los de fábrica (respetan el estilo del libro). */
+    fun resetReadingSettings() = setReadingSettings(ReadingSettings())
 
     /** Guarda la dirección del libro, cierra todas las tarjetas (eran de la otra dirección) y vacía la fila del servicio. */
     fun setDirection(pair: LanguagePair) {
@@ -187,20 +211,33 @@ class ReaderViewModel(
      * Pide la traducción de [card] como toque; con [hit], al llegar pretraduce los siguientes. [announce]: la pidió la
      * persona con un toque, así que el resultado se anuncia.
      */
-    private fun request(resource: String, index: Int, card: OpenCard, hit: List<PageParagraph>?, announce: Boolean = false) {
+    private fun request(
+        resource: String,
+        index: Int,
+        card: OpenCard,
+        hit: List<PageParagraph>?,
+        announce: Boolean = false,
+        retry: Boolean = false,
+    ) {
         val token = ++nextToken
         card.token = token
         card.state = if (translations.engineReady(_direction.value)) CardState.Skeleton else CardState.Preparing
         showIfVisible(resource, index, card.state)
         viewModelScope.launch {
+            // Reintentar: la cuenta del tiempo mínimo del estado de espera corre a la par del pedido.
+            val minShown = if (retry) launch { delay(RETRY_MIN_MILLIS) } else null
             bookLoaded.await()
             val pair = _direction.value
             val result = try {
                 translations.translate(TranslateRequest(pair, card.text, Priority.TAP, resource))
             } catch (e: CancellationException) {
                 ensureActive() // el VM se limpió: termina aquí
+                minShown?.cancel()
                 return@launch // release() vació la fila; onLanguagesClosed la vuelve a pedir
             }
+            // Reintentar que no traduce (falla al preparar, sin modelo o falla del párrafo): lo que se mostraba
+            // ("Preparando…" o, con el motor cargado, el esqueleto) se ve un momento, así se nota que se intentó.
+            if (result is TranslateResult.Done) minShown?.cancel() else minShown?.join()
             // Cerrada, reabierta o vuelta a pedir mientras tanto: este resultado ya no es el suyo.
             if (card.token != token || cards[resource]?.get(index) !== card) return@launch
             card.state = result.toCardState()
@@ -268,5 +305,13 @@ class ReaderViewModel(
         if (p == lastSaved) return@withLock
         repo.savePosition(bookId, p.json, (p.totalProgression?.takeIf { !it.isNaN() } ?: 0.0).toFloat())
         lastSaved = p
+    }
+
+    companion object {
+        /**
+         * Lo mínimo (ms) que se ve el estado de espera al reintentar si el resultado no es una traducción: vale para
+         * EngineFailed y MissingModel ("Preparando…") y para ParagraphFailed (el esqueleto, con el motor ya cargado).
+         */
+        const val RETRY_MIN_MILLIS = 700L
     }
 }

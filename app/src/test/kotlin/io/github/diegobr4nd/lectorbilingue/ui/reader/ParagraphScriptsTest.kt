@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -28,6 +29,7 @@ class ParagraphScriptsTest {
             ParagraphScripts.indexAt(1.0, 2.0),
             ParagraphScripts.removeAll("OEBPS/c1.xhtml"),
             ParagraphScripts.edges(),
+            ParagraphScripts.setTheme("oscuro"),
             ParagraphScripts.insert(0, Card.Skeleton, labels),
             ParagraphScripts.insert(0, Card.Preparing, labels),
             ParagraphScripts.insert(0, Card.MissingModel("Falta el modelo (40 MB)", "Descargar", "Falta el modelo, 40 megabytes. Descargar"), labels),
@@ -233,5 +235,29 @@ class ParagraphScriptsTest {
 
     @Test fun `bordes desconocidos si la respuesta no sirve`() {
         for (bad in listOf(null, "null", "4", "-1", "\"2\"", "1.5", "true", "{}")) assertNull(ParagraphScripts.parseEdges(bad), "con $bad")
+    }
+
+    @Test fun `setTheme pone el atributo del tema con el valor como dato JSON`() {
+        for (theme in listOf("claro", "sepia", "oscuro", "negro")) {
+            val js = ParagraphScripts.setTheme(theme)
+            assertTrue(js.contains("setAttribute('data-lector-tema'"), js)
+            assertTrue(js.contains("document.documentElement"), js)
+            assertTrue(js.contains("{\"tema\":\"$theme\"}"), js) // el tema llega como dato, no como código
+            forbidden.forEach { assertFalse(js.contains(it), "usa $it") }
+        }
+    }
+
+    @Test fun `setTheme rechaza temas fuera de la lista`() {
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.setTheme("<x>") }
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.setTheme("") }
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.setTheme("Oscuro") }
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.setTheme("oscuro\"]") }
+    }
+
+    @Test fun `todo tema de la regla lo acepta setTheme`() {
+        for (theme in io.github.diegobr4nd.lectorbilingue.data.PageTheme.entries) for (dark in listOf(false, true)) {
+            val card = ReadingRules.cardTheme(io.github.diegobr4nd.lectorbilingue.data.ReadingSettings(theme = theme), dark)
+            assertTrue(card in ParagraphScripts.CARD_THEMES, card)
+        }
     }
 }

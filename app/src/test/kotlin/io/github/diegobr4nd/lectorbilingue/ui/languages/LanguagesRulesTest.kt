@@ -120,4 +120,13 @@ class LanguagesRulesTest {
         assertTrue(LanguagesRules.shouldStartVisit(viewModelStarted = false, newVisit = true))
         assertFalse(LanguagesRules.shouldStartVisit(viewModelStarted = true, newVisit = false)) // giro de pantalla
     }
+
+    @Test
+    fun el_tamano_del_cache_se_muestra_con_un_decimal_y_se_apaga_con_cero() {
+        assertEquals("3,2", LanguagesRules.cacheSizeMb(3_355_443L, es)) // 3,2 MiB
+        assertEquals("0,1", LanguagesRules.cacheSizeMb(1_000L, es)) // poco pero no vacío: nunca "0,0"
+        assertNull(LanguagesRules.cacheSizeMb(0L, es))
+        assertFalse(LanguagesRules.cacheVisible(0L))
+        assertTrue(LanguagesRules.cacheVisible(1L))
+    }
 }

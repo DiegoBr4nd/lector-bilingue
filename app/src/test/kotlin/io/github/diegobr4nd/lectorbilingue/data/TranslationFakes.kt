@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.data
 
 import io.github.diegobr4nd.lectorbilingue.books.db.TranslationDao
 import io.github.diegobr4nd.lectorbilingue.books.db.TranslationEntity
+import androidx.sqlite.db.SupportSQLiteQuery
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
@@ -76,11 +77,23 @@ class FakeEngine(
 /** El caché de Room en memoria. */
 class FakeTranslationDao : TranslationDao {
     val rows = linkedMapOf<String, TranslationEntity>()
+    /** Borrados y PRAGMA en el orden en que llegan ("deleteAll" o el SQL del PRAGMA). */
+    val maintenance = mutableListOf<String>()
 
     override suspend fun get(key: String): TranslationEntity? = rows[key]
     override suspend fun getAll(keys: List<String>): List<TranslationEntity> = keys.mapNotNull { rows[it] }
     override suspend fun put(row: TranslationEntity) {
         rows[row.key] = row
+    }
+    override suspend fun count(): Int = rows.size
+    override suspend fun approxBytes(): Long = rows.values.sumOf { (it.key.length + it.translation.length) * 2L }
+    override suspend fun deleteAll() {
+        rows.clear()
+        maintenance += "deleteAll"
+    }
+    override suspend fun pragma(query: SupportSQLiteQuery): Int {
+        maintenance += query.sql
+        return 0
     }
 }
 

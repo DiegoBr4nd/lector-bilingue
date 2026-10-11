@@ -8,6 +8,8 @@ import io.github.diegobr4nd.lectorbilingue.data.EnginePreference
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.data.PairStatus
+import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,13 +32,23 @@ data class LanguagesUiState(
     val message: ModelMessage? = null,
     val busy: Boolean = false,
     val pending: PendingAction? = null,
+    /**
+     * Tamaño aproximado de las traducciones guardadas; 0 = nada que borrar (Borrar se apaga); null = no se pudo medir
+     * (se dice "tamaño desconocido" y Borrar sigue disponible: no se afirma que no hay nada).
+     */
+    val cacheBytes: Long? = 0,
+    val confirmCache: Boolean = false,
 )
 
 /**
  * Estado de Idiomas. Solo guarda mensajes fijos (nunca texto de excepciones ni de libros).
  * Borrar e importar bloquean los botones mientras trabajan ([LanguagesUiState.busy]).
  */
-class LanguagesViewModel(private val hub: ModelHubApi, private val settings: AppSettings) : ViewModel() {
+class LanguagesViewModel(
+    private val hub: ModelHubApi,
+    private val settings: AppSettings,
+    private val cache: TranslationCacheApi? = null,
+) : ViewModel() {
     private val _state = MutableStateFlow(LanguagesUiState())
     val state: StateFlow<LanguagesUiState> = _state.asStateFlow()
 
@@ -65,6 +77,7 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
         if (!LanguagesRules.shouldStartVisit(started, newVisit)) return
         started = true
         viewModelScope.launch { settings.loadEnginePreference() }
+        refreshCacheSize()
         refresh()
     }
 
@@ -74,6 +87,46 @@ class LanguagesViewModel(private val hub: ModelHubApi, private val settings: App
         viewModelScope.launch {
             val result = hub.refresh()
             _state.update { it.copy(searching = false, catalogMessage = result) }
+        }
+    }
+
+    private suspend fun measureCache(c: TranslationCacheApi): Long? = try {
+        c.cacheBytes()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null // no se pudo medir: tamaño desconocido (nunca "ninguna")
+    }
+
+    /** Vuelve a medir las traducciones guardadas. */
+    private fun refreshCacheSize() {
+        val c = cache ?: return
+        viewModelScope.launch {
+            val bytes = measureCache(c)
+            _state.update { it.copy(cacheBytes = bytes) }
+        }
+    }
+
+    fun requestClearCache() = _state.update { it.copy(confirmCache = true) }
+
+    fun dismissClearCache() = _state.update { it.copy(confirmCache = false) }
+
+    /** Borra todas las traducciones guardadas. Mensajes fijos: nunca el texto de la excepción. */
+    fun confirmClearCache() {
+        val c = cache ?: return
+        if (_state.value.busy) return
+        _state.update { it.copy(confirmCache = false, busy = true, message = null) }
+        viewModelScope.launch {
+            val message = try {
+                c.clearCache()
+                ModelMessage.CACHE_CLEARED
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ModelMessage.CACHE_CLEAR_FAILED
+            }
+            val bytes = measureCache(c)
+            _state.update { it.copy(busy = false, message = message, cacheBytes = bytes) }
         }
     }
 

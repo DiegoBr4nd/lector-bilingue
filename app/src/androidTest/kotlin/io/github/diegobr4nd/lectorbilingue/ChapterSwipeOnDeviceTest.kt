@@ -5,7 +5,10 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -212,7 +215,73 @@ class ChapterSwipeOnDeviceTest {
         }
     }
 
+    /** Toque REAL en "Capítulo siguiente" desde el principio del capítulo 2: capítulo 3, al inicio. */
+    @Test fun botonSiguienteLlevaAlInicioDelCapituloSiguiente() = runBlocking<Unit> {
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            waitForText("Capítulo uno")
+            goToChapter(s, 1)
+            tapButton(s, "Capítulo siguiente")
+            rule.waitUntil("capítulo 3", 5_000) { position(s).first.endsWith("c3.xhtml") }
+            settle()
+            assertTrue((position(s).second ?: 1.0) < 0.05, "no empezó por el principio: ${position(s)}")
+        }
+    }
+
+    /** "Capítulo anterior" desde el capítulo 2 lleva al principio del 1; en los extremos el botón correspondiente está apagado. */
+    @Test fun botonesApagadosEnLosExtremosYAnteriorVaAlInicio() = runBlocking<Unit> {
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            waitForText("Capítulo uno")
+            goToChapter(s, 2)
+            rule.waitUntil("siguiente apagado en el último", 5_000) { enabledOf("Capítulo siguiente") == false }
+            rule.onNodeWithContentDescription("Capítulo siguiente").assertIsNotEnabled()
+            rule.onNodeWithContentDescription("Capítulo anterior").assertIsEnabled()
+            goToChapter(s, 1)
+            rule.waitUntil("los dos encendidos en el 2", 5_000) {
+                enabledOf("Capítulo siguiente") == true && enabledOf("Capítulo anterior") == true
+            }
+            tapButton(s, "Capítulo anterior")
+            rule.waitUntil("capítulo 1", 5_000) { position(s).first.endsWith("c1.xhtml") }
+            settle()
+            assertTrue((position(s).second ?: 1.0) < 0.05, "no empezó por el principio: ${position(s)}")
+            rule.waitUntil("anterior apagado en el primero", 5_000) { enabledOf("Capítulo anterior") == false }
+            rule.onNodeWithContentDescription("Capítulo anterior").assertIsNotEnabled()
+        }
+    }
+
     // ---------- Ayudas ----------
+
+    /** Abre el capítulo [index] (0 = primero) desde su principio y espera a que sea el actual. */
+    private fun goToChapter(s: ActivityScenario<ReaderActivity>, index: Int) {
+        val publication = app.openBooks.get(created.last())!!
+        val target = publication.locatorFromLink(publication.readingOrder[index])!!
+        s.onActivity { navigator(it)!!.go(target) }
+        rule.waitUntil("capítulo ${index + 1}", 10_000) { position(s).first.endsWith("c${index + 1}.xhtml") }
+        Thread.sleep(800)
+        rule.waitForIdle()
+    }
+
+    private fun enabledOf(description: String): Boolean? {
+        val nodes = rule.onAllNodes(androidx.compose.ui.test.hasContentDescription(description)).fetchSemanticsNodes()
+        if (nodes.isEmpty()) return null
+        return !nodes[0].config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
+    }
+
+    /** Toque real (MotionEvent inyectado) en el centro del botón con esa descripción. */
+    private fun tapButton(s: ActivityScenario<ReaderActivity>, description: String) {
+        rule.waitUntil("el Lector al frente", 5_000) { var f = false; s.onActivity { f = it.hasWindowFocus() }; f }
+        rule.waitUntil("botón $description", 5_000) { enabledOf(description) == true }
+        val bounds = rule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInWindow
+        val origin = IntArray(2)
+        s.onActivity { it.window.decorView.getLocationOnScreen(origin) }
+        val x = origin[0] + bounds.center.x
+        val y = origin[1] + bounds.center.y
+        val down = SystemClock.uptimeMillis()
+        inject(down, down, MotionEvent.ACTION_DOWN, x, y)
+        inject(down, down + 60, MotionEvent.ACTION_UP, x, y)
+        instrumentation.waitForIdleSync()
+    }
 
     /**
      * Abre el capítulo 2 en [progression] y espera a que la página esté en su sitio: 1.0 = abajo del todo, 0.0 =

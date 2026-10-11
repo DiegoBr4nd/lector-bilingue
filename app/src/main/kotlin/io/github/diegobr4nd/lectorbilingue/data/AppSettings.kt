@@ -80,7 +80,79 @@ class AppSettings(private val prefs: SharedPreferences) {
         EnginePreference.AUTO
     }
 
+    private val readingState = MutableStateFlow(ReadingSettings())
+    private val readingLoaded = MutableStateFlow(false)
+
+    /** Los ajustes de lectura, observables: cambian en el mismo instante en que se guardan. */
+    val readingSettingsFlow: StateFlow<ReadingSettings> = readingState.asStateFlow()
+
+    /** Lee los ajustes de lectura fuera del hilo principal y los publica. Repetirla no hace nada. */
+    suspend fun loadReadingSettings(io: CoroutineDispatcher = Dispatchers.IO) {
+        if (readingLoaded.value) return
+        val stored = withContext(io) { readReading() }
+        // Si mientras tanto alguien guardó otros, esos mandan.
+        if (!readingLoaded.value) readingState.value = stored
+        readingLoaded.value = true
+    }
+
+    var readingSettings: ReadingSettings
+        get() = readReading()
+        set(value) {
+            val clean = value.copy(fontScale = ReadingSettings.normalizeScale(value.fontScale))
+            prefs.edit {
+                putString(KEY_READING_THEME, clean.theme.wire)
+                putFloat(KEY_READING_SCALE, clean.fontScale.toFloat())
+                putString(KEY_READING_FONT, clean.font.wire)
+                putString(KEY_READING_LINE_HEIGHT, clean.lineHeight.wire)
+                putString(KEY_READING_MARGINS, clean.margins.wire)
+                putString(KEY_READING_ALIGN, clean.align.wire)
+            }
+            readingState.value = clean
+            readingLoaded.value = true
+        }
+
+    /**
+     * Cambia los ajustes a partir de los últimos publicados (no de una copia vieja): dos cambios seguidos se conservan
+     * los dos. [change] recibe los de ahora y devuelve los nuevos.
+     */
+    fun updateReadingSettings(change: (ReadingSettings) -> ReadingSettings) {
+        synchronized(readingState) { readingSettings = change(readingState.value) }
+    }
+
+    // Cada campo se lee por separado: uno corrupto vuelve a su valor de fábrica y los demás se conservan.
+    private fun readReading() = ReadingSettings(
+        theme = PageTheme.fromWire(safeString(KEY_READING_THEME)),
+        fontScale = readScale(),
+        font = ReadingFont.fromWire(safeString(KEY_READING_FONT)),
+        lineHeight = LineHeightLevel.fromWire(safeString(KEY_READING_LINE_HEIGHT)),
+        margins = MarginLevel.fromWire(safeString(KEY_READING_MARGINS)),
+        align = TextAlignChoice.fromWire(safeString(KEY_READING_ALIGN)),
+    )
+
+    private fun safeString(key: String): String? = try {
+        prefs.getString(key, null)
+    } catch (_: ClassCastException) {
+        null
+    }
+
+    private fun readScale(): Double {
+        val raw = try {
+            prefs.getFloat(KEY_READING_SCALE, 1.0f).toDouble()
+        } catch (_: ClassCastException) {
+            return 1.0
+        }
+        // NaN o fuera de rango: dato dañado, vuelve a fábrica (no se acota).
+        if (raw.isNaN() || raw < ReadingSettings.MIN_SCALE - 1e-6 || raw > ReadingSettings.MAX_SCALE + 1e-6) return 1.0
+        return ReadingSettings.normalizeScale(raw)
+    }
+
     companion object {
+        private const val KEY_READING_THEME = "reading_theme"
+        private const val KEY_READING_SCALE = "reading_scale"
+        private const val KEY_READING_FONT = "reading_font"
+        private const val KEY_READING_LINE_HEIGHT = "reading_line_height"
+        private const val KEY_READING_MARGINS = "reading_margins"
+        private const val KEY_READING_ALIGN = "reading_align"
         private const val FILE = "app_settings"
         private const val KEY_WELCOME = "welcome_done"
         private const val KEY_ENGINE = "engine_choice"

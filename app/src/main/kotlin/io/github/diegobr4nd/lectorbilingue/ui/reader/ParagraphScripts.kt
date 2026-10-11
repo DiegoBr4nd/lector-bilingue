@@ -246,6 +246,24 @@ object ParagraphScripts {
         """,
     )
 
+    /** Temas de la tarjeta que entiende tarjeta.css (ver [ReadingRules.cardTheme]). */
+    val CARD_THEMES = setOf("claro", "sepia", "oscuro", "negro")
+
+    /**
+     * Pone `data-lector-tema` en el `<html>` de la página: tarjeta.css elige con él la paleta de la tarjeta. Solo un valor
+     * de [CARD_THEMES] (cualquier otro lanza IllegalArgumentException), y aun así va como dato JSON. Responde true.
+     */
+    fun setTheme(theme: String): String {
+        require(theme in CARD_THEMES) { "Tema de tarjeta desconocido" }
+        return script(
+            JSONObject().put("tema", theme),
+            """
+            document.documentElement.setAttribute('data-lector-tema', a.tema);
+            return true;
+            """,
+        )
+    }
+
     /** Lee la respuesta de [edges], o null si no es un entero entre 0 y 3 (página no lista, respuesta rara). */
     fun parseEdges(json: String?): PageEdges? {
         val n = (parse(json) as? Int)?.takeIf { it in 0..3 } ?: return null

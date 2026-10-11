@@ -360,6 +360,7 @@ Escribir cada cuerpo completo (las líneas `/* … */` resumen lo que el impleme
   - `config`: OPUS `EngineConfig()`, Firefox `EngineConfig(threads = 1)`.
   - `forced()`: el motor forzado de `AppSettings` (ver su KDoc).
   - `hasMemoryFor`: `ActivityManager.MemoryInfo().availMem` ≥ 450 MB para OPUS y ≥ 200 MB para Firefox (constantes con comentario: ~330 MB medidos en la 2a más margen).
+    - **Cambiado en la 3c-1** (aprobado por Juan): los 450/200 MB fijos negaban la carga con 376 MB libres en el Pixel (muchas apps de fondo) aunque OPUS carga bien ahí. Regla nueva, igual para los dos motores: `EngineMemory.canLoad` = sin memoria baja del sistema (`lowMemory`) y `availMem` > umbral del sistema (`threshold`) + 100 MB de colchón. Ver `data/EngineProvider.kt`.
   - En `LectorApp`: `val translations by lazy { val w = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-traduccion") }.asCoroutineDispatcher(); TranslationService(AndroidEngineProvider(this, w), LectorDatabase…translations(), worker = w, scope = CoroutineScope(SupervisorJob() + w)) }`. **Una sola** `LectorDatabase.open(this)` en la app: convertirla en `private val db by lazy { LectorDatabase.open(this) }` y usarla en `books` y `translations`.
 - [ ] **Step 4: Correr** las pruebas: OK. Más `:app:testFdroidDebugUnitTest :app:lintFdroidDebug`.
 - [ ] **Step 5: Commit** `feat(3b): servicio de traducción con fila, un hilo y caché`.
