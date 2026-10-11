@@ -10,7 +10,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ParagraphScriptsTest {
-    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
+    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…", "Original")
     private val forbidden = listOf("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "Function(")
 
     @Test fun `el texto hostil va como dato JSON y no rompe el script`() {
@@ -42,7 +42,7 @@ class ParagraphScriptsTest {
     }
 
     @Test fun `los separadores de linea y parrafo van escapados en todos los datos`() {
-        val js = ParagraphScripts.insert(1, Card.Failed("a b", "c d", "e f"), CardLabels("x ", "y", "z"))
+        val js = ParagraphScripts.insert(1, Card.Failed("a b", "c d", "e f"), CardLabels("x ", "y", "z", "w"))
         assertFalse(js.contains(" ")); assertFalse(js.contains(" "))
         assertTrue(js.contains("\\u2028")); assertTrue(js.contains("\\u2029"))
     }
@@ -192,7 +192,7 @@ class ParagraphScriptsTest {
     // Diseño 3b (M1): la tarjeta con texto no lleva aria-label (taparía la traducción al deslizar con TalkBack).
     @Test fun `la tarjeta con texto no lleva nombre propio y las demas si`() {
         val js = ParagraphScripts.insert(0, Card.Text("Hola"), labels)
-        assertTrue(js.contains("if (a.kind === 'texto') card.removeAttribute('aria-label');"), js)
+        assertTrue(js.contains("if (a.kind === 'texto' || a.kind === 'solo') card.removeAttribute('aria-label');"), js)
         assertTrue(js.contains("else card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);"), js)
         assertTrue(js.contains("setAttribute('role', 'note')"), js)
     }
@@ -259,5 +259,174 @@ class ParagraphScriptsTest {
             val card = ReadingRules.cardTheme(io.github.diegobr4nd.lectorbilingue.data.ReadingSettings(theme = theme), dark)
             assertTrue(card in ParagraphScripts.CARD_THEMES, card)
         }
+    }
+
+    // ---- 3c-2: modos de traducción ----
+
+    @Test fun `setMode pone el atributo del modo con el valor como dato JSON`() {
+        assertEquals(setOf("tocar", "intercalado", "solo"), ParagraphScripts.MODES)
+        for (mode in ParagraphScripts.MODES) {
+            val js = ParagraphScripts.setMode(mode)
+            assertTrue(js.contains("document.documentElement.setAttribute('data-lector-modo', a.modo)"), js)
+            assertTrue(js.contains("\"modo\":\"$mode\""), js) // el modo llega como dato, no como código
+            forbidden.forEach { assertFalse(js.contains(it), "usa $it") }
+        }
+    }
+
+    @Test fun `setMode rechaza modos fuera de la lista`() {
+        for (bad in listOf("", "Solo", "solo\"]", "<x>", "tap", "translation_only", " solo")) {
+            assertFailsWith<IllegalArgumentException>(bad) { ParagraphScripts.setMode(bad) }
+        }
+    }
+
+    // Ruling D: al salir de "solo" se quita el estilo copiado y se vuelven a mostrar los originales.
+    @Test fun `setMode fuera de solo quita el estilo copiado y muestra los originales`() {
+        val js = ParagraphScripts.setMode("intercalado")
+        assertTrue(js.contains("if (a.modo !== 'solo')"), js)
+        assertTrue(js.contains("style.removeProperty("), js)
+        assertTrue(js.contains("classList.remove('lector-oculto')"), js)
+        assertTrue(js.contains("removeAttribute('data-lector-original')"), js)
+    }
+
+    @Test fun `visible usa el mismo selector y filtro que find y excluye las tarjetas`() {
+        val js = ParagraphScripts.visible()
+        assertTrue(js.contains(ParagraphScripts.SELECTOR), js)
+        assertTrue(js.contains("!e.closest('.lector-tarjeta') && !e.querySelector(a.sel)"), js)
+        assertTrue(js.contains("getBoundingClientRect()"), js)
+        assertTrue(js.contains("window.innerHeight"), js)
+        assertTrue(js.contains("\"n\":10"), js)
+        assertTrue(js.contains("\"max\":20000"), js)
+        // Mismo recorte y marca que find.
+        assertTrue(js.contains("""t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();"""), js)
+        assertTrue(js.contains("return t.length > a.max ? { i: i, t: t.slice(0, a.max) + '…', cut: true } : { i: i, t: t };"), js)
+        assertTrue(ParagraphScripts.visible(3).contains("\"n\":3"))
+    }
+
+    // Ruling E: un original oculto (display:none mide 0×0) se mide con el rectángulo de su tarjeta.
+    @Test fun `visible mide un original oculto con su tarjeta`() {
+        val js = ParagraphScripts.visible()
+        assertTrue(js.contains("classList.contains('lector-oculto')"), js)
+        assertTrue(js.contains("nextElementSibling"), js)
+        assertTrue(js.contains("matches('aside.lector-tarjeta[data-lector-i=\"' + "), js)
+    }
+
+    @Test fun `visible rechaza un numero de siguientes fuera de rango`() {
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.visible(-1) }
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.visible(51) }
+        ParagraphScripts.visible(0); ParagraphScripts.visible(50)
+    }
+
+    @Test fun `leer la respuesta de visible`() {
+        assertEquals(
+            listOf(PageParagraph(4, "Hola."), PageParagraph(5, "Adiós mundo.", cut = true)),
+            ParagraphScripts.parseVisible("""[{"i":4,"t":"Hola."},{"i":5,"t":" Adiós\n mundo. ","cut":true}]"""),
+        )
+        // Cadena citada (JSON.stringify) se desenvuelve una vez.
+        assertEquals(listOf(PageParagraph(2, "Uno.")), ParagraphScripts.parseVisible(JSONObject.quote("""[{"i":2,"t":"Uno."}]""")))
+        // Uno vacío se salta (aquí no hay "tocado" que deba tener texto).
+        assertEquals(listOf(PageParagraph(1, "b")), ParagraphScripts.parseVisible("""[{"i":0,"t":"  "},{"i":1,"t":"b"}]"""))
+        assertEquals(emptyList(), ParagraphScripts.parseVisible("[]"))
+    }
+
+    @Test fun `parseVisible falla cerrado`() {
+        for (bad in listOf(
+            null, "null", "no es json", "{}", "3", "\"x\"",
+            """[{"i":"0","t":"a"}]""", """[{"i":1.5,"t":"a"}]""", """[{"i":0}]""", """[{"i":-1,"t":"a"}]""", """[3]""",
+            // Fuera de orden o repetidos: la página manda de arriba abajo; otra cosa no es de fiar.
+            """[{"i":2,"t":"a"},{"i":1,"t":"b"}]""", """[{"i":2,"t":"a"},{"i":2,"t":"b"}]""",
+            JSONObject.quote(JSONObject.quote("[]")),
+        )) {
+            assertEquals(emptyList(), ParagraphScripts.parseVisible(bad), "con $bad")
+        }
+        // Demasiados para lo pedido (lo visible + los siguientes nunca llega a mil): fuera.
+        val many = JSONArray().apply { for (k in 0..1000) put(JSONObject().put("i", k).put("t", "x")) }.toString()
+        assertEquals(emptyList(), ParagraphScripts.parseVisible(many))
+    }
+
+    @Test fun `los scripts nuevos no usan marcado ni eval`() {
+        val all = listOf(
+            ParagraphScripts.visible(),
+            ParagraphScripts.setMode("tocar"), ParagraphScripts.setMode("intercalado"), ParagraphScripts.setMode("solo"),
+            ParagraphScripts.showOriginal(2, true), ParagraphScripts.showOriginal(2, false),
+            ParagraphScripts.insert(0, Card.Solo("Hola"), labels),
+            ParagraphScripts.insert(0, Card.Waiting("Traduciendo…"), labels),
+        )
+        for (js in all) {
+            forbidden.forEach { assertFalse(js.contains(it), "usa $it: $js") }
+            assertFalse(Regex("""setAttribute\(\s*['"](on|style)""", RegexOption.IGNORE_CASE).containsMatchIn(js), js)
+            assertFalse(js.contains("cssText"), js) // estilo solo por propiedad, nunca como cadena
+            assertFalse(js.contains(".go("), js)
+        }
+    }
+
+    // Ruling D: la tarjeta Solo copia del original una lista FIJA de propiedades calculadas, con 'important'.
+    @Test fun `la tarjeta solo copia una lista fija de propiedades calculadas del original`() {
+        assertEquals(
+            listOf(
+                "display", "font-family", "font-size", "font-weight", "font-style", "line-height", "text-indent", "text-align",
+                "letter-spacing", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-right",
+                "padding-bottom", "padding-left", "list-style-type", "list-style-position",
+            ),
+            ParagraphScripts.COPIED_STYLE,
+        )
+        val js = ParagraphScripts.insert(3, Card.Solo("Hola \"</script>"), labels)
+        assertTrue(js.contains("\"kind\":\"solo\""), js)
+        assertTrue(js.contains(JSONArray(ParagraphScripts.COPIED_STYLE).toString()), js)
+        assertTrue(js.contains("getComputedStyle(p)"), js)
+        assertTrue(js.contains("card.style.setProperty(k, cs.getPropertyValue(k), 'important')"), js)
+        assertTrue(js.contains("p.classList.add('lector-oculto')"), js)
+        // Texto como texto; la marca "Original" viene de strings.xml.
+        assertTrue(js.contains("\"mark\":\"Original\""), js)
+        assertTrue(js.contains("textContent = a.text"), js)
+        assertTrue(js.contains("textContent = a.mark"), js)
+        assertFalse(js.contains("</script>"), js)
+    }
+
+    @Test fun `una tarjeta que no es solo quita el estilo copiado y muestra el original`() {
+        for (card in listOf(Card.Text("x"), Card.Skeleton, Card.Waiting("Traduciendo…"), Card.TooLong("largo"))) {
+            val js = ParagraphScripts.insert(1, card, labels)
+            assertTrue(js.contains("card.style.removeProperty(k)"), js)
+            assertTrue(js.contains("p.classList.remove('lector-oculto')"), js)
+        }
+    }
+
+    @Test fun `la tarjeta en espera lleva su texto como nombre`() {
+        val js = ParagraphScripts.insert(0, Card.Waiting("Traduciendo…"), labels)
+        assertTrue(js.contains("\"kind\":\"espera\""), js)
+        // org.json escribe "…" escapado: se compara con su propia forma.
+        assertTrue(js.contains("\"spoken\":" + JSONObject.quote("Traduciendo…")), js)
+        assertTrue(js.contains("\"text\":" + JSONObject.quote("Traduciendo…")), js)
+    }
+
+    @Test fun `showOriginal alterna la clase del parrafo y la marca de la tarjeta`() {
+        val on = ParagraphScripts.showOriginal(4, true)
+        assertTrue(on.contains("\"i\":4"), on); assertTrue(on.contains("\"on\":true"), on)
+        assertTrue(ParagraphScripts.showOriginal(4, false).contains("\"on\":false"))
+        for (part in listOf(
+            "p.classList.remove('lector-oculto')", "p.classList.add('lector-oculto')",
+            "setAttribute('data-lector-original', '')", "removeAttribute('data-lector-original')",
+            // Solo una tarjeta Solo (hermano siguiente con nuestra clase e índice).
+            "card.dataset.lectorEstado !== 'solo'", "nextElementSibling",
+        )) assertTrue(on.contains(part), "falta $part")
+        assertFailsWith<IllegalArgumentException> { ParagraphScripts.showOriginal(-1, true) }
+    }
+
+    // Ruling C: sin saltos. insert, remove y showOriginal miden el primer bloque hoja que empieza en pantalla (top ≥ 0,
+    // alto > 0) antes y después del cambio, y corrigen con scrollBy en el mismo script. Nunca go(guardado).
+    @Test fun `insert remove y showOriginal compensan con scrollBy anclado en el primer bloque en pantalla`() {
+        for (js in listOf(
+            ParagraphScripts.insert(2, Card.Text("x"), labels), ParagraphScripts.insert(2, Card.Solo("x"), labels),
+            ParagraphScripts.remove(2), ParagraphScripts.showOriginal(2, true), ParagraphScripts.setMode("tocar"),
+        )) {
+            assertTrue(js.contains("r.top >= 0 && r.height > 0"), js)
+            assertTrue(js.contains("window.scrollBy(0, d)"), js)
+            assertTrue(js.contains("var b = anchor()"), js)
+        }
+    }
+
+    // Si la página se vacía de tarjetas, ningún original puede quedar oculto sin su tarjeta.
+    @Test fun `removeAll y remove vuelven a mostrar los originales ocultos`() {
+        assertTrue(ParagraphScripts.removeAll("OEBPS/c1.xhtml").contains("classList.remove('lector-oculto')"))
+        assertTrue(ParagraphScripts.remove(1).contains("p.classList.remove('lector-oculto')"))
     }
 }

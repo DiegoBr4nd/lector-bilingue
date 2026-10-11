@@ -43,6 +43,23 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
         run(ParagraphScripts.setTheme(theme))
     }
 
+    /**
+     * Párrafos que se ven en la página y los [following] siguientes, de arriba abajo (modos Intercalado y Solo
+     * traducción). Vacío si aún no hay página o la respuesta no cuadra.
+     */
+    suspend fun visible(following: Int = 10): List<PageParagraph> =
+        ParagraphScripts.parseVisible(run(ParagraphScripts.visible(following)))
+
+    /** Pone el modo de la página ("tocar", "intercalado" o "solo"; ver [ParagraphScripts.MODES]). */
+    suspend fun setMode(mode: String) {
+        run(ParagraphScripts.setMode(mode))
+    }
+
+    /** Solo traducción: muestra ([on]) u oculta el original del párrafo [index] en lugar de su traducción. */
+    suspend fun showOriginal(index: Int, on: Boolean) {
+        run(ParagraphScripts.showOriginal(index, on))
+    }
+
     /** Bordes de la página visible (arriba / abajo del todo), o null si aún no hay página o no respondió. */
     suspend fun edges(): PageEdges? = ParagraphScripts.parseEdges(run(ParagraphScripts.edges()))
 

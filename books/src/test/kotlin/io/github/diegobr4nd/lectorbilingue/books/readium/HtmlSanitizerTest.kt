@@ -307,6 +307,26 @@ class HtmlSanitizerTest {
         }
     }
 
+    // Review Focus 5 (3c-2): un libro hostil no puede imitar las marcas de los modos para esconder texto en Solo
+    // traducción (clase lector-oculto) ni fingir el modo (data-lector-modo en <html>) o el original mostrado.
+    @Test fun `quita del libro la clase lector-oculto y los atributos de los modos`() {
+        for (kind in listOf(HtmlSanitizer.Kind.XHTML, HtmlSanitizer.Kind.HTML)) {
+            val markup = """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" data-lector-modo="solo">""" +
+                """<head><title>t</title></head><body data-lector-modo="solo">""" +
+                """<p class="lector-oculto">a</p><li class="x LECTOR-OCULTO y">b</li><h2 class=" lector-oculto ">c</h2>""" +
+                """<blockquote class="lector-ocultos">d</blockquote><dd data-lector-original="">e</dd>""" +
+                """<aside data-lector-original="" data-lector-estado="solo">f</aside></body></html>"""
+            val doc = Jsoup.parse(HtmlSanitizer.sanitize(markup.toByteArray(), kind).toString(Charsets.UTF_8), "", if (kind == HtmlSanitizer.Kind.HTML) Parser.htmlParser() else Parser.xmlParser())
+            assertFalse(doc.select("p").single().hasAttr("class"), kind.name)
+            assertEquals("x y", doc.select("li").single().attr("class"), kind.name)
+            assertFalse(doc.select("h2").single().hasAttr("class"), kind.name)
+            assertEquals("lector-ocultos", doc.select("blockquote").single().attr("class"), kind.name) // otra clase
+            assertTrue(doc.select(".lector-oculto, [data-lector-modo], [data-lector-original]").isEmpty(), kind.name)
+            assertFalse(doc.select("html").single().hasAttr("data-lector-modo"), kind.name)
+            assertTrue(doc.select("p, li, h2, blockquote, dd, aside").all { it.hasText() }, kind.name) // el texto se queda
+        }
+    }
+
     @Test fun `con prefijo o dos pasadas tampoco quedan marcas de tarjeta`() {
         val out = HtmlSanitizer.sanitize(
             """<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>t</h:title></h:head><h:body>""" +

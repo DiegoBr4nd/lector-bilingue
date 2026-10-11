@@ -42,7 +42,7 @@ class ReadingSettingsOnDeviceTest {
     private val app = instrumentation.targetContext.applicationContext as LectorApp
     private val dir = File(app.cacheDir, "reading_settings_test").apply { deleteRecursively(); mkdirs() }
     private val created = mutableListOf<String>()
-    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
+    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…", "Original")
 
     /** Los ajustes de Juan: se devuelven tal cual en [cleanUp]. */
     private val saved = app.settings.readingSettings

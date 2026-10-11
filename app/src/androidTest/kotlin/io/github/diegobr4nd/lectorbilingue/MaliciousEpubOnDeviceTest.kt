@@ -1029,7 +1029,7 @@ p::after { content: url('SPY/after.png'); }
 
     private companion object {
         val MIME = "application/epub+zip".toByteArray()
-        val LABELS = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
+        val LABELS = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…", "Original")
 
         /** Hueco al principio del capítulo: el primer párrafo queda a media pantalla, lejos de las barras del Lector. */
         const val SPACER = """<div style="height: 40vh"></div>"""

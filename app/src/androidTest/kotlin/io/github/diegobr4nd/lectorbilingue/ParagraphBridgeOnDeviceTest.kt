@@ -10,6 +10,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
 import io.github.diegobr4nd.lectorbilingue.ui.reader.PageParagraph
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphBridge
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphScripts
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -38,7 +39,7 @@ class ParagraphBridgeOnDeviceTest {
     private val app = instrumentation.targetContext.applicationContext as LectorApp
     private val dir = File(app.cacheDir, "bridge_test").apply { deleteRecursively(); mkdirs() }
     private val created = mutableListOf<String>()
-    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…")
+    private val labels = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…", "Original")
 
     // Los colores que se miden son los del tema claro: se fija y al final se devuelven los ajustes de la persona.
     private val saved = app.settings.readingSettings.also { app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT) }
@@ -182,6 +183,135 @@ class ParagraphBridgeOnDeviceTest {
         }
     }
 
+    /**
+     * Modos de traducción (3c-2, Task 3): `visible`, `setMode`, la tarjeta Solo (oculta el original y toma su letra con
+     * `getComputedStyle`), `showOriginal`, la tarjeta en espera, sin saltos (Ruling C) y texto hostil como texto.
+     */
+    @Test fun modosVisibleSoloOriginalYSinSaltos() = runBlocking<Unit> {
+        val id = ReaderTestBook.importAndOpen(app, dir).also { created += it }
+        ActivityScenario.launch<ReaderActivity>(ReaderActivity.intent(app, id)).use { s ->
+            val bridge = ParagraphBridge { s.navigator() }
+            waitFor("página lista") {
+                js(s, "document.readyState === 'complete' && !!window.readium && document.querySelectorAll('p').length") == "70"
+            }
+            Thread.sleep(500) // que la pantalla termine de quitar tarjetas viejas y poner el tema (al quedar lista)
+
+            // 1. visible(): los que tocan la pantalla (medidos aquí por separado) y los 10 siguientes, de arriba abajo.
+            val onScreen = JSONArray(js(s, "(function () { var all = $LEAVES; var h = window.innerHeight, on = [];" +
+                " for (var k = 0; k < all.length; k++) { var r = all[k].getBoundingClientRect(); if (r.bottom > 0 && r.top < h) on.push(k); }" +
+                " return JSON.stringify(on); })()")!!).let { a -> (0 until a.length()).map { a.getInt(it) } }
+            assertTrue(onScreen.isNotEmpty() && onScreen.first() == 0, "en pantalla: $onScreen")
+            val seen = bridge.visible()
+            assertEquals(onScreen + (onScreen.last() + 1..onScreen.last() + 10), seen.map { it.index })
+            for (p in seen.filter { it.index >= 1 }) assertEquals(ReaderTestBook.paragraph(p.index), p.text)
+            assertEquals(listOf(onScreen.last() + 1, onScreen.last() + 2), bridge.visible(2).map { it.index } - onScreen.toSet())
+
+            // 2. setMode("solo") + Solo en el h1 (índice 0, una hoja que no es p): el h1 se oculta y la tarjeta toma su letra.
+            bridge.setMode("solo")
+            assertEquals("solo", js(s, "document.documentElement.getAttribute('data-lector-modo')"))
+            val h1Size = js(s, "getComputedStyle(document.querySelector('h1')).fontSize")
+            val h1Top = rectTop(s, 0)
+            bridge.show(0, Card.Solo("Título traducido"), labels)
+            assertEquals("none", js(s, "getComputedStyle(document.querySelector('h1')).display"))
+            assertEquals("true", js(s, "String(document.querySelector('h1').classList.contains('lector-oculto'))"))
+            assertEquals(h1Size, js(s, "getComputedStyle(${card(0)}).fontSize"))
+            assertTrue(abs(rectTop(s, 0) - h1Top) <= 1.0, "la tarjeta no quedó en el sitio del h1")
+            // visible() mide el h1 oculto con su tarjeta: sigue en la lista.
+            assertEquals(0, bridge.visible().first().index)
+
+            // 3. Solo en el primer p: oculto; la tarjeta con su letra, sin fondo ni línea; el ancla (B) no se mueve.
+            val p1 = "document.querySelectorAll('p')[0]"
+            val style = listOf("fontSize", "fontFamily", "lineHeight", "marginBottom", "textIndent", "display")
+                .associateWith { js(s, "getComputedStyle($p1).$it") }
+            val b = anchorIndex(s)
+            val bTop = rectTop(s, b)
+            bridge.show(1, Card.Solo("Hola solo"), labels)
+            assertEquals("none", js(s, "getComputedStyle($p1).display"))
+            for ((k, v) in style) assertEquals(v, js(s, "getComputedStyle(${card(1)}).$k"), k)
+            assertEquals("rgba(0, 0, 0, 0)", js(s, "getComputedStyle(${card(1)}).backgroundColor"))
+            assertEquals("0px", js(s, "getComputedStyle(${card(1)}).borderLeftWidth"))
+            assertEquals("Hola solo", js(s, "${card(1)}.querySelector('.lector-traduccion').textContent"))
+            assertEquals("none", js(s, "getComputedStyle(${card(1)}.querySelector('.lector-marca')).display"))
+            assertTrue(abs(rectTop(s, b) - bTop) <= 1.0, "el ancla se movió: ${rectTop(s, b) - bTop}")
+
+            // 4. showOriginal: vuelve el original con la marca "Original"; la tarjeta pierde el estilo copiado; y vuelta.
+            bridge.showOriginal(1, true)
+            assertEquals(style["display"], js(s, "getComputedStyle($p1).display"))
+            assertEquals("true", js(s, "String(${card(1)}.hasAttribute('data-lector-original'))"))
+            assertEquals("none", js(s, "getComputedStyle(${card(1)}.querySelector('.lector-traduccion')).display"))
+            assertEquals("inline-block", js(s, "getComputedStyle(${card(1)}.querySelector('.lector-marca')).display"))
+            assertEquals("Original", js(s, "${card(1)}.querySelector('.lector-marca').textContent"))
+            assertEquals("", js(s, "${card(1)}.style.getPropertyValue('font-size')"))
+            assertTrue(abs(rectTop(s, b) - bTop) <= 1.0, "el ancla se movió al mostrar el original")
+            bridge.showOriginal(1, false)
+            assertEquals("none", js(s, "getComputedStyle($p1).display"))
+            assertEquals(style["fontSize"], js(s, "getComputedStyle(${card(1)}).fontSize"))
+            assertTrue(abs(rectTop(s, b) - bTop) <= 1.0, "el ancla se movió al volver a la traducción")
+
+            // 5. Texto hostil en Solo: entra como texto, nada se ejecuta ni se crea marcado.
+            val evil = "\"); alert(1); (\" </script><img src=x onerror=alert(2)> <img src=x onerror=\"window.__lectorXss=1\">"
+            val imgs = js(s, "String(document.querySelectorAll('img').length)")
+            bridge.show(1, Card.Solo(evil), labels)
+            Thread.sleep(500)
+            assertEquals(imgs, js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals("undefined", js(s, "typeof window.__lectorXss"))
+            assertEquals(evil, js(s, "${card(1)}.querySelector('.lector-traduccion').textContent"))
+            assertEquals("2", js(s, "String(${card(1)}.children.length)"))
+            assertEquals("0", js(s, "String(${card(1)}.querySelector('.lector-traduccion').children.length)"))
+
+            // 6. En espera: el original se ve, en gris (AA del tema claro), y debajo "Traduciendo…".
+            bridge.show(3, Card.Waiting("Traduciendo…"), labels)
+            val p3 = "document.querySelectorAll('p')[2]"
+            assertEquals("false", js(s, "String($p3.classList.contains('lector-oculto'))"))
+            assertEquals("rgb(107, 114, 128)", js(s, "getComputedStyle($p3).color"))
+            assertEquals("Traduciendo…", js(s, "${card(3)}.textContent"))
+            assertEquals("Traduciendo…", js(s, "${card(3)}.getAttribute('aria-label')"))
+            // Al llegar la traducción, pasa a Solo y el original se oculta.
+            bridge.show(3, Card.Solo("Tres"), labels)
+            assertEquals("none", js(s, "getComputedStyle($p3).display"))
+
+            // 7. Salir de "solo": vuelven los originales y las tarjetas pierden el estilo copiado.
+            bridge.setMode("intercalado")
+            assertEquals("0", js(s, "String(document.querySelectorAll('.lector-oculto').length)"))
+            assertEquals("0", js(s, "String(Array.prototype.filter.call(document.querySelectorAll('aside.lector-tarjeta'), function (c) { return c.style.length > 0 || c.hasAttribute('data-lector-original'); }).length)"))
+            assertEquals(style["display"], js(s, "getComputedStyle($p1).display"))
+
+            // 8. Sin saltos con el párrafo cortado arriba (A): su tarjeta no empuja lo que se lee (B).
+            js(s, "var r = document.querySelectorAll('p')[9].getBoundingClientRect(); window.scrollBy(0, r.top + r.height / 2); 'ok'")
+            Thread.sleep(300)
+            val cutA = 10 // el p[9] (índice 10) queda cortado arriba
+            val b2 = anchorIndex(s)
+            assertEquals(cutA + 1, b2)
+            val b2Top = rectTop(s, b2)
+            bridge.show(cutA, Card.Text("Una traducción bastante larga para que la tarjeta ocupe varias líneas en la pantalla del teléfono."), labels)
+            assertTrue(abs(rectTop(s, b2) - b2Top) <= 1.0, "B se movió al insertar: ${rectTop(s, b2) - b2Top}")
+            bridge.hide(cutA)
+            assertTrue(abs(rectTop(s, b2) - b2Top) <= 1.0, "B se movió al quitar: ${rectTop(s, b2) - b2Top}")
+
+            // 9. Quitar todas también muestra cualquier original oculto.
+            bridge.setMode("solo")
+            bridge.show(12, Card.Solo("Doce"), labels)
+            assertEquals("1", js(s, "String(document.querySelectorAll('.lector-oculto').length)"))
+            val href = s.navigator()!!.currentLocator.value.href.toString()
+            assertEquals(true, bridge.hideAll(href))
+            assertEquals("0", js(s, "String(document.querySelectorAll('.lector-oculto').length + document.querySelectorAll('aside.lector-tarjeta').length)"))
+            bridge.setMode("tocar")
+        }
+    }
+
+    /** `top` de la hoja [k] (si está oculta, el de su tarjeta), como lo mide ParagraphScripts. */
+    private fun rectTop(s: ActivityScenario<ReaderActivity>, k: Int): Double =
+        js(s, "(function () { var e = $LEAVES[$k]; if (e.classList.contains('lector-oculto')) e = e.nextElementSibling;" +
+            " return String(e.getBoundingClientRect().top); })()")!!.toDouble()
+
+    /** El primer bloque hoja que empieza en pantalla (top ≥ 0 y alto > 0): el ancla de Ruling C. */
+    private fun anchorIndex(s: ActivityScenario<ReaderActivity>): Int =
+        js(s, "(function () { var all = $LEAVES; for (var k = 0; k < all.length; k++) { var e = all[k];" +
+            " if (e.classList.contains('lector-oculto')) e = e.nextElementSibling; var r = e.getBoundingClientRect();" +
+            " if (r.top >= 0 && r.height > 0) return String(k); } return '-1'; })()")!!.toInt()
+
+    private fun card(i: Int) = "document.querySelector('aside.lector-tarjeta[data-lector-i=\"$i\"]')"
+
     private fun centerOf(s: ActivityScenario<ReaderActivity>, element: String): Pair<Double, Double> {
         val c = JSONObject(js(s, "var r = $element.getBoundingClientRect(); JSON.stringify({x: r.left + r.width / 2, y: r.top + r.height / 2})")!!)
         return c.getDouble("x") to c.getDouble("y")
@@ -211,5 +341,9 @@ class ParagraphBridgeOnDeviceTest {
 
     private companion object {
         const val CARD = "document.querySelector('aside.lector-tarjeta[data-lector-i=\"1\"]')"
+
+        /** Las hojas, como las cuenta ParagraphScripts (sin tarjetas, sin contenedores). */
+        const val LEAVES = "Array.prototype.filter.call(document.querySelectorAll('${ParagraphScripts.SELECTOR}'), " +
+            "function (e) { return !e.closest('.lector-tarjeta') && !e.querySelector('${ParagraphScripts.SELECTOR}'); })"
     }
 }

@@ -147,6 +147,7 @@ fun ReaderScreen(
         stringResource(R.string.reader_card_translation),
         stringResource(R.string.reader_card_skeleton),
         stringResource(R.string.reader_card_preparing),
+        stringResource(R.string.reader_card_original),
     )
     val currentLabels by rememberUpdatedState(labels)
     val announceTranslating by rememberUpdatedState(stringResource(R.string.reader_card_skeleton))

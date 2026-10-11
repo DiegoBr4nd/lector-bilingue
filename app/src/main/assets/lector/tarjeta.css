@@ -15,6 +15,7 @@
   --lector-error-linea: #b42318;  /* 6,6:1 sobre la página */
   --lector-error-enlace: #912018; /* 8,0:1 sobre el fondo de error */
   --lector-esqueleto: #c7d0ea;    /* rayas decorativas */
+  --lector-espera: #6b7280;       /* 3c-2: original en espera y marca "Original"; 4,8:1 sobre la página */
 }
 
 /* Sepia (página #faf4e8 de Readium): texto 12,5:1, enlace 6,8:1, línea 5,4:1 sobre la página. */
@@ -27,6 +28,7 @@ html[data-lector-tema="sepia"] {
   --lector-error-linea: #a8321e;  /* 6,1:1 sobre la página */
   --lector-error-enlace: #842015;
   --lector-esqueleto: #d8c7a3;
+  --lector-espera: #776a5e;       /* 4,8:1 sobre la página */
 }
 
 /* Oscuro (página #1e1e1e): texto 10,2:1, enlace 7,4:1, línea 7,0:1 sobre la página. */
@@ -39,6 +41,7 @@ html[data-lector-tema="oscuro"] {
   --lector-error-linea: #ff8a80;  /* 7,3:1 sobre la página */
   --lector-error-enlace: #ffb4a9;
   --lector-esqueleto: #4a5470;
+  --lector-espera: #8c8c8c;       /* 5,0:1 sobre la página */
 }
 
 /* Negro (página #000000): texto 13,7:1, enlace 9,9:1, línea 8,8:1 sobre la página. */
@@ -51,6 +54,7 @@ html[data-lector-tema="negro"] {
   --lector-error-linea: #ff8a80;  /* 9,2:1 sobre la página */
   --lector-error-enlace: #ffb4a9;
   --lector-esqueleto: #343d57;
+  --lector-espera: #7a7a7a;       /* 4,9:1 sobre la página */
 }
 
 aside.lector-tarjeta {
@@ -172,4 +176,66 @@ aside.lector-tarjeta[data-lector-estado="preparando"]::after {
   aside.lector-tarjeta[data-lector-estado="preparando"]::after {
     animation: none;
   }
+}
+
+/*
+ * Modos de traducción (3c-2). La app pone `data-lector-modo` en <html> (ParagraphScripts.setMode: tocar, intercalado o
+ * solo). En "tocar" e "intercalado" la tarjeta es la de arriba. En "solo" (Solo traducción):
+ * - el original queda oculto con `lector-oculto` (cualquier hoja: p, li, blockquote, h1–h6, dd) y su tarjeta ocupa
+ *   su lugar con la letra del libro: el script copia a la tarjeta el estilo calculado del original (lista fija, con
+ *   !important en línea); aquí solo se quita fondo, borde y radio, y el color se hereda como el texto del libro;
+ * - al tocar, el original vuelve (`data-lector-original` en la tarjeta) y la tarjeta queda como una marca "Original";
+ * - aún sin traducir, el original se ve en gris (--lector-espera, AA en los 4 temas) y debajo "Traduciendo…".
+ * Especificidad 0,4,2 o más con !important: gana a ReadiumCSS (hasta 0,2,7) y a las reglas de tema de arriba (0,3,2).
+ */
+html[data-lector-modo="solo"] .lector-oculto.lector-oculto {
+  display: none !important;
+}
+
+html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="solo"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+}
+
+/* La marca "Original" solo se ve con el original mostrado; entonces la traducción se esconde. */
+aside.lector-tarjeta .lector-marca {
+  display: none !important;
+}
+
+html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-original] {
+  padding: 0 !important;
+  margin: 0 0 1em !important;
+}
+
+html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-original] .lector-traduccion {
+  display: none !important;
+}
+
+html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-original] .lector-marca {
+  display: inline-block !important;
+  font-size: 0.8em;
+  letter-spacing: 0.02em;
+  color: var(--lector-espera) !important;
+  background-color: transparent !important;
+}
+
+/* En espera: "Traduciendo…" quieto (sin latido), en gris, sin fondo ni línea. */
+html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="espera"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 0 1em !important;
+  font-size: 0.85em;
+  color: var(--lector-espera) !important;
+}
+
+/* El original en espera, en gris. `:has` (WebView 105 o más): en uno más viejo la regla se ignora y el original queda
+   con su color (se pierde solo la pista visual; "Traduciendo…" sigue debajo). */
+html[data-lector-modo="solo"] *:has(+ aside.lector-tarjeta.lector-tarjeta[data-lector-estado="espera"]) {
+  color: var(--lector-espera) !important;
 }

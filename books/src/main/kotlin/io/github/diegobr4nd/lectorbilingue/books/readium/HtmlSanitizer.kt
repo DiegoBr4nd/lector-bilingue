@@ -78,8 +78,14 @@ object HtmlSanitizer {
      */
     const val CARD_STYLESHEET = "https://readium_assets/lector/tarjeta.css"
 
-    /** Clase y prefijo de atributos de las tarjetas de la app (ParagraphScripts en :app). El libro no puede usarlos. */
-    private const val CARD_CLASS = "lector-tarjeta"
+    /**
+     * Clases y prefijo de atributos que solo pone la app (ParagraphScripts en :app). El libro no puede usarlos:
+     * - `lector-tarjeta`: la tarjeta de traducción (3b);
+     * - `lector-oculto`: el original escondido en Solo traducción (3c-2); un libro que la pusiera escondería su texto;
+     * - `data-lector-…`: índice y estado de la tarjeta, tema y modo en `<html>`, original mostrado (`data-lector-modo`,
+     *   `data-lector-original`…).
+     */
+    private val APP_CLASSES = listOf("lector-tarjeta", "lector-oculto")
     private const val CARD_DATA_PREFIX = "data-lector-"
 
     private const val XHTML_NS = "http://www.w3.org/1999/xhtml"
@@ -203,15 +209,16 @@ object HtmlSanitizer {
     }
 
     /**
-     * Las marcas de nuestras tarjetas (clase [CARD_CLASS] y atributos `data-lector-…`) son solo de la app: el libro no
-     * puede hacerse pasar por una tarjeta ni esconder una tocando esas marcas. Las demás clases se quedan.
-     * Sin distinguir mayúsculas: en modo "quirks" el navegador compara las clases así.
+     * Las marcas de la app (clases [APP_CLASSES] y atributos `data-lector-…`) son solo suyas: el libro no puede hacerse
+     * pasar por una tarjeta, esconder una, ni esconder su propio texto en Solo traducción tocando esas marcas. Las
+     * demás clases se quedan. Sin distinguir mayúsculas: en modo "quirks" el navegador compara las clases así.
      */
     private fun removeCardClass(el: Element) {
+        fun isApp(token: String) = APP_CLASSES.any { token.equals(it, ignoreCase = true) }
         for (attr in el.attributes().asList().filter { localName(it.key) == "class" }) {
             val tokens = attr.value.split(' ', '\t', '\n', '\r', '\u000C').filter { it.isNotEmpty() }
-            if (tokens.none { it.equals(CARD_CLASS, ignoreCase = true) }) continue
-            val kept = tokens.filterNot { it.equals(CARD_CLASS, ignoreCase = true) }
+            if (tokens.none(::isApp)) continue
+            val kept = tokens.filterNot(::isApp)
             if (kept.isEmpty()) el.removeAttr(attr.key) else el.attr(attr.key, kept.joinToString(" "))
         }
     }
