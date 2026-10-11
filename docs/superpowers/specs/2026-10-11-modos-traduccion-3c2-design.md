@@ -101,4 +101,30 @@ Resultado en §11.
 | Memoria del motor | La regla `EngineMemory` de la 3c-1; aviso único si falla |
 
 ## 11. Resultado de la comprobación
-(Se completa en la Tarea 1 del plan.)
+
+Pixel 7, 2026-10-11, build de depuración (base e8dc241), tema claro, letra 100 %. Libro inventado: un capítulo de **361 hojas** (h1 + 300 `p` + 12 secciones con `h2`, `blockquote` y `ul` de 3 `li`); viewport 786 px CSS. Rama `spike/3c2-modos` (borrada). Tarjetas con texto inventado (sin motor). "A" = primer párrafo visible (su borde de abajo ya pasó el tope); "B" = primer párrafo que **empieza** en pantalla (lo que se está leyendo). Los saltos se midieron cuadro a cuadro con `requestAnimationFrame` ("cuadros movidos" = cuadros con más de 1 px de diferencia).
+
+| # | Qué | Resultado | ¿Pasa? |
+|---|---|---|---|
+| M1 | `visible(10)` (selector y filtro de la 3b, `getBoundingClientRect` vs `innerHeight`, mismo recorte y `cut`) | JS **0,8–8,4 ms** (1.ª llamada 7,3 ms); ida y vuelta Kotlin↔página **5,6–18,6 ms**. Peor caso, con una tarjeta bajo cada una de las 361 hojas: JS **9,9–13,7 ms**, ida y vuelta **21–45 ms**. Devuelve 15–19 párrafos (~3 KB). | Sí (< 50 ms) |
+| M2a | Tarjetas en visibles y más abajo (19 tarjetas, esqueleto → texto, una por llamada) | A: **0 px**. Pero B baja **166 px** (153 de 155 cuadros): la tarjeta del párrafo A, cortado arriba, empuja todo lo que se lee. | No, sin corrección |
+| M2a + (b) | Igual, con `scrollBy` en el mismo script anclado en **B** | B: **0,2 px**, 0 cuadros movidos (A sale por arriba, como se espera). Compensa 94,9 px en la 1.ª inserción; las demás, 0. | Sí |
+| M2b | 6 tarjetas **por encima** de la pantalla, sin corregir | A y B: **0,3 px**, 0 cuadros movidos. El WebView ya trae el *scroll anchoring* de Chrome (`overflow-anchor: auto` en `html` y `body`): corrige solo lo que cambia arriba (`scrollY` +761 px). | Sí |
+| M2b + (a) | Guardar `currentLocator` + `go(guardado, animated = false)` (truco de la 3c-1) | **Empeora:** salto final de **381 px** y 94 cuadros movidos. El localizador en modo continuo solo trae `progression` (claves `progression`, `position`, `totalProgression`, sin texto), y la progresión se recalcula sobre un capítulo ahora más alto. | **No** |
+| M2b + (b) | `scrollBy` en el mismo script | 0,7 px, 0 cuadros movidos; compensa ±0,2 px (el *anchoring* ya lo hizo; no se suman). | Sí |
+| M3 | Solo traducción: ocultar el original (`lector-oculto`) y poner la tarjeta en su lugar, en el mismo script | El reemplazo del primer párrafo queda en su sitio (A: 0 px) y B baja exactamente la diferencia de alto entre original y traducción (**96,8 px**; 48 → 145 px en ese párrafo), como preveía §3. Con la compensación (b) anclada en B: **0,1 px**, 0 cuadros movidos. | Sí, con (b) |
+| M4 | Citas, listas y encabezados en Solo traducción (capturas) | Con solo CSS heredado (`font-size: inherit`…) **se pierde la estructura**: el `h2` sale como párrafo, la cita sin sangría, los `li` sin viñeta. Copiando a la tarjeta el estilo calculado del original (lista fija, abajo) se ven como el libro: título grande, cita con sangría, viñetas; también en oscuro (`color: inherit`). | Sí, copiando estilo |
+
+**Técnica elegida para insertar sin saltos: (b) `scrollBy` dentro del mismo script, anclado en el primer párrafo que empieza en pantalla (B).**
+- Por qué: el script mide el `top` de B, inserta (o cambia) la tarjeta y corrige con `window.scrollBy(0, Δ)` antes de que el WebView pinte: ningún cuadro sale movido. (a) depende de la `progression` del localizador, que cambia al crecer el capítulo: salta 381 px y además se ven cuadros fuera de sitio entre la inserción y el `go`.
+- Lo que cambia **por encima** de la pantalla ya lo corrige el *scroll anchoring* de Chrome; (b) no lo duplica (Δ ≈ 0). La regla "solo visibles y más abajo" se mantiene como límite de trabajo (gasto), ya no por los saltos.
+- El caso que de verdad salta es la tarjeta del párrafo cortado arriba (A): (b) lo corrige. Lo mismo al ocultar/mostrar en Intercalado y al alternar el original en Solo traducción.
+- `go(guardado)` (truco de la 3c-1) **no** se usa para las tarjetas.
+
+**Cambios a la §5.2 que salen de la comprobación:**
+- `insert`, `remove` y `showOriginal` llevan la compensación (b) dentro del mismo script (anclada en B: el primer párrafo hoja con `top ≥ 0` y alto > 0; si no hay, sin compensar).
+- En "solo", antes de ocultar el original, la tarjeta copia de él una **lista fija** de propiedades con `style.setProperty(…, 'important')` (CSSOM: la CSP no lo frena y no es marcado): `display, font-family, font-size, font-weight, font-style, line-height, text-indent, text-align, letter-spacing, margin-*, padding-*, list-style-type, list-style-position`. Fondo, borde y color salen de tarjeta.css (`transparent`, `0`, `inherit`). Al volver a otro modo se quita ese estilo.
+- `lector-oculto` vale para **toda hoja** (`p, li, blockquote, h1–h6, dd`), no solo `p`.
+- `visible()`: un original oculto se mide con el rectángulo de su tarjeta (oculto da 0×0).
+
+Capturas (no van al repo), en `C:\Users\JUAN\AppData\Local\Temp\claude\C--Users-JUAN-Documents-lector-bilingue\7825bb96-c19c-4248-8529-7df99ae37d55\scratchpad\spike-3c2\`: `m4-s4-1-tocar.png`, `m4-s4-2-intercalado.png`, `m4-s4-3-solo-css.png` (estructura perdida), `m4-s4-3-solo-copia.png`, `m4-s4-4-solo-copia-oscuro.png`; números en `results-m1.txt`, `results-m2.txt`, `results-m3.txt`.
