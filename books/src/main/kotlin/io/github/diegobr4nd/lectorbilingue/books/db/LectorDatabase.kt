@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /** Base de datos de la app. v2 (3b): caché de traducciones y dirección por libro (ver [MIGRATION_1_2]). */
 @Database(entities = [BookEntity::class, TranslationEntity::class], version = 2, exportSchema = true)
@@ -13,9 +14,22 @@ abstract class LectorDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "lector.db"
-        fun open(context: Context): LectorDatabase =
-            Room.databaseBuilder(context.applicationContext, LectorDatabase::class.java, NAME)
+
+        /**
+         * Al abrir: `secure_delete = ON` hace que SQLite ponga en ceros lo que borra (DELETE), para que el texto de
+         * las traducciones no quede en páginas libres del .db. El WAL guarda copias viejas hasta un checkpoint: quien
+         * borra hace después [TranslationDao.checkpointWal]. [name] solo cambia en pruebas.
+         */
+        fun open(context: Context, name: String = NAME): LectorDatabase =
+            Room.databaseBuilder(context.applicationContext, LectorDatabase::class.java, name)
                 .addMigrations(MIGRATION_1_2)
+                .addCallback(object : Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        // PRAGMA devuelve una fila: se usa query (no execSQL). El cursor es perezoso: sin moveToFirst()
+                        // la sentencia no se ejecuta.
+                        db.query("PRAGMA secure_delete = ON").use { it.moveToFirst() }
+                    }
+                })
                 .build()
     }
 }

@@ -38,6 +38,11 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
      */
     suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
 
+    /** Pone el tema de la tarjeta ("claro", "sepia", "oscuro" o "negro") en la página visible. */
+    suspend fun setTheme(theme: String) {
+        run(ParagraphScripts.setTheme(theme))
+    }
+
     /** Bordes de la página visible (arriba / abajo del todo), o null si aún no hay página o no respondió. */
     suspend fun edges(): PageEdges? = ParagraphScripts.parseEdges(run(ParagraphScripts.edges()))
 

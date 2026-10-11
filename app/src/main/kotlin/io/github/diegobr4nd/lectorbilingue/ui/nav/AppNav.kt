@@ -17,6 +17,7 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
+import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
@@ -29,6 +30,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
 fun AppNav(
     settings: AppSettings,
     hub: ModelHubApi,
+    translationCache: TranslationCacheApi? = null,
     onClose: () -> Unit = {},
     // "Ranura" (slot): un hueco que llena quien llama (MainActivity pone la Biblioteca; las pruebas, lo que necesiten).
     library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) -> Unit = { _, _ -> },
@@ -85,7 +87,7 @@ fun AppNav(
                     library({ backStack.add(Route.Languages) }, if (developer.available) ({ backStack.add(Route.Developer) }) else null)
                 }
                 Route.Languages -> NavEntry(key) {
-                    LanguagesScreen(hub = hub, settings = settings, onBack = { pop() })
+                    LanguagesScreen(hub = hub, settings = settings, onBack = { pop() }, cache = translationCache)
                 }
                 Route.Developer -> NavEntry(key) {
                     // Sin pantalla de desarrollador (release) esta ruta no se alcanza: Routes la descarta.

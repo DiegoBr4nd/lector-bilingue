@@ -14,11 +14,18 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Lo que Idiomas necesita del caché de traducciones (una interfaz para poder probar la pantalla sin Room). */
+interface TranslationCacheApi {
+    suspend fun cacheBytes(): Long
+    suspend fun clearCache()
+}
 
 enum class Priority { TAP, PREFETCH }
 
@@ -70,7 +77,7 @@ class TranslationService(
     private val worker: CoroutineDispatcher,          // un solo hilo
     private val scope: CoroutineScope,                // vive lo que la app
     private val idleUnloadMillis: Long = 120_000,
-) {
+) : TranslationCacheApi {
     /** Un párrafo en la fila o en curso. [key] usa la etiqueta del modelo que se esperaba usar al pedirlo. */
     private class Entry(
         val key: String,
@@ -152,21 +159,49 @@ class TranslationService(
 
     /** Al salir del Lector: cancela la fila (también lo que está en curso) y descarga el motor. */
     fun release() {
-        synchronized(lock) {
-            prefetchEpoch++
-            keepResource = null
-            (taps + prefetches).forEach { it.result.cancel() }
-            running?.result?.cancel()
-            taps.clear()
-            prefetches.clear()
-            pending.clear()
-            running = null
-            loop?.cancel()
-            loop = null
-            idle?.cancel()
-            idle = null
-        }
+        synchronized(lock) { releaseLocked() }
         scope.launch(worker) { unloadEngine() }
+    }
+
+    /** Con el candado tomado. Devuelve el bucle que cancela (o null) para poder esperarlo sin que se escape otro. */
+    private fun releaseLocked(): Job? {
+        prefetchEpoch++
+        keepResource = null
+        (taps + prefetches).forEach { it.result.cancel() }
+        running?.result?.cancel()
+        taps.clear()
+        prefetches.clear()
+        pending.clear()
+        running = null
+        val cancelled = loop
+        cancelled?.cancel()
+        loop = null
+        idle?.cancel()
+        idle = null
+        return cancelled
+    }
+
+    /** Tamaño aproximado de las traducciones guardadas, en bytes. */
+    override suspend fun cacheBytes(): Long = cache.approxBytes()
+
+    /**
+     * Borra todas las traducciones guardadas. Primero [release] (vacía la fila y cancela lo que está en curso) y se
+     * espera a que el bucle termine de verdad: así nada en curso puede guardar una fila justo después de borrar.
+     *
+     * Privacidad: `secure_delete` (ver `LectorDatabase.open`) pone en ceros lo borrado, pero las copias de las páginas
+     * con el texto viejo siguen en el WAL ("lector.db-wal") hasta un checkpoint. Por eso, tras borrar, se hace un
+     * checkpoint que vacía el WAL: después el texto no queda ni en el .db ni en el -wal. Room lo corre fuera del hilo
+     * principal.
+     */
+    override suspend fun clearCache() {
+        val cancelled = synchronized(lock) { releaseLocked() }
+        scope.launch(worker) { unloadEngine() }
+        // Aunque se salga de Idiomas a mitad, el borrado termina: si no, quedaría a medias.
+        withContext(NonCancellable) {
+            cancelled?.join()
+            cache.deleteAll()
+            cache.checkpointWal()
+        }
     }
 
     /** true si hay un motor cargado para [pair] (la tarjeta muestra "Traduciendo…" en vez de "Preparando el traductor…"). */

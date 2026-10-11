@@ -110,9 +110,9 @@ class ModelActionsTest {
         assertEquals(ModelMessage.UNKNOWN, ModelActions.classifyImport(RuntimeException("x")))
     }
 
-    @Test fun `solo cancelar, importar bien y descargar bien no son errores`() {
+    @Test fun `solo cancelar, importar, descargar, borrar y borrar traducciones bien no son errores`() {
         val ok = ModelMessage.entries.filter { !it.isError }.toSet()
-        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK, ModelMessage.DOWNLOAD_OK, ModelMessage.DELETE_OK), ok)
+        assertEquals(setOf(ModelMessage.CANCELLED, ModelMessage.IMPORT_OK, ModelMessage.DOWNLOAD_OK, ModelMessage.DELETE_OK, ModelMessage.CACHE_CLEARED), ok)
     }
 
     @Test fun `mensaje final de la descarga segun el estado`() {

@@ -6,11 +6,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -21,6 +23,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,6 +34,7 @@ import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
 import io.github.diegobr4nd.lectorbilingue.data.PairStatus
 import io.github.diegobr4nd.lectorbilingue.data.RowStatus
+import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.ui.library.LanguageNotice
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryContent
@@ -207,5 +211,60 @@ class LanguagesOnDeviceTest {
         androidx.test.espresso.Espresso.pressBack()
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Falta Rápido", substring = true).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Falta Rápido", substring = true).assertHeightIsAtLeast(48.dp)
+    }
+
+    /** Caché falso: [fail] hace fallar el borrado; [measureFails], la medida. Nunca toca la base real. */
+    private class LangFakeCache(var bytes: Long, val fail: Boolean = false, var measureFails: Boolean = false) : TranslationCacheApi {
+        override suspend fun cacheBytes(): Long = if (measureFails) error("no se pudo medir") else bytes
+        override suspend fun clearCache() {
+            if (fail) error("fallo")
+            bytes = 0
+        }
+    }
+
+    private fun showLanguagesWithCache(cache: TranslationCacheApi) {
+        rule.setContent {
+            LectorTheme { LanguagesScreen(hub = LangFakeHub(installedOpus()), settings = settings, onBack = {}, cache = cache) }
+        }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Motor").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** I4: el aviso de borrar sale junto a la fila de traducciones guardadas (donde está el dedo), no arriba. */
+    private fun assertCacheMessageNextToRow(message: String, rowText: String) {
+        rule.waitUntil(5_000) { rule.onAllNodesWithText(message).fetchSemanticsNodes().isNotEmpty() }
+        val nodes = rule.onAllNodesWithText(message).fetchSemanticsNodes()
+        assertEquals(1, nodes.size, "el aviso sale una sola vez")
+        val msg = nodes.single()
+        assertEquals(LiveRegionMode.Polite, msg.config[SemanticsProperties.LiveRegion])
+        val row = rule.onNodeWithText(rowText, substring = true).fetchSemanticsNode().boundsInRoot
+        val gap = with(rule.density) { (msg.boundsInRoot.top - row.bottom).toDp() }
+        assertTrue(gap >= (-1).dp && gap < 40.dp, "el aviso está lejos de la fila: $gap")
+    }
+
+    @Test
+    fun el_aviso_de_traducciones_borradas_sale_junto_a_la_fila() {
+        showLanguagesWithCache(LangFakeCache(bytes = 3_355_443L))
+        rule.onNodeWithText("Traducciones guardadas", substring = true).performScrollTo()
+        rule.onNodeWithContentDescription("Borrar las traducciones guardadas", substring = true).performClick()
+        rule.onNode(inDialog("Borrar")).performClick()
+        assertCacheMessageNextToRow("Traducciones borradas", "Traducciones guardadas: ninguna")
+    }
+
+    @Test
+    fun el_aviso_de_fallo_al_borrar_sale_junto_a_la_fila() {
+        showLanguagesWithCache(LangFakeCache(bytes = 3_355_443L, fail = true))
+        rule.onNodeWithText("Traducciones guardadas", substring = true).performScrollTo()
+        rule.onNodeWithContentDescription("Borrar las traducciones guardadas", substring = true).performClick()
+        rule.onNode(inDialog("Borrar")).performClick()
+        assertCacheMessageNextToRow("No se pudieron borrar las traducciones", "Traducciones guardadas: aprox.")
+    }
+
+    /** M4: si no se puede medir, no dice "ninguna" y Borrar sigue disponible. */
+    @Test
+    fun si_no_se_puede_medir_dice_tamano_desconocido_y_se_puede_borrar() {
+        showLanguagesWithCache(LangFakeCache(bytes = 3_355_443L, measureFails = true))
+        rule.onNodeWithText("Traducciones guardadas: tamaño desconocido").performScrollTo().assertExists()
+        rule.onNodeWithText("Traducciones guardadas: ninguna").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Borrar las traducciones guardadas").assertIsEnabled()
     }
 }

@@ -23,5 +23,7 @@ fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.IMPORT_OK -> R.string.hub_msg_import_ok
     ModelMessage.DOWNLOAD_OK -> R.string.hub_msg_download_ok
     ModelMessage.DELETE_OK -> R.string.hub_msg_delete_ok
+    ModelMessage.CACHE_CLEARED -> R.string.languages_cache_cleared
+    ModelMessage.CACHE_CLEAR_FAILED -> R.string.languages_cache_clear_failed
     ModelMessage.UNKNOWN -> R.string.hub_msg_unknown
 }

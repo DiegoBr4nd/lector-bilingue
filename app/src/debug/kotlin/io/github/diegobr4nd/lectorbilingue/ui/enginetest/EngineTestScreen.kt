@@ -530,7 +530,9 @@ private fun ModelMessage.textRes(): Int = when (this) {
     ModelMessage.IMPORT_OK -> R.string.msg_import_ok
     ModelMessage.DOWNLOAD_OK -> R.string.msg_download_ok
     ModelMessage.DELETE_OK -> R.string.msg_delete_ok
-    ModelMessage.UNKNOWN -> R.string.msg_unknown
+    // Solo los usa Idiomas (borrar traducciones); esta pantalla de desarrollo nunca los recibe.
+    ModelMessage.CACHE_CLEARED -> R.string.msg_delete_ok
+    ModelMessage.CACHE_CLEAR_FAILED, ModelMessage.UNKNOWN -> R.string.msg_unknown
 }
 
 @Composable

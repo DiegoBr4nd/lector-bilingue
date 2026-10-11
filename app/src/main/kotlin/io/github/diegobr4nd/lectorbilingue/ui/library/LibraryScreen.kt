@@ -123,6 +123,8 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(Unit) { app.settings.loadEnginePreference() } // Primera lectura fuera del hilo principal.
+    // Los ajustes de lectura, listos antes de abrir un libro (el Lector arranca con ellos).
+    LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
     val vm: LibraryViewModel = viewModel(
         factory = viewModelFactory {
             initializer {

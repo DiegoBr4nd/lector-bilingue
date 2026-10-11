@@ -17,7 +17,7 @@ import java.util.UUID
 enum class ModelMessage(val isError: Boolean = true) {
     NO_CATALOG, NO_CATALOG_IMPORT, NO_MODEL, DOWNLOAD_BUSY, CANCELLED(isError = false), NETWORK, POLICY,
     SIGNATURE, INTEGRITY, CATALOG, FILES, INVALID_ZIP, IMPORT_NO_MATCH, IMPORT_OK(isError = false),
-    DOWNLOAD_OK(isError = false), DELETE_OK(isError = false), UNKNOWN,
+    DOWNLOAD_OK(isError = false), DELETE_OK(isError = false), CACHE_CLEARED(isError = false), CACHE_CLEAR_FAILED, UNKNOWN,
 }
 
 /** Lógica pura (sin Android) de los botones de modelos: se prueba en la JVM. */

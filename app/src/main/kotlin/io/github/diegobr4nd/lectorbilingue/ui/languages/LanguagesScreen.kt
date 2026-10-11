@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -68,6 +69,7 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.EnginePreference
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.ModelMessage
+import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
 import io.github.diegobr4nd.lectorbilingue.ui.BottomInsetSpacer
 import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
@@ -86,9 +88,11 @@ fun LanguagesScreen(
     settings: AppSettings,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Las traducciones guardadas. La fila de borrar se ve siempre; sin él dice "ninguna" y Borrar queda apagado. */
+    cache: TranslationCacheApi? = null,
 ) {
     val viewModel: LanguagesViewModel =
-        viewModel(factory = viewModelFactory { initializer { LanguagesViewModel(hub, settings) } })
+        viewModel(factory = viewModelFactory { initializer { LanguagesViewModel(hub, settings, cache) } })
     val ui by viewModel.state.collectAsStateWithLifecycle()
     val cards by viewModel.cards.collectAsStateWithLifecycle()
     val loaded by viewModel.loaded.collectAsStateWithLifecycle()
@@ -140,6 +144,9 @@ fun LanguagesScreen(
         onRetry = viewModel::refresh,
         onConfirm = viewModel::confirm,
         onDismissConfirm = viewModel::dismissConfirm,
+        onClearCache = viewModel::requestClearCache,
+        onConfirmClearCache = viewModel::confirmClearCache,
+        onDismissClearCache = viewModel::dismissClearCache,
         modifier = modifier,
     )
 }
@@ -161,6 +168,9 @@ fun LanguagesContent(
     onConfirm: () -> Unit,
     onDismissConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    onClearCache: () -> Unit = {},
+    onConfirmClearCache: () -> Unit = {},
+    onDismissClearCache: () -> Unit = {},
 ) {
     ScreenFrame(modifier) {
         Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
@@ -178,7 +188,9 @@ fun LanguagesContent(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.m),
         ) {
-            if (ui.message != null) MessageText(ui.message)
+            // Los avisos de borrar traducciones salen junto a su fila (abajo, donde está el dedo); los demás, arriba.
+            val cacheMessage = ui.message?.takeIf { it.isCacheMessage }
+            if (ui.message != null && cacheMessage == null) MessageText(ui.message)
             when {
                 !loaded -> LoadingLine(stringResource(R.string.languages_searching))
                 else -> {
@@ -198,6 +210,16 @@ fun LanguagesContent(
                     EngineSelector(ui.preference, autoLine, onSelectEngine)
                 }
             }
+            // Al final, antes de Importar: lo que ocupan las traducciones guardadas (se apaga si no hay nada).
+            if (loaded) {
+                // La fila y su aviso juntos (sin el espacio de la columna entre ellos).
+                Column {
+                    CacheRow(ui.cacheBytes, enabled = !ui.busy, onClear = onClearCache)
+                    cacheMessage?.let { MessageText(it) }
+                }
+            } else {
+                cacheMessage?.let { MessageText(it) }
+            }
             if (ui.busy) LoadingLine(stringResource(R.string.languages_working))
             // Importar se ve siempre, aunque no haya catálogo o esté buscando.
             TextButton(
@@ -214,7 +236,53 @@ fun LanguagesContent(
         }
     }
     ui.pending?.let { PendingDialog(it, onConfirm, onDismissConfirm) }
+    if (ui.confirmCache) {
+        ConfirmDialog(
+            title = stringResource(R.string.languages_cache_confirm_title),
+            body = stringResource(R.string.languages_cache_confirm_body),
+            confirmLabel = stringResource(R.string.languages_cache_delete),
+            onConfirm = onConfirmClearCache,
+            onDismiss = onDismissClearCache,
+            destructive = true,
+        )
+    }
 }
+
+/**
+ * "Traducciones guardadas: aprox. 3,2 MB" y el botón Borrar. Siempre visible: sin nada guardado dice "ninguna" y Borrar
+ * queda apagado; si no se pudo medir ([bytes] null) dice "tamaño desconocido" y Borrar sigue disponible.
+ */
+@Composable
+private fun CacheRow(bytes: Long?, enabled: Boolean, onClear: () -> Unit) {
+    val size = bytes?.let { LanguagesRules.cacheSizeMb(it) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            when {
+                bytes == null -> stringResource(R.string.languages_cache_unknown)
+                size == null -> stringResource(R.string.languages_cache_none)
+                else -> stringResource(R.string.languages_cache_label, size)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(Spacing.s))
+        val description = when {
+            bytes == null -> stringResource(R.string.languages_cache_delete_description_unknown)
+            size == null -> null
+            else -> stringResource(R.string.languages_cache_delete_description, size)
+        }
+        TextButton(
+            onClick = onClear,
+            enabled = enabled && LanguagesRules.canClearCache(bytes),
+            shape = ButtonShape,
+            modifier = Modifier.heightIn(min = 48.dp).semantics { description?.let { contentDescription = it } },
+        ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+/** Avisos de borrar las traducciones guardadas: se muestran bajo su fila. */
+private val ModelMessage.isCacheMessage: Boolean
+    get() = this == ModelMessage.CACHE_CLEARED || this == ModelMessage.CACHE_CLEAR_FAILED
 
 /** Aviso fijo en lenguaje sencillo; los errores van en el color de error y se anuncian solos. */
 @Composable

@@ -64,8 +64,10 @@ class TapTranslateTimingOnDeviceTest {
         // 1. Motor frío (incluye la carga).
         app.translations.release()
         delay(1_000)
+        // Si el frío falla, el mensaje dice qué resultado fue y cuánta memoria libre había (solo números y nombres de tipo).
+        val freeMb = availMb()
         val (cold, rc) = timed(paragraph(0, 50))
-        assertTrue(rc is TranslateResult.Done, "frío no terminó")
+        assertTrue(rc is TranslateResult.Done, "frío no terminó: ${rc::class.simpleName}, libres=${freeMb} MB")
 
         // 2. Motor cargado, párrafo típico (50 palabras), 5 muestras.
         val warm = (1..5).map { n -> timed(paragraph(n, 50)).also { assertTrue(it.second is TranslateResult.Done) }.first }
@@ -92,6 +94,13 @@ class TapTranslateTimingOnDeviceTest {
         Log.i(TAG, "pretraducido_ms=${cachedMs.joinToString(",")}")
         Log.i(TAG, "lote20 palabras=$words total_ms=$total palabras_por_s=${"%.1f".format(words * 1000.0 / total)}")
         app.translations.release()
+    }
+
+    /** Memoria libre del teléfono en MB: el servicio no carga OPUS con menos de 450 MB libres (da EngineFailed). */
+    private fun availMb(): Long {
+        val info = android.app.ActivityManager.MemoryInfo()
+        app.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
+        return info.availMem / (1024 * 1024)
     }
 
     private companion object { const val TAG = "TimingTap" }

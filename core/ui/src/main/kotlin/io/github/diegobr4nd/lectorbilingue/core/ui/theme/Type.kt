@@ -29,6 +29,16 @@ val ReadingFontFamily = FontFamily(
     Font(R.font.literata_italic, FontWeight.Normal, FontStyle.Italic),
 )
 
+/**
+ * Atkinson Hyperlegible (Braille Institute, OFL 1.1): letra pensada para baja visión. Aquí solo para mostrarla en la
+ * hoja de ajustes; en el libro la sirve Readium desde assets/lector/fuentes/.
+ */
+val AtkinsonFamily = FontFamily(
+    Font(R.font.atkinson_regular, FontWeight.Normal),
+    Font(R.font.atkinson_bold, FontWeight.Bold),
+    Font(R.font.atkinson_italic, FontWeight.Normal, FontStyle.Italic),
+)
+
 private fun TextStyle.inter() = copy(fontFamily = InterFamily)
 
 val LectorTypography: Typography = Typography().let { b ->

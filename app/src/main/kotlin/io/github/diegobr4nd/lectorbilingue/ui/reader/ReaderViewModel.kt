@@ -3,7 +3,9 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
+import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.Priority
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslateRequest
 import io.github.diegobr4nd.lectorbilingue.data.TranslateResult
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
@@ -51,6 +53,8 @@ class ReaderViewModel(
     private val translations: TranslationService,
     /** Idiomas del EPUB (`publication.metadata.languages`), para la dirección automática. */
     private val languages: List<String>,
+    /** Ajustes del teléfono: de aquí salen y aquí se guardan los ajustes de lectura (iguales para todos los libros). */
+    private val settings: AppSettings,
 ) : ViewModel() {
     private val position = MutableStateFlow<ReaderPosition?>(null)
     private var lastSaved: ReaderPosition? = null
@@ -158,6 +162,23 @@ class ReaderViewModel(
             }
         }
     }
+
+    /** Ajustes de lectura de la hoja "Ajustes de lectura". Valen los de fábrica hasta que se leen del teléfono. */
+    val readingSettings: StateFlow<ReadingSettings> get() = settings.readingSettingsFlow
+
+    /** Guarda los ajustes (el tamaño ya acotado) y los publica en el mismo instante: el libro cambia enseguida. */
+    fun setReadingSettings(new: ReadingSettings) {
+        settings.readingSettings = new
+    }
+
+    /** Un cambio de la hoja ("qué cambiar"): se aplica sobre los últimos ajustes, así dos toques seguidos no se pisan. */
+    fun updateReadingSettings(change: (ReadingSettings) -> ReadingSettings) = settings.updateReadingSettings(change)
+
+    /** A+ / A−: un paso de 10 %, sin pasar de 75 % ni de 250 %. */
+    fun stepFontScale(up: Boolean) = updateReadingSettings { it.copy(fontScale = ReadingRules.step(it.fontScale, up)) }
+
+    /** "Restablecer": vuelve a los de fábrica (respetan el estilo del libro). */
+    fun resetReadingSettings() = setReadingSettings(ReadingSettings())
 
     /** Guarda la dirección del libro, cierra todas las tarjetas (eran de la otra dirección) y vacía la fila del servicio. */
     fun setDirection(pair: LanguagePair) {

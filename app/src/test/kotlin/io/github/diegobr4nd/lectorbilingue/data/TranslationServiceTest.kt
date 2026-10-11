@@ -7,6 +7,7 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -260,5 +261,148 @@ class TranslationServiceTest {
         assertEquals(TranslateResult.ParagraphFailed, s.translate(req("A.")))
         assertEquals(TranslateResult.Done("T(B.)"), s.translate(req("B.")))
         assertTrue(dao.rows.keys.none { it == key("A.") })
+    }
+
+    // --- Borrar las traducciones guardadas ---
+
+    @Test fun borrarConTraduccionEnCursoNoDejaFilas() = runTest(dispatcher) {
+        val engine = FakeEngine(gate = true)
+        val s = service(engine)
+        dao.rows[key("Vieja.")] = TranslationEntity(key("Vieja."), "T(Vieja.)", 1L)
+        s.prefetch(listOf(req("pre1.", Priority.PREFETCH), req("pre2.", Priority.PREFETCH)))
+        val tap = async { runCatching { s.translate(req("toque.", Priority.TAP)) } }
+        runCurrent() // una traducción en curso, detenida en la compuerta
+        s.clearCache()
+        engine.releaseAll()
+        advanceUntilIdle()
+        assertTrue(dao.rows.isEmpty(), "no debe quedar ninguna fila")
+        assertTrue(tap.await().exceptionOrNull() is CancellationException, "el pedido en curso recibe cancelación")
+        assertEquals(0L, s.cacheBytes())
+    }
+
+    // I2: secure_delete pone en ceros las páginas del .db, pero las copias viejas siguen en el WAL hasta un checkpoint.
+    @Test fun borrarVaciaElWalDespuesDeBorrar() = runTest(dispatcher) {
+        dao.rows["k"] = TranslationEntity("k", "texto", 1L)
+        service().clearCache()
+        advanceUntilIdle()
+        assertEquals(listOf("deleteAll", "PRAGMA wal_checkpoint(TRUNCATE)"), dao.maintenance)
+    }
+
+    @Test fun borrarConLaFilaVaciaNoFalla() = runTest(dispatcher) {
+        val s = service()
+        s.clearCache()
+        advanceUntilIdle()
+        assertEquals(0L, s.cacheBytes())
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun despuesDeBorrarSeSigueTraduciendo() = runTest(dispatcher) {
+        val s = service()
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        s.clearCache()
+        advanceUntilIdle()
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test fun cacheBytesDaElTamanoAproximadoDelDao() = runTest(dispatcher) {
+        dao.rows["ab"] = TranslationEntity("ab", "cde", 1L)
+        assertEquals(10L, service().cacheBytes())
+    }
+
+    // Un motor nativo bloquea el hilo sin suspender: cancelar no lo detiene hasta que vuelve.
+    @Test fun borrarEsperaAUnMotorQueBloqueaSinSuspender() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val blocking = object : io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine {
+            override val id = EngineId.OPUS.wire
+            override suspend fun load(pair: LanguagePair, config: io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig) {}
+            override suspend fun translate(sentences: List<String>): List<String> {
+                started.countDown()
+                latch.await() // bloquea el hilo (sin suspender), como el código nativo
+                return sentences.map { "T($it)" }
+            }
+            override fun unload() {}
+        }
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val real = executor.asCoroutineDispatcher()
+        val realDao = FakeTranslationDao()
+        val s = TranslationService(
+            FakeEngineProvider(opus = FakeEngine()).let { p ->
+                object : EngineProvider by p {
+                    override fun engine(id: EngineId) = blocking
+                }
+            },
+            realDao, clock = { 42L }, worker = real, scope = translationScope(real),
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                val tap = async(kotlinx.coroutines.Dispatchers.Default) { runCatching { s.translate(req("Toque.")) } }
+                assertTrue(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                val clear = async(kotlinx.coroutines.Dispatchers.Default) { s.clearCache() }
+                kotlinx.coroutines.delay(300) // clearCache ya esperando al bucle bloqueado
+                assertFalse(clear.isCompleted, "debe esperar a que el motor vuelva")
+                latch.countDown()
+                clear.await()
+                tap.await()
+                assertTrue(realDao.rows.isEmpty(), "el guardado del motor bloqueado cayó antes del borrado")
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    // Lo que hace la prueba de tiempos en el teléfono: soltar y pedir enseguida, sin esperar la descarga.
+    @Test fun pedirJustoDespuesDeSoltarVuelveACargarYTraduce() = runTest(dispatcher) {
+        val engine = FakeEngine()
+        val s = service(engine)
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        s.release()
+        assertEquals(TranslateResult.Done("T(B.)"), s.translate(req("B.")))
+        assertEquals(1, engine.unloadCount)
+        assertEquals(2, engine.loadCount)
+    }
+
+    // Con un hilo real y un motor que bloquea (como el nativo): soltar a mitad y pedir enseguida no pierde el pedido.
+    @Test fun pedirTrasSoltarConElMotorBloqueadoTraduceAlVolver() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var calls = 0
+        val blocking = object : io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine {
+            override val id = EngineId.OPUS.wire
+            override suspend fun load(pair: LanguagePair, config: io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig) {}
+            override suspend fun translate(sentences: List<String>): List<String> {
+                if (calls++ == 0) {
+                    started.countDown()
+                    latch.await()
+                }
+                return sentences.map { "T($it)" }
+            }
+            override fun unload() {}
+        }
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val real = executor.asCoroutineDispatcher()
+        val s = TranslationService(
+            FakeEngineProvider(opus = FakeEngine()).let { p ->
+                object : EngineProvider by p {
+                    override fun engine(id: EngineId) = blocking
+                }
+            },
+            FakeTranslationDao(), clock = { 42L }, worker = real, scope = translationScope(real),
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                val first = async(kotlinx.coroutines.Dispatchers.Default) { runCatching { s.translate(req("Uno.")) } }
+                assertTrue(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                s.release()
+                val second = async(kotlinx.coroutines.Dispatchers.Default) { s.translate(req("Dos.")) }
+                kotlinx.coroutines.delay(200)
+                latch.countDown()
+                assertEquals(TranslateResult.Done("T(Dos.)"), kotlinx.coroutines.withTimeout(10_000) { second.await() })
+                assertTrue(first.await().isFailure) // el primero se canceló
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }
