@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue.ui.library
 
+import androidx.lifecycle.viewModelScope
 import io.github.diegobr4nd.lectorbilingue.books.BookFiles
 import io.github.diegobr4nd.lectorbilingue.books.BookImporter
 import io.github.diegobr4nd.lectorbilingue.books.BookMetadata
@@ -11,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -173,8 +175,12 @@ class LibraryViewModelTest {
 
     @Test fun `borrar quita el libro`() = runTest(dispatcher) {
         val vm = viewModel()
+        // El borrado corre en Dispatchers.IO y vuelve al hilo principal: se espera a que esa tarea termine (no solo a
+        // que la lista quede vacía). Si siguiera viva al final, volvería después de resetMain() y la excepción haría
+        // fallar a otra clase de pruebas.
+        val before = vm.viewModelScope.coroutineContext.job.children.toSet()
         vm.delete(id)
-        untilReal { vm.state.value.books.isEmpty() }
+        untilReal { vm.state.value.books.isEmpty() && (vm.viewModelScope.coroutineContext.job.children.toSet() - before).isEmpty() }
         assertTrue(vm.state.value.books.isEmpty())
         assertEquals(listOf(id), closedIds) // El ViewModel suelta el libro abierto; la pantalla ya no lo hace.
     }

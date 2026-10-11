@@ -14,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -56,13 +57,30 @@ class LanguagesViewModelTest {
         }
     }
 
-    private fun vm(cache: FakeCache) = LanguagesViewModel(FakeHub(), AppSettings(MemoryPrefs()), cache)
+    private val settings = AppSettings(MemoryPrefs())
+
+    private fun vm(cache: FakeCache) = LanguagesViewModel(FakeHub(), settings, cache)
+
+    /**
+     * Entra a la pantalla y espera a que termine la lectura del motor guardado. Esa lectura corre en Dispatchers.IO
+     * (un hilo real, fuera del reloj virtual) y vuelve al hilo principal: si la prueba terminara antes, volvería
+     * después de resetMain() y la excepción ("Dispatchers.Main was accessed…") haría fallar a otra clase de pruebas.
+     */
+    private fun TestScope.enter(vm: LanguagesViewModel) {
+        vm.onEnter(true)
+        val end = System.nanoTime() + 5_000_000_000
+        while (true) {
+            advanceUntilIdle()
+            if (settings.enginePreferenceLoaded.value) return
+            check(System.nanoTime() < end) { "no terminó a tiempo" }
+            Thread.sleep(1)
+        }
+    }
 
     @Test fun `borrar pide confirmar, trabaja con busy, avisa y vuelve a medir`() = runTest(dispatcher) {
         val cache = FakeCache(bytes = 3_355_443L).apply { holdClear = true }
         val vm = vm(cache)
-        vm.onEnter(true)
-        advanceUntilIdle()
+        enter(vm)
         assertEquals(3_355_443L, vm.state.value.cacheBytes)
         vm.requestClearCache()
         assertTrue(vm.state.value.confirmCache)
@@ -81,8 +99,7 @@ class LanguagesViewModelTest {
     @Test fun `si borrar falla, mensaje fijo y la fila no cambia`() = runTest(dispatcher) {
         val cache = FakeCache(bytes = 2_000_000L, fail = true)
         val vm = vm(cache)
-        vm.onEnter(true)
-        advanceUntilIdle()
+        enter(vm)
         vm.confirmClearCache()
         advanceUntilIdle()
         assertEquals(ModelMessage.CACHE_CLEAR_FAILED, vm.state.value.message)
@@ -93,8 +110,7 @@ class LanguagesViewModelTest {
     @Test fun `cancelar la confirmacion no borra`() = runTest(dispatcher) {
         val cache = FakeCache(bytes = 1_000_000L)
         val vm = vm(cache)
-        vm.onEnter(true)
-        advanceUntilIdle()
+        enter(vm)
         vm.requestClearCache()
         vm.dismissClearCache()
         advanceUntilIdle()
@@ -106,8 +122,7 @@ class LanguagesViewModelTest {
     @Test fun `si no se puede medir el tamano queda desconocido, no en cero`() = runTest(dispatcher) {
         val cache = FakeCache(bytes = 2_000_000L, measureFails = true)
         val vm = vm(cache)
-        vm.onEnter(true)
-        advanceUntilIdle()
+        enter(vm)
         assertNull(vm.state.value.cacheBytes)
         // Se puede borrar igual; si después ya se puede medir, se ve el tamaño real.
         cache.measureFails = false
