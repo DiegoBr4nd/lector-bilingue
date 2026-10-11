@@ -2,6 +2,8 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 
 import io.github.diegobr4nd.lectorbilingue.data.ModelActions
 import io.github.diegobr4nd.lectorbilingue.data.PairStatus
+import io.github.diegobr4nd.lectorbilingue.data.Priority
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 
@@ -23,12 +25,47 @@ sealed interface CardState {
 
     /** El párrafo pasa del tope ([TranslationRules.MAX_PARAGRAPH_CHARS]): no se traduce ni se reintenta. */
     data object TooLong : CardState
+
+    // Los tres siguientes solo los ve la página en Solo traducción (3c-2): el ViewModel guarda el estado de la
+    // traducción (Text, Skeleton…) y [ModeRules.display] los arma según el modo.
+
+    /** Solo traducción: la traducción en lugar del original, con la letra del libro. */
+    data class Solo(val translation: String) : CardState
+
+    /** Solo traducción, aún sin traducir: el original en gris con "Traduciendo…". */
+    data object Waiting : CardState
+
+    /** Solo traducción: la persona tocó para ver el original (marca "Original"); otro toque vuelve a [translation]. */
+    data class ShowingOriginal(val translation: String) : CardState
 }
 
-/** Lo que la pantalla hace en la página: poner (o actualizar) la tarjeta del párrafo [index] de [resource], o quitarla. */
+/**
+ * Lo que la pantalla hace en la página, en este orden: poner (o actualizar) la tarjeta del párrafo [index] de
+ * [resource], quitarla, o cambiar el modo de la página. [anchor]: qué queda quieto en pantalla (Ruling F de la 3c-2):
+ * [CardAnchor.SELF] en Tocar (la tarjeta justo bajo el párrafo tocado, como en la 3b), [CardAnchor.SCREEN] en
+ * Intercalado y Solo traducción (lo que se está leyendo).
+ */
 sealed interface CardOp {
-    data class Show(val resource: String, val index: Int, val card: CardState) : CardOp
-    data class Hide(val resource: String, val index: Int) : CardOp
+    data class Show(val resource: String, val index: Int, val card: CardState, val anchor: CardAnchor = CardAnchor.SELF) : CardOp
+    data class Hide(val resource: String, val index: Int, val anchor: CardAnchor = CardAnchor.SELF) : CardOp
+
+    /**
+     * El modo cambió: la pantalla pone el modo de la página ([ModeRules.pageMode]) ANTES de las tarjetas que siguen,
+     * que ya vienen adaptadas (una tarjeta Solo solo entra en una página en modo "solo").
+     */
+    data class Mode(val mode: ReadingMode) : CardOp
+}
+
+/**
+ * Aviso único arriba del capítulo en Intercalado y Solo traducción (en vez de un error por párrafo). Se quita con
+ * "Reintentar" (`retryChapter`), al cerrar Idiomas, al cambiar de dirección o al volver a Tocar.
+ */
+sealed interface ChapterNotice {
+    /** Falta el modelo de [engine] para la dirección del libro: "Falta el idioma … · Descargar". */
+    data class MissingModel(val engine: EngineId) : ChapterNotice
+
+    /** No se pudo preparar el motor: "No se pudo preparar el traductor · Reintentar". */
+    data object EngineFailed : ChapterNotice
 }
 
 /**
@@ -42,6 +79,10 @@ class CardTexts(
     val retry: String,
     val download: String,
     val tooLong: String,
+    /** "Traduciendo…" bajo el original en gris (Solo traducción). */
+    val waiting: String,
+    /** "Original": lo que oye TalkBack al alternar al original en Solo traducción. */
+    val original: String,
     val missing: (EngineId) -> String,
     val missingSpoken: (EngineId) -> String,
 )
@@ -74,6 +115,20 @@ object CardRules {
         is CardState.MissingModel -> Card.MissingModel(texts.missing(state.engine), texts.download, texts.missingSpoken(state.engine))
         is CardState.Failed -> Card.Failed(failedLabel(state, texts), texts.retry, spoken(state, texts)!!)
         CardState.TooLong -> Card.TooLong(texts.tooLong)
+        is CardState.Solo -> Card.Solo(state.translation)
+        CardState.Waiting -> Card.Waiting(texts.waiting)
+        // La misma tarjeta Solo; la pantalla además muestra el original ([originalShown]).
+        is CardState.ShowingOriginal -> Card.Solo(state.translation)
+    }
+
+    /**
+     * Solo traducción: true si tras poner la tarjeta hay que mostrar el original (`showOriginal(i, true)`), false si
+     * hay que volver a la traducción; null para cualquier otra tarjeta (no se llama a `showOriginal`).
+     */
+    fun originalShown(state: CardState): Boolean? = when (state) {
+        is CardState.Solo -> false
+        is CardState.ShowingOriginal -> true
+        else -> null
     }
 
     /**
@@ -81,8 +136,10 @@ object CardRules {
      * la traducción: la pantalla le antepone "Traducción:". Solo va al servicio de accesibilidad, nunca a registros.
      */
     fun spoken(state: CardState, texts: CardTexts): String? = when (state) {
-        CardState.Skeleton, CardState.Preparing -> null
+        CardState.Skeleton, CardState.Preparing, CardState.Waiting -> null
         is CardState.Text -> state.translation
+        is CardState.Solo -> state.translation
+        is CardState.ShowingOriginal -> texts.original
         is CardState.MissingModel -> texts.missingSpoken(state.engine)
         is CardState.Failed -> "${failedLabel(state, texts)}. ${texts.retry}"
         CardState.TooLong -> texts.tooLong
@@ -94,4 +151,104 @@ object CardRules {
     /** MB del modelo de [engine] para [pair] según el catálogo, o null si el catálogo aún no lo trae. */
     fun modelMegabytes(pairs: List<PairStatus>, pair: String, engine: EngineId): Long? =
         pairs.firstOrNull { it.pair == pair }?.rows?.firstOrNull { it.engine == engine }?.let { ModelActions.megabytes(it.sizeBytes) }
+}
+
+/** Qué hace un toque sobre un párrafo (o su tarjeta), según el modo: ver [ModeRules.tap]. */
+enum class TapAction {
+    /** Sin tarjeta: se abre y se pide su traducción (como en la 3b). */
+    OPEN,
+
+    /** Tocar: se cierra y se olvida. */
+    CLOSE,
+
+    /** Intercalado: oculta o vuelve a mostrar la traducción. Solo traducción: alterna traducción ↔ original. */
+    TOGGLE,
+
+    NOTHING,
+}
+
+/** Un párrafo que la guía de modo pide al servicio, con su prioridad. */
+data class ModeRequest(val paragraph: PageParagraph, val priority: Priority)
+
+/**
+ * Qué hacer con los párrafos visibles: [tooLong] llevan su tarjeta "demasiado largo" (sin pedirlos), [cached] ya
+ * tienen traducción guardada (salen al instante) y [requests] se piden en este orden.
+ */
+data class ModePlan(val tooLong: List<PageParagraph>, val cached: List<PageParagraph>, val requests: List<ModeRequest>)
+
+/** Reglas puras de los modos de lectura (3c-2, spec §5.3). */
+object ModeRules {
+    /** Cuántos párrafos de más abajo de la pantalla se piden a `visible()`. */
+    const val FOLLOWING = 10
+
+    /** Como máximo tantos pedidos del modo a la vez (en curso más en espera); lo que sobra, en la siguiente vuelta. */
+    const val MAX_ACTIVE = 15
+
+    /** Ruling F: Tocar fija el párrafo tocado; Intercalado y Solo traducción, lo que se lee en pantalla. */
+    fun anchor(mode: ReadingMode): CardAnchor = if (mode == ReadingMode.TAP) CardAnchor.SELF else CardAnchor.SCREEN
+
+    /** El modo de la página (`data-lector-modo`, uno de [ParagraphScripts.MODES]). */
+    fun pageMode(mode: ReadingMode): String = when (mode) {
+        ReadingMode.TAP -> "tocar"
+        ReadingMode.INTERLEAVED -> "intercalado"
+        ReadingMode.TRANSLATION_ONLY -> "solo"
+    }
+
+    /**
+     * Lo que la página muestra para una tarjeta en estado [state] (Text, Skeleton…) en [mode]; null = sin tarjeta.
+     * [toggled]: la persona la tocó (Intercalado: la ocultó; Solo traducción: está viendo el original).
+     */
+    fun display(mode: ReadingMode, state: CardState, toggled: Boolean): CardState? = when (mode) {
+        ReadingMode.TAP -> state
+        ReadingMode.INTERLEAVED -> if (toggled) null else state
+        ReadingMode.TRANSLATION_ONLY -> when (state) {
+            is CardState.Text -> if (toggled) CardState.ShowingOriginal(state.translation) else CardState.Solo(state.translation)
+            CardState.Skeleton, CardState.Preparing -> CardState.Waiting
+            else -> state // error del párrafo o demasiado largo: su tarjeta de la 3b, bajo el original
+        }
+    }
+
+    /** Qué hace un toque en [mode] sobre un párrafo cuya tarjeta está en [state] (null = sin tarjeta). */
+    fun tap(mode: ReadingMode, state: CardState?): TapAction = when {
+        state == null -> TapAction.OPEN
+        mode == ReadingMode.TAP -> TapAction.CLOSE
+        mode == ReadingMode.INTERLEAVED -> TapAction.TOGGLE
+        // Solo traducción: solo hay original que alternar si ya está traducido (en espera, el original ya se ve).
+        state is CardState.Text -> TapAction.TOGGLE
+        else -> TapAction.NOTHING
+    }
+
+    /**
+     * El plan para los párrafos de `visible()` (de arriba abajo): los primeros (los que tocan la pantalla) como
+     * [Priority.TAP] y los [FOLLOWING] últimos como [Priority.PREFETCH]; al menos el primero va como toque.
+     *
+     * - Sin repetir los que ya tienen tarjeta ([open]), salvo los que aún esperan en la fila del modo ([queued]):
+     *   esos se conservan, en el orden nuevo.
+     * - Vacíos fuera; recortados o de más del tope → [ModePlan.tooLong]; ya en [cached] (texto normalizado) →
+     *   [ModePlan.cached]; un siguiente de más de [CardRules.MAX_PREFETCH_CHARS] espera a verse.
+     * - Tope: [inFlight] + pedidos ≤ [MAX_ACTIVE].
+     *
+     * Nota: `visible()` no marca cuáles tocan la pantalla; al final del capítulo (menos de [FOLLOWING] debajo) alguno
+     * de la pantalla sale como pretraducción. Solo cambia la prioridad, no el orden.
+     */
+    fun plan(paragraphs: List<PageParagraph>, open: Set<Int>, queued: Set<Int>, inFlight: Int, cached: Set<String>): ModePlan {
+        val onScreen = maxOf(1, paragraphs.size - FOLLOWING)
+        val tooLong = ArrayList<PageParagraph>()
+        val fromCache = ArrayList<PageParagraph>()
+        val requests = ArrayList<ModeRequest>()
+        paragraphs.forEachIndexed { k, p ->
+            val text = TranslationRules.normalize(p.text)
+            val waiting = p.index in queued
+            if (text.isEmpty() || (p.index in open && !waiting)) return@forEachIndexed
+            val following = k >= onScreen
+            when {
+                !waiting && (p.cut || TranslationRules.tooLong(text)) -> tooLong += p
+                following && text.length > CardRules.MAX_PREFETCH_CHARS -> Unit
+                !waiting && text in cached -> fromCache += p
+                inFlight + requests.size < MAX_ACTIVE ->
+                    requests += ModeRequest(p, if (following) Priority.PREFETCH else Priority.TAP)
+            }
+        }
+        return ModePlan(tooLong, fromCache, requests)
+    }
 }

@@ -16,6 +16,7 @@ import io.github.diegobr4nd.lectorbilingue.data.FakeTranslationDao
 import io.github.diegobr4nd.lectorbilingue.data.MemoryPrefs
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
@@ -636,5 +637,411 @@ class ReaderViewModelTest {
         vm.setReadingSettings(ReadingSettings(theme = PageTheme.SEPIA))
         vm.stepFontScale(up = true); vm.stepFontScale(up = true)
         assertEquals(ReadingSettings(theme = PageTheme.SEPIA, fontScale = 1.2), AppSettings(prefs).readingSettings)
+    }
+
+    // ---------- Modos de lectura (3c-2): la guía de modo ----------
+
+    private val c1 = "c1.xhtml"
+    private val c2 = "c2.xhtml"
+    private val screen = CardAnchor.SCREEN
+
+    /** Párrafos "P{i}." de una página (en pantalla y siguientes, de arriba abajo, como los da `visible()`). */
+    private fun ps(range: IntRange) = range.map { p(it, "P$it.") }
+
+    /** El modo de lectura guardado antes de abrir el Lector (igual para todos los libros). */
+    private fun mode(m: ReadingMode) {
+        settings.readingSettings = ReadingSettings(mode = m)
+    }
+
+    /** La última op (Show o Hide) del párrafo [index] de [resource], o null si no hubo ninguna. */
+    private fun List<CardOp>.lastFor(index: Int, resource: String = c1): CardOp? = lastOrNull {
+        (it is CardOp.Show && it.index == index && it.resource == resource) ||
+            (it is CardOp.Hide && it.index == index && it.resource == resource)
+    }
+
+    /** Ninguna tarjeta de [indices] quedó en espera ("Traduciendo…", "Preparando…" o el original en gris). */
+    private fun List<CardOp>.noneWaiting(indices: Iterable<Int>, resource: String = c1) = indices.all { i ->
+        val last = lastFor(i, resource)
+        !(last is CardOp.Show && (last.card == CardState.Skeleton || last.card == CardState.Preparing || last.card == CardState.Waiting))
+    }
+
+    private fun List<CardOp>.anchors() = mapNotNull {
+        when (it) {
+            is CardOp.Show -> it.anchor
+            is CardOp.Hide -> it.anchor
+            is CardOp.Mode -> null
+        }
+    }
+
+    @Test fun intercaladoPideLoVisibleEnOrdenYLosSiguientesComoPretraduccion() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val slow = FakeEngine(workMillis = 100) // cada párrafo tarda 100 ms
+        val (vm, ops) = vmWithOps(slow)
+        val page = ps(0..11) // 2 en pantalla + los 10 siguientes
+        vm.onResourceShown(c1)
+        vm.onTap(c1, listOf(p(50, "Cincuenta."))) // un toque ocupa el motor de 0 a 100 ms
+        vm.onVisible(c1, page)
+        runCurrent()
+        // Cada uno recibe enseguida su tarjeta de espera, de arriba abajo.
+        val first = ops.filterIsInstance<CardOp.Show>().filter { it.index in 0..11 }.distinctBy { it.index }
+        assertEquals((0..11).toList(), first.map { it.index })
+        assertTrue(first.all { it.card == CardState.Skeleton || it.card == CardState.Preparing }, "$first")
+        // P0. (en pantalla) espera en la fila del servicio detrás del toque: va como toque, cambiar de capítulo
+        // (aquí, directo al servicio) no lo saca.
+        advanceTimeBy(50); runCurrent()
+        service.cancelPrefetchExcept("otro.xhtml")
+        advanceTimeBy(200); runCurrent() // t = 250: P0. hecho; P1. (en pantalla) en curso
+        vm.onTap(c1, listOf(p(60, "Sesenta."))) // otro toque: sale antes que cualquier pretraducción
+        advanceTimeBy(100); runCurrent() // t = 350: "Sesenta." en curso; P2. (siguiente) espera detrás
+        // Los siguientes van como pretraducción: cambiar de capítulo sí los saca de la fila.
+        service.cancelPrefetchExcept("otro.xhtml")
+        advanceUntilIdle()
+        assertEquals(listOf("Cincuenta.", "P0.", "P1.", "Sesenta.") + (3..11).map { "P$it." }, slow.translatedTexts)
+        for (i in (0..11) - 2) assertEquals(CardOp.Show(c1, i, CardState.Text("T(P$i.)"), screen), ops.lastFor(i))
+        // El que salió de la fila no se queda en "Traduciendo…": se quita y se pide en la siguiente vuelta.
+        assertEquals(CardOp.Hide(c1, 2, screen), ops.lastFor(2))
+        assertNull(vm.cardState(c1, 2))
+        vm.onVisible(c1, page); advanceUntilIdle()
+        assertEquals(CardState.Text("T(P2.)"), vm.cardState(c1, 2))
+        assertEquals(14, slow.translatedTexts.size)
+        assertTrue(ops.anchors().all { it == screen }, "en los modos el ancla es la pantalla: ${ops.anchors()}")
+    }
+
+    @Test fun topeDeQuincePedidos() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val g = FakeEngine(gate = true)
+        val (vm, ops) = vmWithOps(g)
+        val page = ps(0..29)
+        vm.onResourceShown(c1); vm.onVisible(c1, page)
+        runCurrent()
+        assertEquals((0..14).toList(), ops.filterIsInstance<CardOp.Show>().map { it.index }.distinct())
+        assertTrue((15..29).all { vm.cardState(c1, it) == null })
+        g.releaseAll(); advanceUntilIdle()
+        assertEquals((0..14).map { "P$it." }, g.translatedTexts)
+        assertNull(vm.cardState(c1, 15)) // lo que sobró espera a la siguiente vuelta
+        val before = ops.size
+        vm.onVisible(c1, page); advanceUntilIdle()
+        // La segunda vuelta pide los 15 que faltaban…
+        assertEquals((15..29).toList(), ops.drop(before).filterIsInstance<CardOp.Show>().map { it.index }.distinct())
+        assertEquals((0..29).map { "P$it." }, g.translatedTexts)
+        assertTrue(ops.noneWaiting(0..29))
+        // …y nunca hubo más de 15 en espera a la vez.
+        assertEquals(15, ops.maxWaiting())
+    }
+
+    /** Cuántas tarjetas llegaron a estar en espera a la vez, repasando las ops en orden. */
+    private fun List<CardOp>.maxWaiting(): Int {
+        val waiting = HashSet<Pair<String, Int>>()
+        var max = 0
+        for (op in this) {
+            when (op) {
+                is CardOp.Show -> if (op.card == CardState.Skeleton || op.card == CardState.Preparing || op.card == CardState.Waiting) {
+                    waiting += op.resource to op.index
+                } else {
+                    waiting -= op.resource to op.index
+                }
+                is CardOp.Hide -> waiting -= op.resource to op.index
+                is CardOp.Mode -> Unit
+            }
+            max = maxOf(max, waiting.size)
+        }
+        return max
+    }
+
+    // Review Focus 1: desplazar rápido varias pantallas no llena la fila de pedidos viejos.
+    @Test fun desplazarRapidoSoloPideLoUltimoVisible() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        val g = FakeEngine(gate = true)
+        val (vm, ops) = vmWithOps(g)
+        vm.onResourceShown(c1)
+        vm.onVisible(c1, ps(0..11)); runCurrent() // P0. queda en curso (la compuerta lo detiene)
+        vm.onVisible(c1, ps(20..31)); runCurrent()
+        vm.onVisible(c1, ps(40..51)); runCurrent()
+        g.releaseAll(); advanceUntilIdle()
+        // Solo el que ya estaba en curso y la última pantalla; nada de las pantallas que pasaron.
+        assertEquals(listOf("P0.") + (40..51).map { "P$it." }, g.translatedTexts)
+        for (i in (1..11) + (20..31)) {
+            assertEquals(CardOp.Hide(c1, i, screen), ops.lastFor(i), "párrafo $i")
+            assertNull(vm.cardState(c1, i))
+        }
+        for (i in 40..51) assertEquals(CardOp.Show(c1, i, CardState.Solo("T(P$i.)"), screen), ops.lastFor(i))
+        assertTrue(ops.noneWaiting((0..11) + (20..31) + (40..51)))
+    }
+
+    @Test fun cambiarDeCapituloCancelaLoPendiente() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val slow = FakeEngine(workMillis = 100)
+        val (vm, ops) = vmWithOps(slow)
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..10)) // 1 en pantalla + 10 siguientes
+        advanceTimeBy(150); runCurrent() // P0. hecho; P1. en curso; P2. espera en la fila del servicio; P3.–P10. en la del modo
+        vm.onResourceShown(c2); vm.onVisible(c2, listOf(p(0, "Q0."), p(1, "Q1.")))
+        advanceUntilIdle()
+        // Lo que estaba en curso termina (nunca se corta); lo pendiente del capítulo anterior ya no se traduce.
+        assertEquals(listOf("P0.", "P1.", "Q0.", "Q1."), slow.translatedTexts)
+        assertEquals(CardState.Text("T(P0.)"), vm.cardState(c1, 0))
+        assertEquals(CardState.Text("T(P1.)"), vm.cardState(c1, 1))
+        assertTrue((2..10).all { vm.cardState(c1, it) == null })
+        assertEquals(CardOp.Show(c2, 1, CardState.Text("T(Q1.)"), screen), ops.last())
+        // Al volver solo se reponen las traducidas: ningún esqueleto viejo.
+        val before = ops.size
+        vm.onResourceShown(c1); runCurrent()
+        assertEquals(
+            listOf<CardOp>(CardOp.Show(c1, 0, CardState.Text("T(P0.)"), screen), CardOp.Show(c1, 1, CardState.Text("T(P1.)"), screen)),
+            ops.drop(before),
+        )
+    }
+
+    // Review Focus 3: cambiar de modo con traducciones a medias no deja nada en espera para siempre.
+    @Test fun cambiarDeModoAMitadNoDejaEsqueletos() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val g = FakeEngine(gate = true)
+        val (vm, ops) = vmWithOps(g)
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        runCurrent() // P0. en curso, el resto en la fila del modo
+        // Intercalado → Solo traducción: primero el modo de la página y luego cada tarjeta adaptada (en espera).
+        var before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TRANSLATION_ONLY) }
+        runCurrent()
+        val toSolo = ops.drop(before)
+        assertEquals(CardOp.Mode(ReadingMode.TRANSLATION_ONLY), toSolo.first())
+        assertEquals((0..4).map { CardOp.Show(c1, it, CardState.Waiting, screen) }, toSolo.drop(1).take(5))
+        // Solo traducción → Tocar a mitad: las automáticas se quitan (la fila del modo también).
+        before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TAP) }
+        runCurrent()
+        val toTap = ops.drop(before)
+        assertEquals(CardOp.Mode(ReadingMode.TAP), toTap.first())
+        assertEquals((0..4).map { CardOp.Hide(c1, it, screen) }.toSet(), toTap.drop(1).toSet())
+        g.releaseAll(); advanceUntilIdle()
+        assertEquals(listOf("P0."), g.translatedTexts) // solo terminó el que estaba en curso (queda en caché)
+        assertTrue(ops.drop(before).none { it is CardOp.Show }, "el resultado tardío no reabre: ${ops.drop(before)}")
+        assertTrue((0..4).all { vm.cardState(c1, it) == null })
+        // Otra vez a Solo traducción: la pantalla manda lo visible de ese momento (P0. sale del caché) y todo se traduce.
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TRANSLATION_ONLY) }
+        runCurrent()
+        vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        for (i in 0..4) assertEquals(CardOp.Show(c1, i, CardState.Solo("T(P$i.)"), screen), ops.lastFor(i))
+        assertEquals((0..4).map { "P$it." }, g.translatedTexts)
+        assertTrue(ops.noneWaiting(0..4))
+    }
+
+    // Review Focus 4: un motor que no carga da un solo aviso arriba, no un error por párrafo.
+    @Test fun fallaElMotorUnSoloAviso() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        engine.failLoads = 100
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.EngineFailed, vm.chapterNotice.value)
+        assertTrue(ops.none { it is CardOp.Show && it.card is CardState.Failed }, "$ops")
+        assertTrue(ops.noneWaiting(0..4))
+        assertTrue((0..4).all { vm.cardState(c1, it) == null }) // Intercalado: sin tarjeta
+        assertEquals(1, engine.loadCount) // una sola carga, no una por párrafo
+        // La página quieta otra vez no vuelve a intentar.
+        vm.onVisible(c1, ps(0..4)); advanceUntilIdle()
+        assertEquals(1, engine.loadCount)
+        assertEquals(ChapterNotice.EngineFailed, vm.chapterNotice.value)
+    }
+
+    @Test fun reintentarCapituloVuelveAPedirLoVisible() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        engine.failLoads = 1
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.EngineFailed, vm.chapterNotice.value)
+        vm.onVisible(c1, ps(3..7)) // se desplazó: "Reintentar" pide lo que se ve ahora
+        advanceUntilIdle()
+        assertTrue(engine.translatedTexts.isEmpty()) // con el aviso puesto, nada
+        vm.retryChapter(c1)
+        assertNull(vm.chapterNotice.value)
+        advanceUntilIdle()
+        assertEquals((3..7).map { "P$it." }, engine.translatedTexts)
+        for (i in 3..7) assertEquals(CardOp.Show(c1, i, CardState.Text("T(P$i.)"), screen), ops.lastFor(i))
+        assertNull(vm.chapterNotice.value)
+    }
+
+    @Test fun faltaElModeloUnSoloAviso() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        provider.installedEngines = emptyMap()
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.MissingModel(EngineId.OPUS), vm.chapterNotice.value)
+        assertTrue(ops.none { it is CardOp.Show && it.card is CardState.MissingModel }, "$ops")
+        assertTrue(ops.noneWaiting(0..4)) // Solo traducción: el original queda a la vista, sin gris
+        assertTrue((0..4).all { vm.cardState(c1, it) == null })
+        assertEquals(0, engine.loadCount)
+        val calls = provider.installedCalls
+        vm.onVisible(c1, ps(0..4)); advanceUntilIdle()
+        assertEquals(calls, provider.installedCalls) // con el aviso puesto no se vuelve a mirar
+        // Se descargó en Idiomas: al cerrar se quita el aviso y se traduce lo visible.
+        provider.installedEngines = mapOf(EngineId.OPUS to FakeEngineProvider.OPUS_TAG)
+        vm.onLanguagesClosed()
+        advanceUntilIdle()
+        assertNull(vm.chapterNotice.value)
+        for (i in 0..4) assertEquals(CardOp.Show(c1, i, CardState.Solo("T(P$i.)"), screen), ops.lastFor(i))
+    }
+
+    @Test fun tocarEnIntercaladoOcultaYMuestra() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show(c1, 0, CardState.Text("T(P0.)"), screen), ops.lastFor(0))
+        vm.onTap(c1, listOf(p(0, "P0."), p(1, "P1.")))
+        assertEquals(CardOp.Hide(c1, 0, screen), ops.last())
+        assertNull(vm.cardState(c1, 0))
+        // Oculta a pedido: la página quieta otra vez no la vuelve a pedir ni a mostrar.
+        val before = ops.size
+        vm.onVisible(c1, ps(0..1)); advanceUntilIdle()
+        assertEquals(before, ops.size)
+        vm.onTap(c1, listOf(p(0, "P0."), p(1, "P1.")))
+        assertEquals(CardOp.Show(c1, 0, CardState.Text("T(P0.)"), screen), ops.last()) // al instante
+        assertEquals(CardState.Text("T(P0.)"), vm.cardState(c1, 0))
+        assertEquals(listOf("P0.", "P1."), engine.translatedTexts) // sin volver a traducir
+        // Un párrafo sin tarjeta (aún no pedido): el toque lo abre y lo traduce.
+        vm.onTap(c1, listOf(p(7, "Siete.")))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show(c1, 7, CardState.Text("T(Siete.)"), screen), ops.last())
+    }
+
+    @Test fun tocarEnSoloAlternaOriginal() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        assertEquals(CardOp.Show(c1, 0, CardState.Solo("T(P0.)"), screen), ops.lastFor(0))
+        // El toque sobre la tarjeta Solo (la pantalla manda el índice sin texto) muestra el original…
+        vm.onTap(c1, listOf(p(0, "")))
+        assertEquals(CardOp.Show(c1, 0, CardState.ShowingOriginal("T(P0.)"), screen), ops.last())
+        assertEquals(CardState.ShowingOriginal("T(P0.)"), vm.cardState(c1, 0))
+        // …y otro toque (sobre el original) vuelve a la traducción.
+        vm.onTap(c1, listOf(p(0, "P0."), p(1, "P1.")))
+        assertEquals(CardOp.Show(c1, 0, CardState.Solo("T(P0.)"), screen), ops.last())
+        assertEquals(CardState.Solo("T(P0.)"), vm.cardState(c1, 0))
+        assertEquals(listOf("P0.", "P1."), engine.translatedTexts) // alternar no traduce otra vez
+        assertTrue(ops.anchors().all { it == screen })
+    }
+
+    @Test fun lasTarjetasAutomaticasNoSeAnuncian() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        val (vm, _, said) = vmWithAnnouncements()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..3))
+        advanceUntilIdle()
+        assertTrue(said.isEmpty(), "$said")
+        // Solo lo pedido con un toque: alternar al original sí se anuncia.
+        vm.onTap(c1, listOf(p(0, "")))
+        assertEquals(listOf(CardOp.Show(c1, 0, CardState.ShowingOriginal("T(P0.)"), screen)), said)
+        // Ni la adaptación al cambiar de modo ni lo que se llena solo en Intercalado.
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.INTERLEAVED) }
+        vm.onVisible(c1, ps(10..12))
+        advanceUntilIdle()
+        assertEquals(CardState.Text("T(P12.)"), vm.cardState(c1, 12))
+        assertEquals(1, said.size)
+    }
+
+    @Test fun modoTocarNoPideNadaAlDesplazar() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps() // modo de fábrica: Tocar
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..11))
+        advanceUntilIdle()
+        assertTrue(ops.isEmpty(), "$ops")
+        assertTrue(engine.translatedTexts.isEmpty())
+        assertEquals(0, provider.installedCalls) // ni siquiera mira el caché
+        assertNull(vm.chapterNotice.value)
+    }
+
+    // Tarea 3 (revisión): el estilo copiado de la tarjeta Solo se queda viejo al cambiar un ajuste; se repone todo.
+    @Test fun cambiarUnAjusteEnSoloReponeLasTarjetas() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        vm.onTap(c1, listOf(p(0, ""))) // la persona está viendo el original del 0
+        val before = ops.size
+        vm.updateReadingSettings { it.copy(fontScale = 1.5) }
+        runCurrent()
+        assertEquals(
+            listOf<CardOp>(
+                CardOp.Show(c1, 0, CardState.ShowingOriginal("T(P0.)"), screen),
+                CardOp.Show(c1, 1, CardState.Solo("T(P1.)"), screen),
+            ),
+            ops.drop(before),
+        )
+        assertEquals(2, engine.translatedTexts.size)
+    }
+
+    @Test fun enTocarCambiarUnAjusteNoReponeNada() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onTap(c1, listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        val before = ops.size
+        vm.updateReadingSettings { it.copy(theme = PageTheme.SEPIA) }
+        advanceUntilIdle()
+        assertEquals(before, ops.size)
+    }
+
+    // Tarea 3 (revisión): salir de "solo" y volver deja la tarjeta como "solo" en la página: se repone con el modo.
+    @Test fun salirYVolverASoloReponeLasTarjetas() = runTest(dispatcher) {
+        mode(ReadingMode.TRANSLATION_ONLY)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        var before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.INTERLEAVED) }
+        advanceUntilIdle()
+        assertEquals(
+            listOf(
+                CardOp.Mode(ReadingMode.INTERLEAVED),
+                CardOp.Show(c1, 0, CardState.Text("T(P0.)"), screen),
+                CardOp.Show(c1, 1, CardState.Text("T(P1.)"), screen),
+            ),
+            ops.drop(before),
+        )
+        before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TRANSLATION_ONLY) }
+        advanceUntilIdle()
+        assertEquals(
+            listOf(
+                CardOp.Mode(ReadingMode.TRANSLATION_ONLY),
+                CardOp.Show(c1, 0, CardState.Solo("T(P0.)"), screen),
+                CardOp.Show(c1, 1, CardState.Solo("T(P1.)"), screen),
+            ),
+            ops.drop(before),
+        )
+        assertEquals(2, engine.translatedTexts.size)
+    }
+
+    // Puerta 3c-2, punto 4: cambiar la dirección vuelve a traducir lo visible.
+    @Test fun cambiarDireccionEnUnModoVuelveATraducirLoVisible() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val (vm, ops) = vmWithOps()
+        advanceUntilIdle()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        val before = ops.size
+        vm.setDirection(esEn)
+        advanceUntilIdle()
+        val after = ops.drop(before)
+        assertEquals(setOf<CardOp>(CardOp.Hide(c1, 0, screen), CardOp.Hide(c1, 1, screen)), after.take(2).toSet())
+        assertEquals(esEn, engine.loadedPairs.last())
+        assertEquals(listOf("P0.", "P1.", "P0.", "P1."), engine.translatedTexts)
+        for (i in 0..1) assertEquals(CardOp.Show(c1, i, CardState.Text("T(P$i.)"), screen), ops.lastFor(i))
+    }
+
+    // El toque en Tocar sigue fijando el propio párrafo (Ruling F); al pasar a un modo, la pantalla.
+    @Test fun elAnclaSaleDelModo() = runTest(dispatcher) {
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onTap(c1, listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        assertTrue(ops.anchors().all { it == CardAnchor.SELF })
+        val before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TRANSLATION_ONLY) }
+        runCurrent()
+        assertEquals(
+            listOf<CardOp>(CardOp.Mode(ReadingMode.TRANSLATION_ONLY), CardOp.Show(c1, 0, CardState.Solo("T(Hi.)"), screen)),
+            ops.drop(before),
+        )
     }
 }

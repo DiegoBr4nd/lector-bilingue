@@ -189,12 +189,18 @@ fun ReaderScreen(
 
     // Tarjetas: se aplican durante toda la composición (no solo al frente: ninguna se pierde) y solo en el recurso
     // visible; las de otro recurso se reponen al volver a él (onResourceShown).
-    // TAP (3b): se fija el propio párrafo (CardAnchor.SELF), así la tarjeta sale justo debajo del tocado (Ruling F).
+    // El ancla viene en cada op (Ruling F): en Tocar el propio párrafo (la tarjeta sale justo debajo del tocado); en
+    // Intercalado y Solo traducción, lo que se lee en pantalla. El modo de la página llega en la misma fila, antes de
+    // las tarjetas ya adaptadas. Una tarjeta Solo puede pedir además mostrar u ocultar el original.
     LaunchedEffect(vm) {
         vm.cardOps.collect { op ->
             when (op) {
-                is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels, CardAnchor.SELF)
-                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index, CardAnchor.SELF)
+                is CardOp.Show -> if (op.resource == currentHref) {
+                    bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels, op.anchor)
+                    CardRules.originalShown(op.card)?.let { bridge.showOriginal(op.index, it, op.anchor) }
+                }
+                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index, op.anchor)
+                is CardOp.Mode -> bridge.setMode(ModeRules.pageMode(op.mode))
             }
         }
     }
@@ -516,9 +522,11 @@ private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardText
     val retry = stringResource(R.string.reader_card_retry)
     val download = stringResource(R.string.reader_card_download)
     val tooLong = stringResource(R.string.reader_card_too_long)
-    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong) {
+    val waiting = stringResource(R.string.reader_card_skeleton)
+    val original = stringResource(R.string.reader_card_original)
+    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong, waiting, original) {
         CardTexts(
-            failed, prepareFailed, retry, download, tooLong,
+            failed, prepareFailed, retry, download, tooLong, waiting, original,
             missing = { engine -> CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize },
             // Para TalkBack: "a" en vez de la flecha y "megabytes" en vez de "MB".
             missingSpoken = { engine ->

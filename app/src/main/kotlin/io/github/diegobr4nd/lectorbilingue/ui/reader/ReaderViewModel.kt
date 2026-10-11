@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.Priority
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslateRequest
 import io.github.diegobr4nd.lectorbilingue.data.TranslateResult
@@ -43,6 +44,9 @@ data class ReaderPosition(val json: String, val totalProgression: Double?, val c
  * - La posición se guarda 1 s después del último cambio y al salir.
  * - Tarjetas: por recurso (capítulo), índice del párrafo → estado. Solo viven en memoria: no van a
  *   `SavedStateHandle` ni a disco (la traducción ya queda en el caché del servicio). La pantalla aplica [cardOps].
+ * - Modos (3c-2, spec §5.3): en Intercalado y Solo traducción, la "guía de modo" pide sola lo visible ([onVisible]),
+ *   de a un pedido por vez al servicio y con su propia fila (así, al desplazar rápido, lo viejo se descarta antes de
+ *   llegar al motor). La tarjeta guarda el estado de la traducción; lo que ve la página sale de [ModeRules.display].
  * - Se llama desde el hilo principal (todo el estado de las tarjetas vive ahí, sin candados).
  *
  * No guarda ni registra texto del libro ni traducciones (solo el localizador, que es una dirección dentro del EPUB).
@@ -78,16 +82,38 @@ class ReaderViewModel(
     val cardOps: SharedFlow<CardOp> = _cardOps.asSharedFlow()
 
     // Ruling L: el resultado de un toque (o de reintentar tocando la tarjeta) se anuncia a TalkBack; la reinserción,
-    // la pretraducción y los reintentos al cerrar Idiomas no. Solo si llega con su recurso a la vista.
+    // la pretraducción, los reintentos al cerrar Idiomas y las tarjetas que la guía de modo llena solas no. Solo si
+    // llega con su recurso a la vista.
     private val _announcements = MutableSharedFlow<CardOp.Show>(extraBufferCapacity = 16)
     val announcements: SharedFlow<CardOp.Show> = _announcements.asSharedFlow()
 
-    /** Una tarjeta abierta. [token] cambia con cada pedido: un resultado viejo (o de una tarjeta ya cerrada) se ignora. */
-    private class OpenCard(val text: String, var state: CardState, var token: Long)
+    /**
+     * Una tarjeta abierta. [token] cambia con cada pedido: un resultado viejo (o de una tarjeta ya cerrada) se ignora.
+     * [auto]: la pidió la guía de modo, no un toque (al volver a Tocar se quita). [toggled]: la persona la tocó
+     * (Intercalado: la ocultó; Solo traducción: está viendo el original); se olvida al cambiar de modo.
+     */
+    private class OpenCard(val text: String, var state: CardState, var token: Long, val auto: Boolean = false) {
+        var toggled = false
+    }
+
+    /** Un pedido de la guía de modo. Vale mientras la tarjeta siga en su sitio con el mismo [token]. */
+    private class ModeJob(val resource: String, val index: Int, val card: OpenCard, val token: Long, var priority: Priority)
 
     private val cards = HashMap<String, LinkedHashMap<Int, OpenCard>>() // recurso → índice → tarjeta
     private var visible: String? = null
     private var nextToken = 0L
+
+    // Guía de modo. El modo sale de los ajustes de lectura (iguales para todos los libros).
+    private var mode: ReadingMode = settings.readingSettingsFlow.value.mode
+    private var appliedSettings: ReadingSettings = settings.readingSettingsFlow.value
+    private val modeQueue = ArrayDeque<ModeJob>() // en espera, en el orden en que se piden
+    private var modeInFlight = 0
+    private var guideRound = 0L // cada vuelta nueva (o cambio de recurso, modo, dirección) deja sin efecto la anterior
+    private val lastVisible = HashMap<String, List<PageParagraph>>() // lo último que la página dijo que se ve
+    private val _chapterNotice = MutableStateFlow<ChapterNotice?>(null)
+
+    /** Aviso único arriba del capítulo en los modos nuevos (falta el modelo o el motor no carga); null = nada. */
+    val chapterNotice: StateFlow<ChapterNotice?> = _chapterNotice.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -104,44 +130,88 @@ class ReaderViewModel(
             if (!directionChosen) _direction.value = TranslationRules.direction(languages, saved)
             bookLoaded.complete(Unit)
         }
+        viewModelScope.launch { settings.readingSettingsFlow.collect { onSettings(it) } }
     }
 
     /**
-     * Toque sobre un párrafo: `hit[0]` es el tocado y el resto, los siguientes (para pretraducir). Si ya tenía tarjeta,
-     * se cierra y se olvida; si no, se abre y se pide su traducción. Vacío → nada.
+     * Toque sobre un párrafo: `hit[0]` es el tocado y el resto, los siguientes (para pretraducir en Tocar). Lo que hace
+     * depende del modo ([ModeRules.tap]): sin tarjeta, se abre y se pide su traducción; con tarjeta, en Tocar se cierra
+     * y se olvida, en Intercalado se oculta o se vuelve a mostrar y en Solo traducción alterna el original. Vacío → nada.
      */
     fun onTap(resource: String, hit: List<PageParagraph>) {
         val tapped = hit.firstOrNull() ?: return
         if (visible == null) onResourceShown(resource)
         val open = cards.getOrPut(resource) { LinkedHashMap() }
-        if (!CardRules.toggle(open.mapValues { it.value.state }, tapped.index)) {
-            open.remove(tapped.index)
-            _cardOps.tryEmit(CardOp.Hide(resource, tapped.index))
-            return
+        val anchor = ModeRules.anchor(mode)
+        val existing = open[tapped.index]
+        when (ModeRules.tap(mode, existing?.state)) {
+            TapAction.NOTHING -> return
+            TapAction.CLOSE -> {
+                open.remove(tapped.index)
+                _cardOps.tryEmit(CardOp.Hide(resource, tapped.index, anchor))
+                return
+            }
+            TapAction.TOGGLE -> {
+                val card = existing ?: return
+                card.toggled = !card.toggled
+                emit(resource, tapped.index, card, anchor)
+                // Lo que aparece se anuncia (la traducción o "Original"); al ocultar, la pantalla dice "Traducción oculta".
+                val shown = ModeRules.display(mode, card.state, card.toggled)
+                if (shown != null && visible == resource) _announcements.tryEmit(CardOp.Show(resource, tapped.index, shown, anchor))
+                return
+            }
+            TapAction.OPEN -> Unit
         }
         val normalized = TranslationRules.normalize(tapped.text)
         if (normalized.isEmpty()) return
         if (tapped.cut || TranslationRules.tooLong(normalized)) {
             // Directa, sin pasar por "Preparando…": el servicio lo rechazaría enseguida igual (y no se reintenta).
             open[tapped.index] = OpenCard(tapped.text, CardState.TooLong, 0)
-            showIfVisible(resource, tapped.index, CardState.TooLong)
-            if (visible == resource) _announcements.tryEmit(CardOp.Show(resource, tapped.index, CardState.TooLong))
+            showIfVisible(resource, tapped.index)
+            if (visible == resource) _announcements.tryEmit(CardOp.Show(resource, tapped.index, CardState.TooLong, anchor))
             return
         }
         val card = OpenCard(tapped.text, CardState.Skeleton, 0)
         open[tapped.index] = card
-        request(resource, tapped.index, card, hit, announce = true)
+        // En los modos nuevos lo de abajo lo pide la guía de modo: aquí no se pretraduce.
+        request(resource, tapped.index, card, hit.takeIf { mode == ReadingMode.TAP }, announce = true)
     }
 
     /** El recurso visible cambió o se recargó: se cancela la pretraducción de los demás y se reponen sus tarjetas. */
     fun onResourceShown(resource: String) {
+        val changed = visible != resource
         visible = resource
         translations.cancelPrefetchExcept(resource)
-        cards[resource]?.forEach { (index, card) -> _cardOps.tryEmit(CardOp.Show(resource, index, card.state)) }
+        if (changed) {
+            // Lo que la guía de modo aún no pidió del capítulo anterior ya no se pide (y no deja esqueletos).
+            guideRound++
+            dropQueued { it.resource != resource }
+        }
+        reshow(ModeRules.anchor(mode))
     }
 
-    /** Estado de la tarjeta abierta del párrafo [index] de [resource], o null si no tiene. */
-    fun cardState(resource: String, index: Int): CardState? = cards[resource]?.get(index)?.state
+    /**
+     * La página quedó quieta: [paragraphs] son los que se ven y los [ModeRules.FOLLOWING] siguientes, de arriba abajo
+     * (`ParagraphBridge.visible`). En Intercalado y Solo traducción se piden los que aún no tienen tarjeta (ver
+     * [ModeRules.plan]); lo que esperaba turno y ya no se ve se descarta. En Tocar, nada.
+     */
+    fun onVisible(resource: String, paragraphs: List<PageParagraph>) {
+        if (mode == ReadingMode.TAP) return
+        if (visible == null) onResourceShown(resource)
+        if (visible != resource) return // respuesta de una página que ya no está
+        lastVisible[resource] = paragraphs
+        guide(resource)
+    }
+
+    /** "Reintentar" del aviso del capítulo: se quita el aviso y se vuelve a pedir lo que se ve. */
+    fun retryChapter(resource: String) {
+        _chapterNotice.value = null
+        guide(resource)
+    }
+
+    /** Estado de la tarjeta del párrafo [index] de [resource] tal como la ve la página, o null si no tiene. */
+    fun cardState(resource: String, index: Int): CardState? =
+        cards[resource]?.get(index)?.let { ModeRules.display(mode, it.state, it.toggled) }
 
     /** Tocar una tarjeta con error (o sin modelo) la vuelve a pedir. Cualquier otro estado: nada. */
     fun retry(resource: String, index: Int) {
@@ -152,18 +222,31 @@ class ReaderViewModel(
     }
 
     /**
-     * Al cerrar Idiomas: se suelta el motor (así un motor o modelo elegido allí se usa enseguida) y se vuelven a pedir
-     * las tarjetas sin modelo y las que estaban traduciéndose (soltar el motor cancela la fila).
+     * Al cerrar Idiomas: se suelta el motor (así un motor o modelo elegido allí se usa enseguida), se quita el aviso del
+     * capítulo y se vuelven a pedir las tarjetas sin modelo y las que estaban traduciéndose (soltar el motor cancela la
+     * fila); en los modos nuevos, además, lo que se ve.
      */
     fun onLanguagesClosed() {
         translations.release()
+        _chapterNotice.value = null
+        modeQueue.clear()
+        val requeue = ArrayList<ModeJob>()
         for ((resource, open) in cards) {
             for ((index, card) in open) {
-                if (card.state is CardState.MissingModel || card.state is CardState.Skeleton || card.state is CardState.Preparing) {
+                val waiting = card.state is CardState.MissingModel || card.state is CardState.Skeleton || card.state is CardState.Preparing
+                if (!waiting) continue
+                if (!card.auto) {
                     request(resource, index, card, null)
+                } else if (resource == visible) {
+                    // Token nuevo: el pedido cancelado, al volver, ya no la toca.
+                    card.token = ++nextToken
+                    requeue += ModeJob(resource, index, card, card.token, Priority.TAP)
                 }
             }
         }
+        modeQueue.addAll(requeue.sortedBy { it.index })
+        pump()
+        visible?.let { guide(it) }
     }
 
     /** Ajustes de lectura de la hoja "Ajustes de lectura". Valen los de fábrica hasta que se leen del teléfono. */
@@ -183,15 +266,22 @@ class ReaderViewModel(
     /** "Restablecer": vuelve a los de fábrica (respetan el estilo del libro). */
     fun resetReadingSettings() = setReadingSettings(ReadingSettings())
 
-    /** Guarda la dirección del libro, cierra todas las tarjetas (eran de la otra dirección) y vacía la fila del servicio. */
+    /**
+     * Guarda la dirección del libro, cierra todas las tarjetas (eran de la otra dirección) y vacía la fila del servicio.
+     * En los modos nuevos vuelve a pedir lo que se ve, ya con la dirección nueva.
+     */
     fun setDirection(pair: LanguagePair) {
         if (pair == _direction.value) return
         directionChosen = true
         _direction.value = pair
+        val anchor = ModeRules.anchor(mode)
         for ((resource, open) in cards) {
-            for (index in open.keys) _cardOps.tryEmit(CardOp.Hide(resource, index))
+            for (index in open.keys) _cardOps.tryEmit(CardOp.Hide(resource, index, anchor))
         }
         cards.clear()
+        modeQueue.clear()
+        guideRound++
+        _chapterNotice.value = null // el aviso era de la otra dirección
         // Lo pedido con la dirección vieja (toques y pretraducción) ya no sirve: sin esto el motor lo terminaría y
         // cambiaría de modelo dos veces (5 a 15 s de espera tras elegir la nueva).
         translations.release()
@@ -205,6 +295,7 @@ class ReaderViewModel(
                 }
             }
         }
+        visible?.let { guide(it) }
     }
 
     /**
@@ -222,7 +313,7 @@ class ReaderViewModel(
         val token = ++nextToken
         card.token = token
         card.state = if (translations.engineReady(_direction.value)) CardState.Skeleton else CardState.Preparing
-        showIfVisible(resource, index, card.state)
+        showIfVisible(resource, index)
         viewModelScope.launch {
             // Reintentar: la cuenta del tiempo mínimo del estado de espera corre a la par del pedido.
             val minShown = if (retry) launch { delay(RETRY_MIN_MILLIS) } else null
@@ -240,10 +331,19 @@ class ReaderViewModel(
             if (result is TranslateResult.Done) minShown?.cancel() else minShown?.join()
             // Cerrada, reabierta o vuelta a pedir mientras tanto: este resultado ya no es el suyo.
             if (card.token != token || cards[resource]?.get(index) !== card) return@launch
+            val anchor = ModeRules.anchor(mode)
+            val notice = result.toNotice()
+            if (mode != ReadingMode.TAP && notice != null) {
+                // Modos nuevos: sin tarjeta de error por párrafo; un solo aviso arriba (la pantalla lo anuncia).
+                chapterFailed(notice, resource, index, card)
+                if (announce && visible == resource) _announcements.tryEmit(CardOp.Show(resource, index, result.toCardState(), anchor))
+                return@launch
+            }
             card.state = result.toCardState()
             // En otro recurso no se inserta; queda guardado y se repone al volver (onResourceShown).
-            showIfVisible(resource, index, card.state)
-            if (announce && visible == resource) _announcements.tryEmit(CardOp.Show(resource, index, card.state))
+            showIfVisible(resource, index)
+            val shown = ModeRules.display(mode, card.state, card.toggled)
+            if (announce && visible == resource && shown != null) _announcements.tryEmit(CardOp.Show(resource, index, shown, anchor))
             // Solo si tradujo: tras un fallo o sin modelo, cada pretraducción volvería a intentar cargar el motor.
             if (hit != null && result is TranslateResult.Done) prefetch(resource, pair, hit)
         }
@@ -258,8 +358,199 @@ class ReaderViewModel(
         translations.prefetch(targets.map { TranslateRequest(pair, it.text, Priority.PREFETCH, resource) })
     }
 
-    private fun showIfVisible(resource: String, index: Int, state: CardState) {
-        if (visible == resource) _cardOps.tryEmit(CardOp.Show(resource, index, state))
+    // ---------- Guía de modo (Intercalado y Solo traducción) ----------
+
+    /** Una vuelta de la guía: mira el caché de lo visible sin tarjeta y aplica [ModeRules.plan]. */
+    private fun guide(resource: String) {
+        if (mode == ReadingMode.TAP || _chapterNotice.value != null || visible != resource) return
+        val paragraphs = lastVisible[resource] ?: return
+        val round = ++guideRound
+        viewModelScope.launch {
+            bookLoaded.await()
+            val pair = _direction.value
+            val open = cards[resource].orEmpty()
+            val unknown = paragraphs.filter { it.index !in open }.map { it.text }
+            val cached = if (unknown.isEmpty()) emptyMap() else translations.cached(pair, unknown)
+            // Mientras se miraba el caché pudo llegar otra vuelta, otro capítulo, otro modo, otra dirección o el aviso.
+            if (round != guideRound || visible != resource || mode == ReadingMode.TAP || _chapterNotice.value != null || _direction.value != pair) {
+                return@launch
+            }
+            applyPlan(resource, paragraphs, cached)
+        }
+    }
+
+    private fun applyPlan(resource: String, paragraphs: List<PageParagraph>, cached: Map<String, String>) {
+        val open = cards.getOrPut(resource) { LinkedHashMap() }
+        val anchor = ModeRules.anchor(mode)
+        val queued = modeQueue.filter { it.resource == resource && current(it) }.associateBy { it.index }
+        val plan = ModeRules.plan(paragraphs, open.keys, queued.keys, modeInFlight, cached.keys)
+        for (p in plan.tooLong) {
+            val card = OpenCard(p.text, CardState.TooLong, 0, auto = true)
+            open[p.index] = card
+            emit(resource, p.index, card, anchor)
+        }
+        for (p in plan.cached) {
+            val card = OpenCard(p.text, CardState.Text(cached.getValue(TranslationRules.normalize(p.text))), 0, auto = true)
+            open[p.index] = card
+            emit(resource, p.index, card, anchor)
+        }
+        val fresh = ArrayList<ModeJob>()
+        val next = plan.requests.map { r ->
+            queued[r.paragraph.index]?.also { it.priority = r.priority } ?: run {
+                val card = OpenCard(r.paragraph.text, CardState.Skeleton, ++nextToken, auto = true)
+                open[r.paragraph.index] = card
+                ModeJob(resource, r.paragraph.index, card, card.token, r.priority).also { fresh += it }
+            }
+        }
+        // Lo que esperaba turno y ya no se ve (o pasa del tope) se descarta, sin dejar su esqueleto.
+        val kept = next.toHashSet()
+        dropQueued { it !in kept }
+        modeQueue.clear()
+        modeQueue.addAll(next)
+        pump(silent = fresh)
+        // Las nuevas salen ya con su estado (la primera, "Preparando…" si el motor aún no está cargado).
+        for (job in fresh) if (current(job)) emit(resource, job.index, job.card, anchor)
+    }
+
+    /**
+     * Manda al servicio el siguiente pedido de la fila del modo: uno a la vez, así un pedido viejo nunca espera en la
+     * fila del servicio (el motor no queda ocioso más que el salto al hilo principal). [silent]: tarjetas que aún no se
+     * pusieron en la página (las pone quien llama).
+     */
+    private fun pump(silent: Collection<ModeJob> = emptyList()) {
+        while (modeInFlight < MODE_IN_FLIGHT) {
+            val job = modeQueue.removeFirstOrNull() ?: return
+            if (!current(job)) continue
+            modeInFlight++
+            val card = job.card
+            if (card.state == CardState.Skeleton && !translations.engineReady(_direction.value)) {
+                card.state = CardState.Preparing
+                if (job !in silent) emit(job.resource, job.index, card, ModeRules.anchor(mode))
+            }
+            viewModelScope.launch {
+                try {
+                    bookLoaded.await()
+                    val result = try {
+                        translations.translate(TranslateRequest(_direction.value, card.text, job.priority, job.resource))
+                    } catch (e: CancellationException) {
+                        ensureActive() // el VM se limpió: termina aquí
+                        // La fila del servicio se vació (cambio de capítulo, Idiomas, dirección): sin dejar el
+                        // esqueleto; se pide en la siguiente vuelta si se sigue viendo.
+                        if (current(job)) removeCard(job.resource, job.index)
+                        return@launch
+                    }
+                    if (current(job)) onModeResult(job, result)
+                } finally {
+                    modeInFlight--
+                    pump()
+                }
+            }
+        }
+    }
+
+    private fun onModeResult(job: ModeJob, result: TranslateResult) {
+        val notice = result.toNotice()
+        if (notice != null) {
+            chapterFailed(notice, job.resource, job.index, job.card)
+            return
+        }
+        job.card.state = result.toCardState()
+        // Sin anuncio: la tarjeta se llenó sola (Ruling L).
+        emit(job.resource, job.index, job.card, ModeRules.anchor(mode))
+    }
+
+    /**
+     * Falta el modelo o el motor no carga en un modo nuevo: un solo aviso arriba del capítulo y ninguna tarjeta de
+     * error. Lo que esperaba turno tampoco se pide (daría lo mismo y volvería a intentar cargar el motor).
+     */
+    private fun chapterFailed(notice: ChapterNotice, resource: String, index: Int, card: OpenCard) {
+        _chapterNotice.value = notice
+        guideRound++
+        if (cards[resource]?.get(index) === card) removeCard(resource, index)
+        dropQueued { true }
+    }
+
+    /** Saca de la fila del modo los pedidos que cumplen [which] y quita sus tarjetas (aún en espera). */
+    private fun dropQueued(which: (ModeJob) -> Boolean) {
+        val it = modeQueue.iterator()
+        while (it.hasNext()) {
+            val job = it.next()
+            if (!which(job)) continue
+            it.remove()
+            if (current(job)) removeCard(job.resource, job.index)
+        }
+    }
+
+    private fun removeCard(resource: String, index: Int) {
+        cards[resource]?.remove(index)
+        if (visible == resource) _cardOps.tryEmit(CardOp.Hide(resource, index, ModeRules.anchor(mode)))
+    }
+
+    private fun current(job: ModeJob) = cards[job.resource]?.get(job.index) === job.card && job.card.token == job.token
+
+    // ---------- Modo y ajustes ----------
+
+    private fun onSettings(new: ReadingSettings) {
+        val old = appliedSettings
+        appliedSettings = new
+        if (new.mode != mode) {
+            changeMode(new.mode)
+        } else if (mode != ReadingMode.TAP && new != old) {
+            // Revisión de la Tarea 3: la tarjeta Solo copió el estilo del original en px; con otro tamaño, letra o
+            // margen ese estilo queda viejo. Se reponen todas y los scripts lo vuelven a copiar.
+            reshow(CardAnchor.SCREEN)
+        }
+    }
+
+    /**
+     * Cambiar de modo: primero el modo de la página ([CardOp.Mode]) y luego cada tarjeta adaptada (Text ↔ Solo), con
+     * el ancla de pantalla (se está leyendo). Al volver a Tocar se quitan las tarjetas de la guía (las traducciones
+     * quedan en caché) y su fila; las abiertas con un toque se quedan. Entre los modos nuevos se vuelve a pedir lo
+     * visible; al salir de Tocar lo visible lo manda la pantalla con [onVisible].
+     */
+    private fun changeMode(new: ReadingMode) {
+        mode = new
+        guideRound++
+        val hides = ArrayList<Int>()
+        if (new == ReadingMode.TAP) {
+            _chapterNotice.value = null
+            modeQueue.clear()
+            lastVisible.clear() // en Tocar la pantalla no lo actualiza: al volver a un modo manda lo de ese momento
+            for ((resource, open) in cards) {
+                val it = open.entries.iterator()
+                while (it.hasNext()) {
+                    val (index, card) = it.next()
+                    if (!card.auto) continue
+                    it.remove()
+                    if (resource == visible) hides += index
+                }
+            }
+        }
+        cards.values.forEach { open -> open.values.forEach { it.toggled = false } }
+        _cardOps.tryEmit(CardOp.Mode(new))
+        visible?.let { resource -> hides.forEach { _cardOps.tryEmit(CardOp.Hide(resource, it, CardAnchor.SCREEN)) } }
+        reshow(CardAnchor.SCREEN)
+        visible?.let { guide(it) }
+    }
+
+    /** Vuelve a poner todas las tarjetas del recurso visible tal como se ven en el modo actual. */
+    private fun reshow(anchor: CardAnchor) {
+        val resource = visible ?: return
+        cards[resource]?.entries?.sortedBy { it.key }?.forEach { (index, card) ->
+            ModeRules.display(mode, card.state, card.toggled)?.let { _cardOps.tryEmit(CardOp.Show(resource, index, it, anchor)) }
+        }
+    }
+
+    /** Pone en la página lo que [card] muestra en el modo actual (o la quita si no muestra nada). */
+    private fun emit(resource: String, index: Int, card: OpenCard, anchor: CardAnchor) {
+        if (visible != resource) return
+        val shown = ModeRules.display(mode, card.state, card.toggled)
+        _cardOps.tryEmit(if (shown != null) CardOp.Show(resource, index, shown, anchor) else CardOp.Hide(resource, index, anchor))
+    }
+
+    /** Pone en la página la tarjeta abierta del párrafo [index], si su recurso es el visible. */
+    private fun showIfVisible(resource: String, index: Int) {
+        cards[resource]?.get(index)?.let { emit(resource, index, it, ModeRules.anchor(mode)) }
     }
 
     private fun TranslateResult.toCardState(): CardState = when (this) {
@@ -268,6 +559,13 @@ class ReaderViewModel(
         TranslateResult.EngineFailed -> CardState.Failed(prepare = true)
         TranslateResult.ParagraphFailed -> CardState.Failed(prepare = false)
         TranslateResult.TooLong -> CardState.TooLong
+    }
+
+    /** Lo que en los modos nuevos va al aviso del capítulo en vez de a una tarjeta; null para lo demás. */
+    private fun TranslateResult.toNotice(): ChapterNotice? = when (this) {
+        is TranslateResult.MissingModel -> ChapterNotice.MissingModel(engine)
+        TranslateResult.EngineFailed -> ChapterNotice.EngineFailed
+        else -> null
     }
 
     /** Al salir del Lector: se cancela la fila y se descarga el motor. */
@@ -313,5 +611,8 @@ class ReaderViewModel(
          * EngineFailed y MissingModel ("Preparando…") y para ParagraphFailed (el esqueleto, con el motor ya cargado).
          */
         const val RETRY_MIN_MILLIS = 700L
+
+        /** Pedidos de la guía de modo en el servicio a la vez (ver `pump`). */
+        private const val MODE_IN_FLIGHT = 1
     }
 }
