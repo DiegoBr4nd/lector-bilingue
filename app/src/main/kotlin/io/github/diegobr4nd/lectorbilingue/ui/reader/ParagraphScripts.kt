@@ -44,6 +44,18 @@ sealed interface Card {
 }
 
 /**
+ * Qué se mantiene quieto en pantalla al poner, quitar o cambiar una tarjeta (Ruling F de la 3c-2). [wire] es el valor
+ * que va al script, de esta lista fija.
+ */
+enum class CardAnchor(val wire: String) {
+    /** El propio párrafo cambiado: en TAP la tarjeta sale justo debajo del tocado (como en la 3b). */
+    SELF("self"),
+
+    /** Lo que se lee: el primer bloque que empieza en pantalla (Intercalado y Solo traducción). */
+    SCREEN("screen"),
+}
+
+/**
  * Textos fijos de la tarjeta (vienen de strings.xml). [translationPrefix] es el nombre que oye TalkBack. [original] es
  * la marca pequeña ("Original") que se ve bajo el original mostrado en Solo traducción.
  */
@@ -93,8 +105,9 @@ object ParagraphScripts {
      */
     val COPIED_STYLE = listOf(
         "display", "font-family", "font-size", "font-weight", "font-style", "line-height", "text-indent", "text-align",
-        "letter-spacing", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-right",
-        "padding-bottom", "padding-left", "list-style-type", "list-style-position",
+        "letter-spacing", "word-spacing", "text-transform", "font-variant", "margin-top", "margin-right", "margin-bottom",
+        "margin-left", "padding-top", "padding-right", "padding-bottom", "padding-left", "list-style-type",
+        "list-style-position",
     )
 
     /** Rectángulo del párrafo `all[k]`: si está oculto (mide 0×0), el de su tarjeta (Ruling E). Solo lee posiciones. */
@@ -103,14 +116,29 @@ object ParagraphScripts {
             "if (c && c.matches(${cardSelector("k")})) return c.getBoundingClientRect(); } return e.getBoundingClientRect(); }"
 
     /**
-     * Sin saltos (Ruling C, técnica b de la spec §11): antes del cambio se mide el `top` del primer bloque hoja que
-     * EMPIEZA en pantalla (`top ≥ 0`, alto > 0: lo que se está leyendo). [KEEP_ANCHOR] va después del cambio, en el
-     * mismo script: corrige con `scrollBy` la diferencia antes de que el WebView pinte. Sin ancla, no se corrige.
+     * Sin saltos (Ruling C, técnica b de la spec §11). `anchor()` busca lo que se está leyendo: el primer bloque hoja
+     * que EMPIEZA dentro de la pantalla (`0 ≤ top < alto de la ventana`, alto > 0); si no hay (un párrafo más alto que
+     * la pantalla), el que cruza el borde de arriba (`top < 0 < bottom`), fijado por su `top`; si tampoco, -1 (no se
+     * corrige). Nunca uno de más abajo: una tarjeta entre lo visible y ese bloque haría saltar el texto.
      */
-    private val ANCHOR = RECT +
-        " function anchor() { for (var k = 0; k < all.length; k++) { var r = rectOf(k); " +
-        "if (r.top >= 0 && r.height > 0) return k; } return -1; }" +
-        " var b = anchor(), top0 = b < 0 ? 0 : rectOf(b).top;"
+    private val ANCHOR_FN = RECT +
+        " function anchor() { var h = window.innerHeight, cross = -1; for (var k = 0; k < all.length; k++) {" +
+        " var r = rectOf(k); if (r.height <= 0) continue;" +
+        " if (r.top >= 0 && r.top < h && r.height > 0) return k;" +
+        " if (cross < 0 && r.top < 0 && r.bottom > 0) cross = k;" +
+        " if (r.top >= h) break; } return cross; }"
+
+    /** Ancla de lo que se lee en pantalla (para [setMode], que cambia toda la página). */
+    private val ANCHOR = ANCHOR_FN + " var b = anchor(), top0 = b < 0 ? 0 : rectOf(b).top;"
+
+    /**
+     * Ancla según la política `a.anchor` ([CardAnchor], Ruling F): "self" fija el propio párrafo cambiado (TAP: la
+     * tarjeta sale justo debajo del tocado, como en la 3b); "screen", lo que se lee en pantalla (Intercalado y Solo).
+     */
+    private val ANCHOR_BY_POLICY = ANCHOR_FN + " var b = a.anchor === 'self' ? a.i : anchor(), top0 = b < 0 ? 0 : rectOf(b).top;"
+
+    /** Guardia de la tarjeta Solo y de [showOriginal]: fuera del modo "solo" no se oculta ningún original. */
+    private const val NOT_SOLO_MODE = "document.documentElement.getAttribute('data-lector-modo') !== 'solo'"
     private const val KEEP_ANCHOR = "if (b >= 0) { var d = rectOf(b).top - top0; if (d) window.scrollBy(0, d); }"
 
     /** Quita de `card` el estilo copiado (solo las propiedades de la lista fija) y muestra el original `p`. */
@@ -246,13 +274,16 @@ object ParagraphScripts {
     /**
      * Solo traducción: con [on] muestra el original del párrafo [index] (quita `lector-oculto`) y la tarjeta pasa a
      * la marca "Original" (`data-lector-original`, sin el estilo copiado); sin [on], vuelve a la traducción. Solo actúa
-     * si el párrafo tiene una tarjeta Solo; responde true si cambió algo. Sin saltos (Ruling C).
+     * en el modo "solo" y si el párrafo tiene una tarjeta Solo; responde true si cambió algo. Sin saltos (Ruling C,
+     * con la política [anchor]).
      */
-    fun showOriginal(index: Int, on: Boolean): String {
+    fun showOriginal(index: Int, on: Boolean, anchor: CardAnchor): String {
         require(index >= 0) { "Índice negativo" }
         return script(
-            JSONObject().put("sel", SELECTOR).put("i", index).put("on", on).put("props", JSONArray(COPIED_STYLE)),
+            JSONObject().put("sel", SELECTOR).put("i", index).put("on", on).put("props", JSONArray(COPIED_STYLE))
+                .put("anchor", anchor.wire),
             """
+            if ($NOT_SOLO_MODE) return false;
             $PARAGRAPHS
             var p = all[a.i];
             if (!p) return false;
@@ -260,7 +291,7 @@ object ParagraphScripts {
             if (!card || card.dataset.lectorEstado !== 'solo') return false;
             $UNSTYLE_AND_SHOW
             $COPY_AND_HIDE
-            $ANCHOR
+            $ANCHOR_BY_POLICY
             if (a.on) { card.setAttribute('data-lector-original', ''); unstyleAndShow(); }
             else { card.removeAttribute('data-lector-original'); copyAndHide(); }
             $KEEP_ANCHOR
@@ -269,10 +300,13 @@ object ParagraphScripts {
         )
     }
 
-    /** Crea (o reemplaza el contenido de) la tarjeta bajo el párrafo [index]. Responde true si el párrafo existe. */
-    fun insert(index: Int, card: Card, labels: CardLabels): String {
+    /**
+     * Crea (o reemplaza el contenido de) la tarjeta bajo el párrafo [index]. Responde true si el párrafo existe (una
+     * tarjeta Solo, además, solo en el modo "solo"). Sin saltos con la política [anchor] (Ruling C y F).
+     */
+    fun insert(index: Int, card: Card, labels: CardLabels, anchor: CardAnchor): String {
         val data = JSONObject().put("sel", SELECTOR).put("i", index).put("prefix", labels.translationPrefix)
-            .put("props", JSONArray(COPIED_STYLE))
+            .put("props", JSONArray(COPIED_STYLE)).put("anchor", anchor.wire)
         when (card) {
             Card.Skeleton -> data.put("kind", "esqueleto").put("text", labels.skeleton)
             Card.Preparing -> data.put("kind", "preparando").put("text", labels.preparing)
@@ -286,13 +320,14 @@ object ParagraphScripts {
         return script(
             data,
             """
+            if (a.kind === 'solo' && $NOT_SOLO_MODE) return false;
             $PARAGRAPHS
             var p = all[a.i];
             if (!p) return false;
             $FIND_CARD
             $UNSTYLE_AND_SHOW
             $COPY_AND_HIDE
-            $ANCHOR
+            $ANCHOR_BY_POLICY
             if (!card) {
               card = document.createElement('aside');
               card.classList.add('$CARD_CLASS');
@@ -345,17 +380,17 @@ object ParagraphScripts {
 
     /**
      * Quita la tarjeta del párrafo [index] si existe y vuelve a mostrar el original si estaba oculto. Responde true si
-     * había tarjeta. Sin saltos (Ruling C).
+     * había tarjeta. Sin saltos con la política [anchor] (Ruling C y F).
      */
-    fun remove(index: Int): String = script(
-        JSONObject().put("sel", SELECTOR).put("i", index),
+    fun remove(index: Int, anchor: CardAnchor): String = script(
+        JSONObject().put("sel", SELECTOR).put("i", index).put("anchor", anchor.wire),
         """
         $PARAGRAPHS
         var p = all[a.i];
         if (!p) return false;
         $FIND_CARD
         if (!card && !p.classList.contains('$HIDDEN_CLASS')) return false;
-        $ANCHOR
+        $ANCHOR_BY_POLICY
         if (card) card.remove();
         p.classList.remove('$HIDDEN_CLASS');
         $KEEP_ANCHOR

@@ -25,6 +25,7 @@ import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
+import io.github.diegobr4nd.lectorbilingue.ui.reader.CardAnchor
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
 import io.github.diegobr4nd.lectorbilingue.ui.reader.PageParagraph
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphBridge
@@ -557,7 +558,7 @@ class MaliciousEpubOnDeviceTest {
             assertEquals("true", js(s, "String(window.__pwn === undefined)"))
             // (d) Una traducción hostil entra como texto.
             val evil = "\"x\" </script><script>window.__pwn=2</script>"
-            runBlocking { bridge.show(0, Card.Text(evil), LABELS) }
+            runBlocking { bridge.show(0, Card.Text(evil), LABELS, CardAnchor.SELF) }
             assertEquals(evil, js(s, "${cardOf("q")}.textContent"))
             assertEquals("0", js(s, "String(${cardOf("q")}.children.length)"))
             assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('script').length)"))
@@ -579,7 +580,7 @@ class MaliciousEpubOnDeviceTest {
             assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
             assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('img').length)"))
             assertEquals("true", js(s, "String(window.__pwn === undefined)"))
-            runBlocking { bridge.show(0, Card.Text("<img src=x onerror=window.__pwn=1>"), LABELS) }
+            runBlocking { bridge.show(0, Card.Text("<img src=x onerror=window.__pwn=1>"), LABELS, CardAnchor.SELF) }
             Thread.sleep(1_000)
             assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
             assertEquals("<img src=x onerror=window.__pwn=1>", js(s, "${cardOf("q")}.textContent"))
@@ -599,7 +600,7 @@ class MaliciousEpubOnDeviceTest {
             assertTrue(hit.isNotEmpty(), "evaluateJavascript no respondió")
             tapCss(s, x, y)
             waitFinal(s, "q", final)
-            assertEquals("true", js(s, ParagraphScripts.insert(0, Card.Text("a\u2028b\u2029c"), LABELS)))
+            assertEquals("true", js(s, ParagraphScripts.insert(0, Card.Text("a\u2028b\u2029c"), LABELS, CardAnchor.SELF)))
             val content = js(s, "${cardOf("q")}.textContent")!!
             assertTrue(content.contains('\u2028') && content.contains('\u2029'), "faltan los separadores")
             val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()

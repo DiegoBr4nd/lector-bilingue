@@ -189,11 +189,12 @@ fun ReaderScreen(
 
     // Tarjetas: se aplican durante toda la composición (no solo al frente: ninguna se pierde) y solo en el recurso
     // visible; las de otro recurso se reponen al volver a él (onResourceShown).
+    // TAP (3b): se fija el propio párrafo (CardAnchor.SELF), así la tarjeta sale justo debajo del tocado (Ruling F).
     LaunchedEffect(vm) {
         vm.cardOps.collect { op ->
             when (op) {
-                is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels)
-                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index)
+                is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels, CardAnchor.SELF)
+                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index, CardAnchor.SELF)
             }
         }
     }

@@ -11,6 +11,7 @@ import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
+import io.github.diegobr4nd.lectorbilingue.ui.reader.CardAnchor
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphBridge
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
@@ -67,7 +68,7 @@ class ReadingSettingsOnDeviceTest {
 
             // Una tarjeta abierta bajo un párrafo a la vista, y una marca en la página para saber si se recarga.
             val index = js(s, FIRST_VISIBLE)!!.toInt() + 3
-            bridge.show(index, Card.Text("Hola"), labels)
+            bridge.show(index, Card.Text("Hola"), labels, CardAnchor.SELF)
             assertEquals("Hola", js(s, "${card(index)}.textContent"))
             js(s, "window.__marca = 7; 'ok'")
             val firstBefore = js(s, FIRST_VISIBLE)!!.toInt()
@@ -116,22 +117,22 @@ class ReadingSettingsOnDeviceTest {
                 rule.waitForIdle()
                 val c = card(1)
 
-                bridge.show(1, Card.Text("Hola"), labels)
+                bridge.show(1, Card.Text("Hola"), labels, CardAnchor.SELF)
                 assertEquals(p.fondo, js(s, "getComputedStyle($c).backgroundColor"), "${p.attr}: fondo")
                 assertEquals(p.texto, js(s, "getComputedStyle($c).color"), "${p.attr}: texto")
                 assertEquals(p.linea, js(s, "getComputedStyle($c).borderLeftColor"), "${p.attr}: línea")
 
-                bridge.show(1, Card.Skeleton, labels)
+                bridge.show(1, Card.Skeleton, labels, CardAnchor.SELF)
                 assertEquals(p.texto, js(s, "getComputedStyle($c.querySelector('.lector-esqueleto')).color"), "${p.attr}: esqueleto")
                 val stripes = js(s, "getComputedStyle($c, '::after').backgroundImage")!!
                 assertTrue(stripes.contains(p.esqueleto), "${p.attr}: rayas $stripes")
 
-                bridge.show(1, Card.MissingModel("Falta el idioma", "Descargar", "Falta el idioma. Descargar"), labels)
+                bridge.show(1, Card.MissingModel("Falta el idioma", "Descargar", "Falta el idioma. Descargar"), labels, CardAnchor.SELF)
                 assertEquals(p.errorFondo, js(s, "getComputedStyle($c).backgroundColor"), "${p.attr}: fondo de error")
                 assertEquals(p.errorLinea, js(s, "getComputedStyle($c).borderLeftColor"), "${p.attr}: línea de error")
                 assertEquals(p.errorEnlace, js(s, "getComputedStyle($c.querySelector('.lector-reintentar')).color"), "${p.attr}: enlace")
                 assertEquals(p.texto, js(s, "getComputedStyle($c.querySelector('.lector-reintentar'), '::before').color"), "${p.attr}: punto")
-                bridge.hide(1)
+                bridge.hide(1, CardAnchor.SELF)
             }
         }
     }
