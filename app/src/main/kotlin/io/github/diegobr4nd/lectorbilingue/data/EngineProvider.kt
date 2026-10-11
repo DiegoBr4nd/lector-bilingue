@@ -23,6 +23,20 @@ interface EngineProvider {
 }
 
 /**
+ * Cuándo hay memoria para cargar un motor, con lo que informa Android (`ActivityManager.MemoryInfo`).
+ *
+ * Solo se niega si el sistema ya está en memoria baja ([lowMemory], o [availBytes] en su umbral [thresholdBytes]).
+ * "Memoria libre" (`availMem`) no cuenta lo que ocupan las apps de fondo: con muchas abiertas baja a 350-450 MB, pero
+ * al cargar el motor Android las cierra para hacer sitio (la app al frente es la última que cierra). En el Pixel 7 con
+ * 420 MB libres OPUS cargó y tradujo bien; la regla vieja (450 MB fijos) lo negaba y el Lector quedaba en "No se pudo
+ * preparar el traductor" hasta que otras apps se cerraran.
+ */
+object EngineMemory {
+    fun canLoad(availBytes: Long, thresholdBytes: Long, lowMemory: Boolean): Boolean =
+        !lowMemory && availBytes > thresholdBytes
+}
+
+/**
  * Las piezas reales. Los motores usan [worker] (el mismo hilo único del servicio) como despachador: así su
  * `synchronized` nunca bloquea un hilo compartido de `Dispatchers.Default` y queda como protección barata.
  */
@@ -58,21 +72,13 @@ class AndroidEngineProvider(private val app: LectorApp, private val worker: Coro
     /** El motor elegido en Idiomas (ver [AppSettings.enginePreference]); null = que decida la RAM. */
     override fun forced(): EngineId? = app.settings.enginePreference.toForced()
 
-    override fun hasMemoryFor(id: EngineId): Boolean = memoryInfo().availMem >= when (id) {
-        EngineId.OPUS -> OPUS_MIN_FREE_BYTES
-        EngineId.FIREFOX -> FIREFOX_MIN_FREE_BYTES
-    }
+    /** Igual para los dos motores (ver [EngineMemory]). */
+    override fun hasMemoryFor(id: EngineId): Boolean =
+        memoryInfo().let { EngineMemory.canLoad(it.availMem, it.threshold, it.lowMemory) }
 
     private fun memoryInfo(): ActivityManager.MemoryInfo {
         val info = ActivityManager.MemoryInfo()
         app.getSystemService(ActivityManager::class.java).getMemoryInfo(info)
         return info
-    }
-
-    private companion object {
-        // OPUS: ~330 MB medidos en la 2a cargado y traduciendo, más margen.
-        const val OPUS_MIN_FREE_BYTES = 450L * 1024 * 1024
-        // Firefox: modelo más chico y un solo hilo; mismo criterio de margen.
-        const val FIREFOX_MIN_FREE_BYTES = 200L * 1024 * 1024
     }
 }

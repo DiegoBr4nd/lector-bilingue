@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -145,7 +146,9 @@ class ReaderViewModel(
     /** Tocar una tarjeta con error (o sin modelo) la vuelve a pedir. Cualquier otro estado: nada. */
     fun retry(resource: String, index: Int) {
         val card = cards[resource]?.get(index) ?: return
-        if (card.state is CardState.Failed || card.state is CardState.MissingModel) request(resource, index, card, null, announce = true)
+        if (card.state is CardState.Failed || card.state is CardState.MissingModel) {
+            request(resource, index, card, null, announce = true, retry = true)
+        }
     }
 
     /**
@@ -208,20 +211,32 @@ class ReaderViewModel(
      * Pide la traducción de [card] como toque; con [hit], al llegar pretraduce los siguientes. [announce]: la pidió la
      * persona con un toque, así que el resultado se anuncia.
      */
-    private fun request(resource: String, index: Int, card: OpenCard, hit: List<PageParagraph>?, announce: Boolean = false) {
+    private fun request(
+        resource: String,
+        index: Int,
+        card: OpenCard,
+        hit: List<PageParagraph>?,
+        announce: Boolean = false,
+        retry: Boolean = false,
+    ) {
         val token = ++nextToken
         card.token = token
         card.state = if (translations.engineReady(_direction.value)) CardState.Skeleton else CardState.Preparing
         showIfVisible(resource, index, card.state)
         viewModelScope.launch {
+            // Reintentar: la cuenta del tiempo mínimo de "Preparando…" corre a la par del pedido.
+            val minShown = if (retry) launch { delay(RETRY_MIN_MILLIS) } else null
             bookLoaded.await()
             val pair = _direction.value
             val result = try {
                 translations.translate(TranslateRequest(pair, card.text, Priority.TAP, resource))
             } catch (e: CancellationException) {
                 ensureActive() // el VM se limpió: termina aquí
+                minShown?.cancel()
                 return@launch // release() vació la fila; onLanguagesClosed la vuelve a pedir
             }
+            // Reintentar que vuelve a fallar al instante: "Preparando…" se ve un momento, así se nota que se intentó.
+            if (result is TranslateResult.Done) minShown?.cancel() else minShown?.join()
             // Cerrada, reabierta o vuelta a pedir mientras tanto: este resultado ya no es el suyo.
             if (card.token != token || cards[resource]?.get(index) !== card) return@launch
             card.state = result.toCardState()
@@ -289,5 +304,10 @@ class ReaderViewModel(
         if (p == lastSaved) return@withLock
         repo.savePosition(bookId, p.json, (p.totalProgression?.takeIf { !it.isNaN() } ?: 0.0).toFloat())
         lastSaved = p
+    }
+
+    companion object {
+        /** Lo mínimo que se ve "Preparando…" al reintentar si el pedido vuelve a fallar (ms). */
+        const val RETRY_MIN_MILLIS = 700L
     }
 }

@@ -326,6 +326,35 @@ class ReaderViewModelTest {
         assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)")), ops.last())
     }
 
+    // Juan: tocar "Reintentar" cuando el motor sigue sin poder prepararse no se veía (el fallo volvía en el acto).
+    @Test fun reintentarQueVuelveAFallarMuestraPreparandoUnMomento() = runTest(dispatcher) {
+        provider.memoryOk = false
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        val failed = CardOp.Show("c1.xhtml", 0, CardState.Failed(prepare = true))
+        assertEquals(failed, ops.last())
+        vm.retry("c1.xhtml", 0)
+        runCurrent()
+        val preparing = CardOp.Show("c1.xhtml", 0, CardState.Preparing)
+        assertEquals(preparing, ops.last())
+        advanceTimeBy(ReaderViewModel.RETRY_MIN_MILLIS - 1)
+        assertEquals(preparing, ops.last(), "Preparando… se ve un momento antes del fallo")
+        advanceUntilIdle()
+        assertEquals(failed, ops.last())
+    }
+
+    // Reintentar que sí traduce no espera de más.
+    @Test fun reintentarQueTraduceNoEspera() = runTest(dispatcher) {
+        engine.failLoads = 1
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown("c1.xhtml"); vm.onTap("c1.xhtml", listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        vm.retry("c1.xhtml", 0)
+        runCurrent()
+        assertEquals(CardOp.Show("c1.xhtml", 0, CardState.Text("T(Hi.)")), ops.last())
+    }
+
     @Test fun reintentarSinTarjetaOConTextoNoHaceNada() = runTest(dispatcher) {
         val (vm, ops) = vmWithOps()
         vm.onResourceShown("c1.xhtml")

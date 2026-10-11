@@ -96,7 +96,7 @@ class TapTranslateTimingOnDeviceTest {
         app.translations.release()
     }
 
-    /** Memoria libre del teléfono en MB: el servicio no carga OPUS con menos de 450 MB libres (da EngineFailed). */
+    /** Memoria libre del teléfono en MB: el servicio no carga el motor si el sistema está en memoria baja (da EngineFailed; ver EngineMemory). */
     private fun availMb(): Long {
         val info = android.app.ActivityManager.MemoryInfo()
         app.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(info)
