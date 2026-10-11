@@ -48,6 +48,16 @@ enum class TextAlignChoice(val wire: String) {
     }
 }
 
+/** Cómo se muestra la traducción: al tocar un párrafo, intercalada, o solo la traducción. */
+enum class ReadingMode(val wire: String) {
+    TAP("tap"), INTERLEAVED("interleaved"), TRANSLATION_ONLY("translation_only");
+
+    companion object {
+        /** Un valor desconocido (o ausente) se lee como [TAP]. */
+        fun fromWire(value: String?): ReadingMode = entries.firstOrNull { it.wire == value } ?: TAP
+    }
+}
+
 /**
  * Cómo quiere leer la persona. Iguales para todos los libros. El valor por defecto es el "de fábrica":
  * respeta el estilo del libro.
@@ -59,8 +69,9 @@ data class ReadingSettings(
     val lineHeight: LineHeightLevel = LineHeightLevel.NORMAL,
     val margins: MarginLevel = MarginLevel.NORMAL,
     val align: TextAlignChoice = TextAlignChoice.START,
+    val mode: ReadingMode = ReadingMode.TAP,
 ) {
-    /** true si no se ha cambiado nada (se puede respetar el estilo del libro tal cual). */
+    /** true si no se ha cambiado nada, modo incluido (así "Restablecer" también devuelve el modo a TAP). */
     val isFactory: Boolean get() = this == ReadingSettings()
 
     companion object {

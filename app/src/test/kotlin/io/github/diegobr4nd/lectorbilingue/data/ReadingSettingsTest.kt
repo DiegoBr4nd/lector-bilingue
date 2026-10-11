@@ -99,4 +99,31 @@ class ReadingSettingsTest {
         assertTrue(ReadingSettings().isFactory)
         assertFalse(ReadingSettings(fontScale = 1.1).isFactory)
     }
+
+    @Test fun `cada modo de lectura se guarda y se lee`() {
+        for (m in ReadingMode.entries) {
+            val prefs = MemoryPrefs()
+            AppSettings(prefs).readingSettings = ReadingSettings(mode = m)
+            assertEquals(m.wire, prefs.values["reading_mode"])
+            assertEquals(m, AppSettings(prefs).readingSettings.mode)
+        }
+    }
+
+    @Test fun `un modo desconocido o de tipo equivocado vuelve a TAP sin tocar lo demas`() {
+        val prefs = MemoryPrefs()
+        AppSettings(prefs).readingSettings = custom.copy(mode = ReadingMode.INTERLEAVED)
+        prefs.values["reading_mode"] = "ultra"
+        assertEquals(custom, AppSettings(prefs).readingSettings)
+        prefs.values["reading_mode"] = 5
+        assertEquals(ReadingMode.TAP, AppSettings(prefs).readingSettings.mode)
+    }
+
+    @Test fun `el modo cuenta para restablecer`() {
+        assertFalse(ReadingSettings(mode = ReadingMode.TRANSLATION_ONLY).isFactory)
+        val s = AppSettings(MemoryPrefs())
+        s.readingSettings = ReadingSettings(mode = ReadingMode.INTERLEAVED)
+        s.readingSettings = ReadingSettings()
+        assertEquals(ReadingMode.TAP, s.readingSettings.mode)
+        assertTrue(s.readingSettingsFlow.value.isFactory)
+    }
 }
