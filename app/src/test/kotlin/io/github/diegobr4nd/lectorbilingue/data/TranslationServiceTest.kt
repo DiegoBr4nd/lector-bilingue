@@ -351,4 +351,58 @@ class TranslationServiceTest {
             executor.shutdownNow()
         }
     }
+
+    // Lo que hace la prueba de tiempos en el teléfono: soltar y pedir enseguida, sin esperar la descarga.
+    @Test fun pedirJustoDespuesDeSoltarVuelveACargarYTraduce() = runTest(dispatcher) {
+        val engine = FakeEngine()
+        val s = service(engine)
+        assertEquals(TranslateResult.Done("T(A.)"), s.translate(req("A.")))
+        s.release()
+        assertEquals(TranslateResult.Done("T(B.)"), s.translate(req("B.")))
+        assertEquals(1, engine.unloadCount)
+        assertEquals(2, engine.loadCount)
+    }
+
+    // Con un hilo real y un motor que bloquea (como el nativo): soltar a mitad y pedir enseguida no pierde el pedido.
+    @Test fun pedirTrasSoltarConElMotorBloqueadoTraduceAlVolver() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var calls = 0
+        val blocking = object : io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine {
+            override val id = EngineId.OPUS.wire
+            override suspend fun load(pair: LanguagePair, config: io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig) {}
+            override suspend fun translate(sentences: List<String>): List<String> {
+                if (calls++ == 0) {
+                    started.countDown()
+                    latch.await()
+                }
+                return sentences.map { "T($it)" }
+            }
+            override fun unload() {}
+        }
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val real = executor.asCoroutineDispatcher()
+        val s = TranslationService(
+            FakeEngineProvider(opus = FakeEngine()).let { p ->
+                object : EngineProvider by p {
+                    override fun engine(id: EngineId) = blocking
+                }
+            },
+            FakeTranslationDao(), clock = { 42L }, worker = real, scope = translationScope(real),
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                val first = async(kotlinx.coroutines.Dispatchers.Default) { runCatching { s.translate(req("Uno.")) } }
+                assertTrue(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                s.release()
+                val second = async(kotlinx.coroutines.Dispatchers.Default) { s.translate(req("Dos.")) }
+                kotlinx.coroutines.delay(200)
+                latch.countDown()
+                assertEquals(TranslateResult.Done("T(Dos.)"), kotlinx.coroutines.withTimeout(10_000) { second.await() })
+                assertTrue(first.await().isFailure) // el primero se canceló
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
 }
