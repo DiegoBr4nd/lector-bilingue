@@ -22,6 +22,8 @@ import io.github.diegobr4nd.lectorbilingue.books.ImportError
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
 import io.github.diegobr4nd.lectorbilingue.books.readium.HtmlSanitizer
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
@@ -91,7 +93,12 @@ class MaliciousEpubOnDeviceTest {
     private val secret = File(app.filesDir, "xxe-secreto.txt")
     private var spy: Spy? = null
 
+    // Los colores que se miden (t4) son los del tema claro: se fija aquí (con el teléfono en modo noche, "Como el
+    // teléfono" daría el oscuro) y al final se devuelven los ajustes de la persona.
+    private val saved = app.settings.readingSettings.also { app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT) }
+
     @After fun cleanUp() = runBlocking<Unit> {
+        app.settings.readingSettings = saved
         for (p in opened) runCatching { p.close() }
         for (id in created) {
             app.openBooks.close(id)
