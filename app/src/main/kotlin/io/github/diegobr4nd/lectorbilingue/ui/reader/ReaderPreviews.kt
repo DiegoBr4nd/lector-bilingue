@@ -39,6 +39,7 @@ import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
 import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TextAlignChoice
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
@@ -322,3 +323,87 @@ private fun TarjetasEstados() = CardStates(listOf(SampleCard.Esqueleto, SampleCa
 @Composable
 private fun TarjetasAvisos() =
     CardStates(listOf(SampleCard.FaltaModelo, SampleCard.Fallo, SampleCard.FalloPreparar, SampleCard.DemasiadoLargo))
+
+/*
+ * Modos de traducción (3c-2, boceto 5a). La página es un WebView: se simula con los colores reales de cada tema
+ * (los de las muestras de la hoja "Aa" y el gris en espera de tarjeta.css). La banda del aviso usa el tema de la app,
+ * que sigue al teléfono: claro sobre las páginas Claro y Sepia, oscuro sobre Oscuro y Negro.
+ */
+private class PagePalette(val name: String, val page: Color, val ink: Color, val waiting: Color, val dark: Boolean)
+
+private val PagePalettes = listOf(
+    PagePalette("Claro", Color(0xFFFFFFFF), Color(0xFF121212), Color(0xFF6B7280), dark = false),
+    PagePalette("Sepia", Color(0xFFFAF4E8), Color(0xFF121212), Color(0xFF776A5E), dark = false),
+    PagePalette("Oscuro", Color(0xFF1E1E1E), Color(0xFFE0E0E0), Color(0xFF8C8C8C), dark = true),
+    PagePalette("Negro", Color(0xFF000000), Color(0xFFE6E6E6), Color(0xFF7A7A7A), dark = true),
+)
+
+/** Teléfono a letra normal y al 200 %, y tableta: cada Preview dibuja los cuatro temas uno bajo otro. */
+@Preview(name = "360", widthDp = 360, heightDp = 2000, showBackground = true)
+@Preview(name = "360 letra 200", widthDp = 360, heightDp = 4200, fontScale = 2f, showBackground = true)
+@Preview(name = "840", widthDp = 840, heightDp = 1600, showBackground = true)
+private annotation class ModesPreviewSet
+
+private const val SampleTranslated = "La guardiana subió la escalera del faro y encendió la lámpara antes de que cayera la noche."
+private const val SampleOriginal = "The keeper climbed the lighthouse stairs and lit the lamp before night fell."
+private const val SampleWaiting = "Far below, the boats came home one by one, their lanterns swaying on the dark water."
+
+/** Solo traducción en una página: traducido (letra del libro), mostrando el original con su marca, y en espera. */
+@Composable
+private fun SoloPage(p: PagePalette) {
+    val book = MaterialTheme.typography.bodyLarge.copy(fontFamily = ReadingFontFamily, color = p.ink)
+    Column(Modifier.fillMaxWidth().background(p.page).padding(Spacing.l)) {
+        Text(p.name, style = MaterialTheme.typography.labelMedium, color = p.waiting, modifier = Modifier.padding(bottom = Spacing.s))
+        // Traducido: sin fondo ni línea, como el texto del libro.
+        Text(SampleTranslated, style = book, modifier = Modifier.padding(bottom = 16.dp))
+        // Tocado: el original en su color normal y debajo la marca "Original" (0,8 em, gris).
+        Text(SampleOriginal, style = book)
+        Text("Original", style = book.copy(fontSize = book.fontSize * 0.8f, color = p.waiting), modifier = Modifier.padding(bottom = 16.dp))
+        // En espera: el original en gris y "Traduciendo…" más chico (0,85 em), quieto.
+        Text(SampleWaiting, style = book.copy(color = p.waiting))
+        Text("Traduciendo…", style = book.copy(fontSize = book.fontSize * 0.85f, color = p.waiting), modifier = Modifier.padding(bottom = 16.dp))
+    }
+}
+
+/** Cada tema: la banda del aviso (con el tema de la app) sobre la página de Solo traducción. */
+@Composable
+private fun ModesWithNotice(notice: NoticeTexts?) = Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    for (p in PagePalettes) {
+        LectorTheme(darkTheme = p.dark) {
+            Column(Modifier.fillMaxWidth()) {
+                if (notice != null) ChapterNoticeBand(notice, onAction = {})
+                SoloPage(p)
+            }
+        }
+        Spacer(Modifier.height(Spacing.s))
+    }
+}
+
+private val NoticeMissing = NoticeTexts(
+    "Falta el idioma inglés → español (227 MB)", "Falta el idioma inglés a español, 227 megabytes. Descargar", "Descargar", error = false,
+)
+private val NoticeFailed = NoticeTexts("No se pudo preparar el traductor", "No se pudo preparar el traductor", "Reintentar", error = true)
+
+/** Solo traducción sin avisos: traducido, original mostrado y en espera, en los cuatro temas. */
+@ModesPreviewSet
+@Composable
+private fun SoloTraduccionTemas() = ModesWithNotice(null)
+
+/** Aviso único "Falta el idioma" (secondaryContainer, Descargar). */
+@ModesPreviewSet
+@Composable
+private fun AvisoFaltaIdioma() = ModesWithNotice(NoticeMissing)
+
+/** Aviso único "No se pudo preparar el traductor" (errorContainer, Reintentar). */
+@ModesPreviewSet
+@Composable
+private fun AvisoFalloMotor() = ModesWithNotice(NoticeFailed)
+
+/** "Ajustes de lectura" con Intercalado y con Solo traducción elegidos (la ayuda cambia). */
+@SettingsPreviewSet
+@Composable
+private fun AjustesIntercalado() = SettingsSample(ReadingSettings(mode = ReadingMode.INTERLEAVED))
+
+@SettingsPreviewSet
+@Composable
+private fun AjustesSoloTraduccion() = SettingsSample(ReadingSettings(mode = ReadingMode.TRANSLATION_ONLY))

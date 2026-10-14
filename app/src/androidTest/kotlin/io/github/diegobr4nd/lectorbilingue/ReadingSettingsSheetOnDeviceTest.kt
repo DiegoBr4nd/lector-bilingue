@@ -52,6 +52,7 @@ import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
 import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TextAlignChoice
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
@@ -174,9 +175,11 @@ class ReadingSettingsSheetOnDeviceTest {
 
     private val longSegments = ReadingSettings(
         lineHeight = LineHeightLevel.COMPACT, margins = MarginLevel.NARROW, align = TextAlignChoice.JUSTIFY,
+        mode = ReadingMode.TRANSLATION_ONLY,
     )
-    private val segmentLabels =
-        listOf("Compacto", "Normal", "Amplio", "Estrechos", "Normales", "Anchos", "Izquierda", "Justificado")
+    private val segmentLabels = listOf(
+        "Tocar", "Intercalado", "Solo traducción", "Compacto", "Normal", "Amplio", "Estrechos", "Normales", "Anchos", "Izquierda", "Justificado",
+    )
 
     @Test fun enLosTopesSeApaganAMenosYAMas() {
         var settings by mutableStateOf(ReadingSettings(fontScale = ReadingSettings.MAX_SCALE))
@@ -206,6 +209,14 @@ class ReadingSettingsSheetOnDeviceTest {
 
     /** [start] distinto de fábrica para que "Restablecer" esté encendido. [segmented]: se exige la fila segmentada. */
     /** TalkBack: la fila "Original del libro" dice también su ayuda; "Restablecer" dice qué hace al tocarlo. */
+    /** Modo de lectura (3c-2): el elegido dice su ayuda tras el nombre; los otros, solo su nombre. */
+    @Test fun talkBackOyeElModoElegidoConSuAyuda() {
+        show(fontScale = 1f, widthDp = 360) { ReadingSettingsContent(ReadingSettings(mode = ReadingMode.INTERLEAVED), {}, {}, {}) }
+        rule.onNode(hasContentDescription("Modo de lectura Intercalado. Cada párrafo con su traducción debajo") and state("Elegido")).assertExists()
+        rule.onNode(hasContentDescription("Modo de lectura Tocar") and state("No elegido")).assertExists()
+        rule.onNode(hasContentDescription("Modo de lectura Solo traducción") and state("No elegido")).assertExists()
+    }
+
     @Test fun talkBackOyeLaAyudaDeOriginalYLaAccionDeRestablecer() {
         show(fontScale = 1f, widthDp = 360) { ReadingSettingsContent(ReadingSettings(theme = PageTheme.SEPIA), {}, {}, {}) }
         rule.onNodeWithContentDescription("Fuente Original del libro. Respeta la letra del libro").assertExists()
@@ -220,7 +231,9 @@ class ReadingSettingsSheetOnDeviceTest {
         fontScale: Float,
         widthDp: Int,
         start: ReadingSettings = ReadingSettings(theme = PageTheme.SEPIA),
-        labels: List<String> = listOf("Claro", "Sepia", "Oscuro", "Negro", "Estrechos", "Justificado", "Atkinson Hyperlegible"),
+        labels: List<String> = listOf(
+            "Intercalado", "Solo traducción", "Claro", "Sepia", "Oscuro", "Negro", "Estrechos", "Justificado", "Atkinson Hyperlegible",
+        ),
         segmented: Boolean = false,
     ) {
         var settings by mutableStateOf(start)
@@ -235,8 +248,8 @@ class ReadingSettingsSheetOnDeviceTest {
         val where = "al ${(fontScale * 100).toInt()} % en $widthDp dp"
         val nodes = rule.onAllNodes(hasClickAction())
         val count = nodes.fetchSemanticsNodes().size
-        // Como el teléfono + 4 muestras + A− y A+ + 4 fuentes + 3 + 3 + 2 opciones + Restablecer.
-        assertEquals(20, count, "$where: controles")
+        // 3 modos de lectura + Como el teléfono + 4 muestras + A− y A+ + 4 fuentes + 3 + 3 + 2 opciones + Restablecer.
+        assertEquals(23, count, "$where: controles")
         for (i in 0 until count) {
             nodes[i].performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
         }
@@ -273,6 +286,7 @@ class ReadingSettingsSheetOnDeviceTest {
         val changed = ReadingSettings(
             theme = PageTheme.SEPIA, fontScale = 1.2, font = ReadingFont.LITERATA,
             lineHeight = LineHeightLevel.WIDE, margins = MarginLevel.WIDE, align = TextAlignChoice.JUSTIFY,
+            mode = ReadingMode.INTERLEAVED,
         )
         var config by mutableStateOf(Shot(false, 360, 1f, ReadingSettings(), 1300))
         ActivityScenario.launch(ComponentActivity::class.java).use { s ->
