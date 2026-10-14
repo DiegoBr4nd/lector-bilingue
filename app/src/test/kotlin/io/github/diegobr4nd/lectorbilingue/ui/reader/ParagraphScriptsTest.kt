@@ -326,6 +326,19 @@ class ParagraphScriptsTest {
         // Uno vacío se salta (aquí no hay "tocado" que deba tener texto).
         assertEquals(listOf(PageParagraph(1, "b")), ParagraphScripts.parseVisible("""[{"i":0,"t":"  "},{"i":1,"t":"b"}]"""))
         assertEquals(emptyList(), ParagraphScripts.parseVisible("[]"))
+        // Marca `v: 1`: toca la pantalla. Solo el 1 cuenta (otro valor o sin marca: es de los siguientes).
+        assertEquals(
+            listOf(PageParagraph(0, "a", onScreen = true), PageParagraph(1, "b"), PageParagraph(2, "c"), PageParagraph(3, "d")),
+            ParagraphScripts.parseVisible("""[{"i":0,"t":"a","v":1},{"i":1,"t":"b"},{"i":2,"t":"c","v":true},{"i":3,"t":"d","v":"1"}]"""),
+        )
+        // find no lleva la marca.
+        assertFalse(ParagraphScripts.parseFind("""[{"i":0,"t":"a","v":1}]""").single().onScreen)
+    }
+
+    // Revisión Tarea 4 (importante 2): visible() marca con `v: 1` los que tocan la pantalla (el script ya los separa).
+    @Test fun `visible marca los que tocan la pantalla`() {
+        val js = ParagraphScripts.visible()
+        assertTrue(js.contains("var it = item(k, t); it.v = 1; out.push(it);"), js)
     }
 
     @Test fun `parseVisible falla cerrado`() {

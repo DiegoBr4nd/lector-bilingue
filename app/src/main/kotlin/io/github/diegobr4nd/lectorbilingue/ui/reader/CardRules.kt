@@ -172,9 +172,10 @@ data class ModeRequest(val paragraph: PageParagraph, val priority: Priority)
 
 /**
  * Qué hacer con los párrafos visibles: [tooLong] llevan su tarjeta "demasiado largo" (sin pedirlos), [cached] ya
- * tienen traducción guardada (salen al instante) y [requests] se piden en este orden.
+ * tienen traducción guardada (salen al instante) y [requests] se piden en este orden. [more]: alguno quedó fuera por el
+ * tope; se vuelve a planear cuando la fila del modo se vacía.
  */
-data class ModePlan(val tooLong: List<PageParagraph>, val cached: List<PageParagraph>, val requests: List<ModeRequest>)
+data class ModePlan(val tooLong: List<PageParagraph>, val cached: List<PageParagraph>, val requests: List<ModeRequest>, val more: Boolean = false)
 
 /** Reglas puras de los modos de lectura (3c-2, spec §5.3). */
 object ModeRules {
@@ -219,36 +220,34 @@ object ModeRules {
     }
 
     /**
-     * El plan para los párrafos de `visible()` (de arriba abajo): los primeros (los que tocan la pantalla) como
-     * [Priority.TAP] y los [FOLLOWING] últimos como [Priority.PREFETCH]; al menos el primero va como toque.
+     * El plan para los párrafos de `visible()` (de arriba abajo): los que tocan la pantalla ([PageParagraph.onScreen],
+     * marca de la página) como [Priority.TAP] y los siguientes como [Priority.PREFETCH].
      *
      * - Sin repetir los que ya tienen tarjeta ([open]), salvo los que aún esperan en la fila del modo ([queued]):
      *   esos se conservan, en el orden nuevo.
      * - Vacíos fuera; recortados o de más del tope → [ModePlan.tooLong]; ya en [cached] (texto normalizado) →
      *   [ModePlan.cached]; un siguiente de más de [CardRules.MAX_PREFETCH_CHARS] espera a verse.
-     * - Tope: [inFlight] + pedidos ≤ [MAX_ACTIVE].
-     *
-     * Nota: `visible()` no marca cuáles tocan la pantalla; al final del capítulo (menos de [FOLLOWING] debajo) alguno
-     * de la pantalla sale como pretraducción. Solo cambia la prioridad, no el orden.
+     * - Tope: [inFlight] + pedidos ≤ [MAX_ACTIVE]; si alguno quedó fuera por el tope, [ModePlan.more].
      */
     fun plan(paragraphs: List<PageParagraph>, open: Set<Int>, queued: Set<Int>, inFlight: Int, cached: Set<String>): ModePlan {
-        val onScreen = maxOf(1, paragraphs.size - FOLLOWING)
         val tooLong = ArrayList<PageParagraph>()
         val fromCache = ArrayList<PageParagraph>()
         val requests = ArrayList<ModeRequest>()
-        paragraphs.forEachIndexed { k, p ->
+        var more = false
+        for (p in paragraphs) {
             val text = TranslationRules.normalize(p.text)
             val waiting = p.index in queued
-            if (text.isEmpty() || (p.index in open && !waiting)) return@forEachIndexed
-            val following = k >= onScreen
+            if (text.isEmpty() || (p.index in open && !waiting)) continue
+            val following = !p.onScreen
             when {
                 !waiting && (p.cut || TranslationRules.tooLong(text)) -> tooLong += p
                 following && text.length > CardRules.MAX_PREFETCH_CHARS -> Unit
                 !waiting && text in cached -> fromCache += p
                 inFlight + requests.size < MAX_ACTIVE ->
                     requests += ModeRequest(p, if (following) Priority.PREFETCH else Priority.TAP)
+                else -> more = true
             }
         }
-        return ModePlan(tooLong, fromCache, requests)
+        return ModePlan(tooLong, fromCache, requests, more)
     }
 }

@@ -8,8 +8,9 @@ import org.json.JSONTokener
 /**
  * Un párrafo de la página visible: [index] es su posición entre los párrafos del recurso (0, 1, 2…). [cut]: la página lo
  * recortó al tope ([TranslationRules.MAX_PARAGRAPH_CHARS]); es demasiado largo aunque [text] quede en el tope.
+ * [onScreen]: solo en la respuesta de `visible()`, toca la pantalla (si no, es de los siguientes).
  */
-data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false)
+data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false, val onScreen: Boolean = false)
 
 /** Lo que muestra la tarjeta bajo un párrafo. */
 sealed interface Card {
@@ -201,7 +202,8 @@ object ParagraphScripts {
 
     /**
      * Los párrafos hoja que se ven (tocan el viewport) y los [following] siguientes con texto, de arriba abajo
-     * (spec 3c-2 §5.2). Responde `JSON.stringify([{i, t, cut}, …])` con el mismo recorte y marca que [find]. Un original
+     * (spec 3c-2 §5.2). Responde `JSON.stringify([{i, t, cut, v}, …])` con el mismo recorte y marca que [find]; `v: 1` en los que tocan
+     * la pantalla (revisión de la Tarea 4: la prioridad sale de aquí, no de cuántos llegan). Un original
      * oculto en Solo traducción se mide con el rectángulo de su tarjeta. Las tarjetas no cuentan. Solo lee.
      */
     fun visible(following: Int = 10): String {
@@ -218,7 +220,7 @@ object ParagraphScripts {
               // Arriba de la pantalla, o sin caja (un elemento oculto del libro mide 0×0).
               if (r.bottom <= 0) continue;
               var t = all[k].textContent || '';
-              if (!below && r.top < h) { if (t.trim()) out.push(item(k, t)); continue; }
+              if (!below && r.top < h) { if (t.trim()) { var it = item(k, t); it.v = 1; out.push(it); } continue; }
               below = true;
               if (extra >= a.n) break;
               if (t.trim()) { out.push(item(k, t)); extra++; }
@@ -233,7 +235,7 @@ object ParagraphScripts {
      * la forma no cuadra, si los índices no van de arriba abajo sin repetirse o si llegan más de [MAX_VISIBLE_ITEMS].
      */
     fun parseVisible(json: String?): List<PageParagraph> {
-        val items = parseItems(json, firstNeedsText = false)
+        val items = parseItems(json, firstNeedsText = false, readOnScreen = true)
         if (items.size > MAX_VISIBLE_ITEMS) return emptyList()
         if (items.zipWithNext().any { (x, y) -> y.index <= x.index }) return emptyList()
         return items
@@ -506,7 +508,7 @@ object ParagraphScripts {
      * (espacios colapsados) y se salta los vacíos; con [firstNeedsText], si el primero está vacío no hay nada. Si algo no
      * tiene la forma esperada, lista vacía (fallar cerrado).
      */
-    private fun parseItems(json: String?, firstNeedsText: Boolean): List<PageParagraph> {
+    private fun parseItems(json: String?, firstNeedsText: Boolean, readOnScreen: Boolean = false): List<PageParagraph> {
         val array = when (val v = parse(json)) {
             is JSONArray -> v
             is String -> parse(v) as? JSONArray
@@ -522,7 +524,8 @@ object ParagraphScripts {
             if (text.isEmpty()) {
                 if (k == 0 && firstNeedsText) return emptyList() else continue
             }
-            out += PageParagraph(i, text, cut = o.opt("cut") == true)
+            // Marca "en pantalla" solo en visible() ([readOnScreen]) y solo con el número 1; si no, es de los siguientes.
+            out += PageParagraph(i, text, cut = o.opt("cut") == true, onScreen = readOnScreen && o.opt("v") == 1)
         }
         return out
     }

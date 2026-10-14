@@ -17,7 +17,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -77,9 +80,11 @@ class ReaderViewModel(
     private val bookLoaded = CompletableDeferred<Unit>() // la dirección guardada ya se leyó
     private var directionChosen = false
 
-    // Con hueco de sobra: tryEmit nunca espera y la pantalla lo vacía enseguida en el hilo principal.
-    private val _cardOps = MutableSharedFlow<CardOp>(extraBufferCapacity = 256)
-    val cardOps: SharedFlow<CardOp> = _cardOps.asSharedFlow()
+    // Sin tope ni pérdidas (revisión Tarea 4): reponer un capítulo manda una op por tarjeta de golpe y la pantalla las
+    // aplica de a una con un script; un búfer fijo perdería las primeras (justo donde se lee). Un solo receptor: la
+    // pantalla. Lo que llega sin pantalla espera y se aplica al volver (filtra por recurso y la reposición lo corrige).
+    private val _cardOps = Channel<CardOp>(Channel.UNLIMITED)
+    val cardOps: Flow<CardOp> = _cardOps.receiveAsFlow()
 
     // Ruling L: el resultado de un toque (o de reintentar tocando la tarjeta) se anuncia a TalkBack; la reinserción,
     // la pretraducción, los reintentos al cerrar Idiomas y las tarjetas que la guía de modo llena solas no. Solo si
@@ -108,6 +113,7 @@ class ReaderViewModel(
     private var appliedSettings: ReadingSettings = settings.readingSettingsFlow.value
     private val modeQueue = ArrayDeque<ModeJob>() // en espera, en el orden en que se piden
     private var modeInFlight = 0
+    private var modeMore = false // la última vuelta dejó párrafos fuera por el tope: se vuelve a planear al vaciarse
     private var guideRound = 0L // cada vuelta nueva (o cambio de recurso, modo, dirección) deja sin efecto la anterior
     private val lastVisible = HashMap<String, List<PageParagraph>>() // lo último que la página dijo que se ve
     private val _chapterNotice = MutableStateFlow<ChapterNotice?>(null)
@@ -148,14 +154,14 @@ class ReaderViewModel(
             TapAction.NOTHING -> return
             TapAction.CLOSE -> {
                 open.remove(tapped.index)
-                _cardOps.tryEmit(CardOp.Hide(resource, tapped.index, anchor))
+                _cardOps.trySend(CardOp.Hide(resource, tapped.index, anchor))
                 return
             }
             TapAction.TOGGLE -> {
                 val card = existing ?: return
                 card.toggled = !card.toggled
                 emit(resource, tapped.index, card, anchor)
-                // Lo que aparece se anuncia (la traducción o "Original"); al ocultar, la pantalla dice "Traducción oculta".
+                // Lo que aparece se anuncia (la traducción o "Original"); al ocultar no: eso lo anuncia la pantalla.
                 val shown = ModeRules.display(mode, card.state, card.toggled)
                 if (shown != null && visible == resource) _announcements.tryEmit(CardOp.Show(resource, tapped.index, shown, anchor))
                 return
@@ -276,7 +282,7 @@ class ReaderViewModel(
         _direction.value = pair
         val anchor = ModeRules.anchor(mode)
         for ((resource, open) in cards) {
-            for (index in open.keys) _cardOps.tryEmit(CardOp.Hide(resource, index, anchor))
+            for (index in open.keys) _cardOps.trySend(CardOp.Hide(resource, index, anchor))
         }
         cards.clear()
         modeQueue.clear()
@@ -334,9 +340,9 @@ class ReaderViewModel(
             val anchor = ModeRules.anchor(mode)
             val notice = result.toNotice()
             if (mode != ReadingMode.TAP && notice != null) {
-                // Modos nuevos: sin tarjeta de error por párrafo; un solo aviso arriba (la pantalla lo anuncia).
+                // Modos nuevos: sin tarjeta de error por párrafo ni su anuncio; un solo aviso arriba (decisión del
+                // controlador: la pantalla anuncia solo el aviso, al cambiar chapterNotice).
                 chapterFailed(notice, resource, index, card)
-                if (announce && visible == resource) _announcements.tryEmit(CardOp.Show(resource, index, result.toCardState(), anchor))
                 return@launch
             }
             card.state = result.toCardState()
@@ -384,6 +390,7 @@ class ReaderViewModel(
         val anchor = ModeRules.anchor(mode)
         val queued = modeQueue.filter { it.resource == resource && current(it) }.associateBy { it.index }
         val plan = ModeRules.plan(paragraphs, open.keys, queued.keys, modeInFlight, cached.keys)
+        modeMore = plan.more
         for (p in plan.tooLong) {
             val card = OpenCard(p.text, CardState.TooLong, 0, auto = true)
             open[p.index] = card
@@ -443,6 +450,11 @@ class ReaderViewModel(
                 } finally {
                     modeInFlight--
                     pump()
+                    // Fila vacía y algo quedó fuera por el tope: se pide sin esperar a que la página se mueva.
+                    if (modeQueue.isEmpty() && modeInFlight == 0 && modeMore) {
+                        modeMore = false
+                        visible?.let { guide(it) }
+                    }
                 }
             }
         }
@@ -483,7 +495,7 @@ class ReaderViewModel(
 
     private fun removeCard(resource: String, index: Int) {
         cards[resource]?.remove(index)
-        if (visible == resource) _cardOps.tryEmit(CardOp.Hide(resource, index, ModeRules.anchor(mode)))
+        if (visible == resource) _cardOps.trySend(CardOp.Hide(resource, index, ModeRules.anchor(mode)))
     }
 
     private fun current(job: ModeJob) = cards[job.resource]?.get(job.index) === job.card && job.card.token == job.token
@@ -527,8 +539,8 @@ class ReaderViewModel(
             }
         }
         cards.values.forEach { open -> open.values.forEach { it.toggled = false } }
-        _cardOps.tryEmit(CardOp.Mode(new))
-        visible?.let { resource -> hides.forEach { _cardOps.tryEmit(CardOp.Hide(resource, it, CardAnchor.SCREEN)) } }
+        _cardOps.trySend(CardOp.Mode(new))
+        visible?.let { resource -> hides.forEach { _cardOps.trySend(CardOp.Hide(resource, it, CardAnchor.SCREEN)) } }
         reshow(CardAnchor.SCREEN)
         visible?.let { guide(it) }
     }
@@ -537,7 +549,7 @@ class ReaderViewModel(
     private fun reshow(anchor: CardAnchor) {
         val resource = visible ?: return
         cards[resource]?.entries?.sortedBy { it.key }?.forEach { (index, card) ->
-            ModeRules.display(mode, card.state, card.toggled)?.let { _cardOps.tryEmit(CardOp.Show(resource, index, it, anchor)) }
+            ModeRules.display(mode, card.state, card.toggled)?.let { _cardOps.trySend(CardOp.Show(resource, index, it, anchor)) }
         }
     }
 
@@ -545,7 +557,7 @@ class ReaderViewModel(
     private fun emit(resource: String, index: Int, card: OpenCard, anchor: CardAnchor) {
         if (visible != resource) return
         val shown = ModeRules.display(mode, card.state, card.toggled)
-        _cardOps.tryEmit(if (shown != null) CardOp.Show(resource, index, shown, anchor) else CardOp.Hide(resource, index, anchor))
+        _cardOps.trySend(if (shown != null) CardOp.Show(resource, index, shown, anchor) else CardOp.Hide(resource, index, anchor))
     }
 
     /** Pone en la página la tarjeta abierta del párrafo [index], si su recurso es el visible. */

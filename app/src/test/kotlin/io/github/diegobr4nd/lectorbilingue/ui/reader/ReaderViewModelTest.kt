@@ -9,6 +9,7 @@ import io.github.diegobr4nd.lectorbilingue.books.BookMetadata
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.BookEntity
+import io.github.diegobr4nd.lectorbilingue.books.db.TranslationEntity
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.FakeEngine
 import io.github.diegobr4nd.lectorbilingue.data.FakeEngineProvider
@@ -18,6 +19,7 @@ import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
+import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
@@ -645,8 +647,12 @@ class ReaderViewModelTest {
     private val c2 = "c2.xhtml"
     private val screen = CardAnchor.SCREEN
 
-    /** Párrafos "P{i}." de una página (en pantalla y siguientes, de arriba abajo, como los da `visible()`). */
-    private fun ps(range: IntRange) = range.map { p(it, "P$it.") }
+    /**
+     * Párrafos "P{i}." de una página, de arriba abajo como los da `visible()`: los [onScreen] primeros tocan la pantalla
+     * y el resto son los siguientes.
+     */
+    private fun ps(range: IntRange, onScreen: Int = 2) =
+        range.mapIndexed { k, i -> PageParagraph(i, "P$i.", onScreen = k < onScreen) }
 
     /** El modo de lectura guardado antes de abrir el Lector (igual para todos los libros). */
     private fun mode(m: ReadingMode) {
@@ -717,16 +723,90 @@ class ReaderViewModelTest {
         assertEquals((0..14).toList(), ops.filterIsInstance<CardOp.Show>().map { it.index }.distinct())
         assertTrue((15..29).all { vm.cardState(c1, it) == null })
         g.releaseAll(); advanceUntilIdle()
-        assertEquals((0..14).map { "P$it." }, g.translatedTexts)
-        assertNull(vm.cardState(c1, 15)) // lo que sobró espera a la siguiente vuelta
-        val before = ops.size
-        vm.onVisible(c1, page); advanceUntilIdle()
-        // La segunda vuelta pide los 15 que faltaban…
-        assertEquals((15..29).toList(), ops.drop(before).filterIsInstance<CardOp.Show>().map { it.index }.distinct())
+        // Lo que sobró se pidió al vaciarse la fila (sin esperar a desplazar), en orden…
         assertEquals((0..29).map { "P$it." }, g.translatedTexts)
         assertTrue(ops.noneWaiting(0..29))
         // …y nunca hubo más de 15 en espera a la vez.
         assertEquals(15, ops.maxWaiting())
+    }
+
+    // Revisión Tarea 4 (menor 3): lo que pasó del tope se pide cuando la fila del modo se vacía, no antes.
+    @Test fun alVaciarseLaFilaPideLoQueSobro() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val slow = FakeEngine(workMillis = 100) // P0. de 0 a 100 ms, P1. de 100 a 200… P14. de 1400 a 1500
+        val (vm, ops) = vmWithOps(slow)
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..19))
+        advanceTimeBy(1_450); runCurrent()
+        assertEquals((0..13).map { "P$it." }, slow.translatedTexts)
+        assertTrue((15..19).all { vm.cardState(c1, it) == null }, "aún no: la fila del modo no se vació")
+        advanceUntilIdle()
+        assertEquals((0..19).map { "P$it." }, slow.translatedTexts)
+        for (i in 15..19) assertEquals(CardOp.Show(c1, i, CardState.Text("T(P$i.)"), screen), ops.lastFor(i))
+        // Con todo pedido no hay más vueltas: la fila queda quieta.
+        val before = ops.size
+        advanceUntilIdle()
+        assertEquals(before, ops.size)
+    }
+
+    // Revisión Tarea 4 (importante 1): reponer muchas tarjetas de una vez no pierde ninguna aunque la pantalla vaya lenta.
+    @Test fun reponerTrescientasTarjetasNoPierdeNinguna() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        for (i in 0..299) {
+            val key = TranslationRules.cacheKey(FakeEngineProvider.OPUS_TAG, enEs, "P$i.")
+            cache.rows[key] = TranslationEntity(key, "T(P$i.)", 1L)
+        }
+        val vm = viewModel()
+        val ops = mutableListOf<CardOp>()
+        // La pantalla aplica cada op con un script (suspende): aquí recibe solo cuando corre el hilo de prueba, después
+        // de que el ViewModel ya mandó todas (en backgroundScope advanceUntilIdle no la esperaría).
+        val screenJob = launch { vm.cardOps.toList(ops) }
+        runCurrent()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..299, onScreen = 10))
+        advanceUntilIdle()
+        assertEquals((0..299).toList(), ops.filterIsInstance<CardOp.Show>().map { it.index }) // todas, desde el caché
+        val before = ops.size
+        vm.onResourceShown(c1) // la página se recargó: se reponen todas en el mismo instante
+        vm.updateReadingSettings { it.copy(fontScale = 1.5) } // y otra vez con un ajuste nuevo
+        advanceUntilIdle()
+        val again = ops.drop(before).filterIsInstance<CardOp.Show>().map { it.index }
+        assertEquals((0..299).toList() + (0..299).toList(), again)
+        assertTrue(engine.translatedTexts.isEmpty())
+        screenJob.cancel()
+    }
+
+    // Decisión del controlador: un toque que da con el motor caído o sin modelo en un modo nuevo solo anuncia el aviso.
+    @Test fun tocarQueFallaEnUnModoSoloDaElAviso() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        provider.installedEngines = emptyMap()
+        val (vm, ops, said) = vmWithAnnouncements()
+        vm.onResourceShown(c1); vm.onTap(c1, listOf(p(7, "Siete.")))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.MissingModel(EngineId.OPUS), vm.chapterNotice.value)
+        assertTrue(said.isEmpty(), "ni la tarjeta ni su texto: la pantalla anuncia el aviso: $said")
+        assertNull(vm.cardState(c1, 7))
+        assertTrue(ops.none { it is CardOp.Show && it.card is CardState.MissingModel })
+    }
+
+    // Revisión Tarea 4 (menor 5): al volver a Tocar quedan las tarjetas abiertas con un toque; las de la guía se van.
+    @Test fun volverATocarConservaLasTocadas() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+        advanceUntilIdle()
+        vm.onTap(c1, listOf(p(7, "Siete."))) // abierta con un toque (no la pidió la guía)
+        advanceUntilIdle()
+        val before = ops.size
+        vm.updateReadingSettings { it.copy(mode = ReadingMode.TAP) }
+        runCurrent()
+        val after = ops.drop(before)
+        assertEquals(CardOp.Mode(ReadingMode.TAP), after.first())
+        assertEquals(setOf<CardOp>(CardOp.Hide(c1, 0, screen), CardOp.Hide(c1, 1, screen)), after.filterIsInstance<CardOp.Hide>().toSet())
+        assertEquals(listOf<CardOp>(CardOp.Show(c1, 7, CardState.Text("T(Siete.)"), screen)), after.filterIsInstance<CardOp.Show>())
+        assertEquals(CardState.Text("T(Siete.)"), vm.cardState(c1, 7))
+        assertNull(vm.cardState(c1, 0))
+        // En Tocar se cierra con un toque, como en la 3b (fijando el propio párrafo).
+        vm.onTap(c1, listOf(p(7, "Siete.")))
+        assertEquals(CardOp.Hide(c1, 7), ops.last())
     }
 
     /** Cuántas tarjetas llegaron a estar en espera a la vez, repasando las ops en orden. */
@@ -772,8 +852,8 @@ class ReaderViewModelTest {
         mode(ReadingMode.INTERLEAVED)
         val slow = FakeEngine(workMillis = 100)
         val (vm, ops) = vmWithOps(slow)
-        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..10)) // 1 en pantalla + 10 siguientes
-        advanceTimeBy(150); runCurrent() // P0. hecho; P1. en curso; P2. espera en la fila del servicio; P3.–P10. en la del modo
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..10, onScreen = 1)) // 1 en pantalla + 10 siguientes
+        advanceTimeBy(150); runCurrent() // P0. hecho; P1. en curso (en el servicio); P2.–P10. esperan en la fila del modo
         vm.onResourceShown(c2); vm.onVisible(c2, listOf(p(0, "Q0."), p(1, "Q1.")))
         advanceUntilIdle()
         // Lo que estaba en curso termina (nunca se corta); lo pendiente del capítulo anterior ya no se traduce.

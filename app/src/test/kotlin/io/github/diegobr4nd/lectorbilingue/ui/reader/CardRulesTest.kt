@@ -151,23 +151,28 @@ class CardRulesTest {
         for (mode in ReadingMode.entries) assertTrue(ModeRules.pageMode(mode) in ParagraphScripts.MODES)
     }
 
-    private fun ps(range: IntRange) = range.map { PageParagraph(it, "P$it.") }
+    /** Párrafos "P{i}." de arriba abajo: los [onScreen] primeros tocan la pantalla (marca `v` de `visible()`). */
+    private fun ps(range: IntRange, onScreen: Int = 2) =
+        range.mapIndexed { k, i -> PageParagraph(i, "P$i.", onScreen = k < onScreen) }
 
-    @Test fun `lo visible se pide como toque en orden y los diez siguientes como pretraduccion`() {
+    @Test fun `lo visible se pide como toque en orden y los siguientes como pretraduccion`() {
         val plan = ModeRules.plan(ps(0..11), open = emptySet(), queued = emptySet(), inFlight = 0, cached = emptySet())
         assertEquals((0..11).toList(), plan.requests.map { it.paragraph.index })
         assertEquals(listOf(Priority.TAP, Priority.TAP) + List(10) { Priority.PREFETCH }, plan.requests.map { it.priority })
-        // Con pocos párrafos, al menos el primero va como toque.
-        assertEquals(Priority.TAP, ModeRules.plan(ps(0..3), emptySet(), emptySet(), 0, emptySet()).requests.first().priority)
+        // La prioridad sale de la marca de la página, no de cuántos llegan: al final del capítulo todos en pantalla.
+        assertEquals(List(4) { Priority.TAP }, ModeRules.plan(ps(0..3, onScreen = 4), emptySet(), emptySet(), 0, emptySet()).requests.map { it.priority })
+        assertFalse(plan.more)
     }
 
     @Test fun `el plan no repite los que ya tienen tarjeta y respeta el tope de quince`() {
         val plan = ModeRules.plan(ps(0..29), open = setOf(0, 1), queued = emptySet(), inFlight = 2, cached = emptySet())
         assertEquals((2..14).toList(), plan.requests.map { it.paragraph.index }) // 2 en curso + 13 = 15
         assertEquals(15, ModeRules.MAX_ACTIVE)
+        assertTrue(plan.more) // quedaron párrafos fuera por el tope
         // Los que ya esperan en la fila del modo cuentan para el tope y se conservan en el orden nuevo.
         val again = ModeRules.plan(ps(5..20), open = setOf(5, 6, 7), queued = setOf(6, 7), inFlight = 0, cached = emptySet())
         assertEquals((6..20).toList(), again.requests.map { it.paragraph.index })
+        assertFalse(again.more) // justo 15: no sobra nada
     }
 
     @Test fun `el plan separa lo que ya esta en cache y lo demasiado largo`() {
@@ -183,9 +188,19 @@ class CardRulesTest {
 
     @Test fun `un siguiente de mas de 4000 caracteres no se pide hasta que se vea`() {
         val long = PageParagraph(5, "D".repeat(4_001))
-        val following = ModeRules.plan(ps(0..4) + long + ps(6..14), emptySet(), emptySet(), 0, emptySet())
+        val following = ModeRules.plan(ps(0..4) + long + ps(6..14, onScreen = 0), emptySet(), emptySet(), 0, emptySet())
         assertTrue(following.requests.none { it.paragraph.index == 5 })
-        val onScreen = ModeRules.plan(listOf(long) + ps(6..15), emptySet(), emptySet(), 0, emptySet())
-        assertEquals(ModeRequest(long, Priority.TAP), onScreen.requests.first())
+        val shown = long.copy(onScreen = true)
+        val onScreen = ModeRules.plan(listOf(shown) + ps(6..15, onScreen = 0), emptySet(), emptySet(), 0, emptySet())
+        assertEquals(ModeRequest(shown, Priority.TAP), onScreen.requests.first())
+    }
+
+    // Revisión Tarea 4 (importante 2): tres párrafos, todos en pantalla, uno de 5000 caracteres: se pide como toque.
+    @Test fun `un parrafo largo en pantalla se pide como toque aunque lleguen pocos`() {
+        val long = PageParagraph(1, "L".repeat(5_000), onScreen = true)
+        val paragraphs = listOf(PageParagraph(0, "A.", onScreen = true), long, PageParagraph(2, "C.", onScreen = true))
+        val plan = ModeRules.plan(paragraphs, emptySet(), emptySet(), 0, emptySet())
+        assertEquals(listOf(0, 1, 2), plan.requests.map { it.paragraph.index })
+        assertTrue(plan.requests.all { it.priority == Priority.TAP })
     }
 }

@@ -204,6 +204,8 @@ class ParagraphBridgeOnDeviceTest {
             assertTrue(onScreen.isNotEmpty() && onScreen.first() == 0, "en pantalla: $onScreen")
             val seen = bridge.visible()
             assertEquals(onScreen + (onScreen.last() + 1..onScreen.last() + 10), seen.map { it.index })
+            // Marca `v`: justo los que tocan la pantalla (revisión Tarea 4, importante 2).
+            assertEquals(onScreen, seen.filter { it.onScreen }.map { it.index })
             for (p in seen.filter { it.index >= 1 }) assertEquals(ReaderTestBook.paragraph(p.index), p.text)
             assertEquals(listOf(onScreen.last() + 1, onScreen.last() + 2), bridge.visible(2).map { it.index } - onScreen.toSet())
 
