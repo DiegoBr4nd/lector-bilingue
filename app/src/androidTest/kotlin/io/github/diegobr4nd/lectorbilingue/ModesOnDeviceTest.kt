@@ -105,11 +105,20 @@ class ModesOnDeviceTest {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-prueba-modos") }.asCoroutineDispatcher()
     private val service = TranslationService(AndroidEngineProvider(app, worker), db.translations(), worker = worker, scope = translationScope(worker))
     private val delegate = LectorApp::class.java.getDeclaredField("translations\$delegate").apply { isAccessible = true }
-    private val appDelegate = delegate.get(app).also { delegate.set(app, lazyOf(service)) }
+    private val appDelegate = (delegate.get(app) as Lazy<*>).also { original ->
+        // Si el servicio de la app ya existía (otra prueba del mismo proceso), se suelta su motor antes de cambiarlo:
+        // así no quedan dos motores cargados. Si no existía, no se crea.
+        if (original.isInitialized()) (original.value as TranslationService).release()
+        delegate.set(app, lazyOf(service))
+    }
 
     @After fun cleanUp() = runBlocking<Unit> {
-        app.settings.readingSettings = saved
-        delegate.set(app, appDelegate)
+        // Primero el servicio de la app (pase lo que pase después) y luego los ajustes de Juan.
+        try {
+            delegate.set(app, appDelegate)
+        } finally {
+            app.settings.readingSettings = saved
+        }
         service.release()
         for (id in created) {
             app.openBooks.close(id)
@@ -202,6 +211,10 @@ class ModesOnDeviceTest {
             assertEquals("Original", js(s, "$card.querySelector('.lector-marca').textContent"))
             assertEquals(GREY, js(s, "getComputedStyle($card.querySelector('.lector-marca')).color"))
             val originalSize = js(s, "getComputedStyle($original).fontSize")!!
+            // La marca va justo debajo de su párrafo (no a un margen de párrafo de distancia).
+            val gap = js(s, "String($card.querySelector('.lector-marca').getBoundingClientRect().top - $original.getBoundingClientRect().bottom)")!!.toDouble()
+            Log.i(TAG, "marca Original: $gap px bajo su párrafo")
+            assertTrue(gap in -1.0..6.0, "la marca queda a $gap px de su párrafo")
             screenshot("solo-original")
 
             // 2. Otro toque, ahora en el original → vuelve la traducción, con el tamaño de letra del original.
@@ -387,11 +400,14 @@ class ModesOnDeviceTest {
         val option = rule.onNode(hasContentDescription("Modo de lectura $name", substring = true) and hasClickAction())
         option.performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         rule.waitForIdle()
+        // Un solo canal para la ayuda (TalkBack la oía dos veces): la opción dice "Modo de lectura X, elegido" y luego
+        // la región viva, la ayuda.
         rule.onNode(
-            hasContentDescription("Modo de lectura $name. $help") and
+            hasContentDescription("Modo de lectura $name") and
                 SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Elegido") and
                 SemanticsMatcher.expectValue(SemanticsProperties.Selected, true),
         ).assertExists()
+        assertTrue(rule.onAllNodes(hasContentDescription(help, substring = true)).fetchSemanticsNodes().isEmpty(), "la ayuda va en la descripción")
         rule.onNode(hasText(help) and SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)).assertExists()
     }
 

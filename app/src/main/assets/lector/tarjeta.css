@@ -222,6 +222,13 @@ html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-or
   background-color: transparent !important;
 }
 
+/* La marca "Original" justo debajo de su párrafo: mientras se ve el original, este pierde su margen de abajo (lo
+   pone la tarjeta, 0 0 1em). Misma regla `:has` que el gris de espera (WebView 105 o más; en uno más viejo la marca
+   solo queda un poco más abajo). */
+html[data-lector-modo="solo"] *:has(+ aside.lector-tarjeta.lector-tarjeta[data-lector-original]) {
+  margin-bottom: 0 !important;
+}
+
 /* En espera: "Traduciendo…" quieto (sin latido), en gris, sin fondo ni línea. */
 html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-estado="espera"] {
   background: transparent !important;

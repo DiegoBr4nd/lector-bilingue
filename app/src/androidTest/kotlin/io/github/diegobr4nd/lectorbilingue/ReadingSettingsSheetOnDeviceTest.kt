@@ -209,10 +209,18 @@ class ReadingSettingsSheetOnDeviceTest {
 
     /** [start] distinto de fábrica para que "Restablecer" esté encendido. [segmented]: se exige la fila segmentada. */
     /** TalkBack: la fila "Original del libro" dice también su ayuda; "Restablecer" dice qué hace al tocarlo. */
-    /** Modo de lectura (3c-2): el elegido dice su ayuda tras el nombre; los otros, solo su nombre. */
+    /**
+     * Modo de lectura (3c-2): la ayuda va por un solo canal, la región viva (TalkBack la oía dos veces). La opción dice
+     * "Modo de lectura Intercalado, elegido" y luego la ayuda; ninguna descripción la repite.
+     */
     @Test fun talkBackOyeElModoElegidoConSuAyuda() {
         show(fontScale = 1f, widthDp = 360) { ReadingSettingsContent(ReadingSettings(mode = ReadingMode.INTERLEAVED), {}, {}, {}) }
-        rule.onNode(hasContentDescription("Modo de lectura Intercalado. Cada párrafo con su traducción debajo") and state("Elegido")).assertExists()
+        rule.onNode(hasContentDescription("Modo de lectura Intercalado") and state("Elegido")).assertExists()
+        rule.onNode(
+            hasText("Cada párrafo con su traducción debajo") and
+                SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, androidx.compose.ui.semantics.LiveRegionMode.Polite),
+        ).assertExists()
+        assertTrue(rule.onAllNodes(hasContentDescription("Cada párrafo", substring = true)).fetchSemanticsNodes().isEmpty())
         rule.onNode(hasContentDescription("Modo de lectura Tocar") and state("No elegido")).assertExists()
         rule.onNode(hasContentDescription("Modo de lectura Solo traducción") and state("No elegido")).assertExists()
     }

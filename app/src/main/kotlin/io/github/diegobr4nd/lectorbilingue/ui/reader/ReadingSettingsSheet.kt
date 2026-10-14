@@ -176,10 +176,10 @@ fun ReadingSettingsContent(
                 chosen = chosenM to notChosenM,
                 stacked = perFont < ModeSegmentedMin,
                 onSelect = { v -> onChange { it.copy(mode = v) } },
-                selectedHelp = modeHelp,
                 labelLines = 2, // "Solo traducción" puede partirse en dos líneas; nunca se corta con "…"
             )
-            // Se oye solo al cambiar de modo (no al abrir la hoja): "Solo traducción, elegido" y luego la ayuda.
+            // La ayuda va por un solo canal, esta región viva (en la descripción de la opción TalkBack la oía dos veces):
+            // al cambiar de modo se oye "Modo de lectura Solo traducción, elegido" y luego la ayuda; no al abrir la hoja.
             HelpText(modeHelp, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
 
             // ----- Tema -----
@@ -493,9 +493,8 @@ private fun SizeRow(scale: Double, onStepScale: (up: Boolean) -> Unit) {
 
 /**
  * Una elección entre pocas opciones: botones segmentados de M3, o filas con ✓ si no caben ([stacked]).
- * [chosen]: "Elegido"/"No elegido" (o en femenino) para TalkBack. [selectedHelp]: ayuda de la opción elegida, que
- * TalkBack dice tras su nombre ("Modo de lectura Intercalado, elegido. Cada párrafo…"). [labelLines]: líneas del
- * nombre en el segmento (con 1, lo que no cabe se corta con "…").
+ * [chosen]: "Elegido"/"No elegido" (o en femenino) para TalkBack. [labelLines]: líneas del nombre en el segmento
+ * (con 1, lo que no cabe se corta con "…").
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -506,20 +505,18 @@ private fun <T> SingleChoice(
     chosen: Pair<String, String>,
     stacked: Boolean,
     onSelect: (T) -> Unit,
-    selectedHelp: String? = null,
     labelLines: Int = 1,
 ) {
     if (stacked) {
         Column(Modifier.selectableGroup()) {
             for ((value, label) in options) {
                 val isSelected = value == selected
-                val spoken = stringResource(R.string.reading_option, heading, label)
                 ChoiceRow(
                     label = label,
                     help = null,
                     selected = isSelected,
                     stateLabel = if (isSelected) chosen.first else chosen.second,
-                    spoken = if (isSelected && selectedHelp != null) stringResource(R.string.reading_spoken_with_help, spoken, selectedHelp) else spoken,
+                    spoken = stringResource(R.string.reading_option, heading, label),
                     onClick = { onSelect(value) },
                 )
             }
@@ -529,8 +526,7 @@ private fun <T> SingleChoice(
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.xs)) {
         options.forEachIndexed { i, (value, label) ->
             val isSelected = value == selected
-            val name = stringResource(R.string.reading_option, heading, label)
-            val spoken = if (isSelected && selectedHelp != null) stringResource(R.string.reading_spoken_with_help, name, selectedHelp) else name
+            val spoken = stringResource(R.string.reading_option, heading, label)
             SegmentedButton(
                 selected = isSelected,
                 onClick = { onSelect(value) },

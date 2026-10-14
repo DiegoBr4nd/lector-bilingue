@@ -141,6 +141,9 @@ fun ReaderScreen(
     val direction by vm.direction.collectAsStateWithLifecycle()
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var currentHref by remember { mutableStateOf<String?>(null) }
+    // El recurso cuya página ya recibió el modo y su reposición (efecto de "página lista"). Hasta entonces la posición
+    // no pide lo visible: así ninguna tarjeta de la guía llega a la página antes que setMode.
+    var readyHref by remember { mutableStateOf<String?>(null) }
     var tocOpen by rememberSaveable { mutableStateOf(false) }
     var directionOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -240,7 +243,11 @@ fun ReaderScreen(
                     bridge.setMode(ModeRules.pageMode(op.mode))
                     // Al entrar en un modo nuevo (sobre todo desde Tocar, donde el ViewModel olvidó lo visible), lo que
                     // se ve ahora. El ViewModel ya está en ese modo: emitió esta op.
-                    if (op.mode != ReadingMode.TAP) currentHref?.let { vm.onVisible(it, bridge.visible(ModeRules.FOLLOWING)) }
+                    // Página aún sin preparar: su efecto de "página lista" pedirá lo visible.
+                    val href = currentHref
+                    if (op.mode != ReadingMode.TAP && href != null && href == readyHref) {
+                        vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
+                    }
                 }
             }
         }
@@ -258,6 +265,7 @@ fun ReaderScreen(
     // tarjetas (las viejas de un capítulo vecino ya cargado) y luego el ViewModel repone las abiertas (spec §12).
     LaunchedEffect(currentHref, resumes) {
         val href = currentHref ?: return@LaunchedEffect
+        readyHref = null // recurso nuevo o vuelta al frente: la página pudo recargarse sin el modo
         var tries = 0
         while (!bridge.hideAll(href) && tries++ < PageReadyTries) delay(PageReadyDelayMs)
         // El tema de la tarjeta va en cada página nueva, antes de reponer las tarjetas: así nunca salen con otro color.
@@ -268,6 +276,7 @@ fun ReaderScreen(
         bridge.setMode(ModeRules.pageMode(mode))
         // Aun si la página nunca respondió, el ViewModel debe saber cuál es el recurso visible.
         vm.onResourceShown(href)
+        readyHref = href
         // En Intercalado y Solo traducción se pide lo que se ve (y los siguientes) apenas la página está lista.
         if (mode != ReadingMode.TAP) vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
     }
@@ -287,7 +296,7 @@ fun ReaderScreen(
             delay(VisibleSettleMs)
             val href = locator.href.toString()
             // Un capítulo nuevo lo pide el efecto de "página lista", tras reponer sus tarjetas.
-            if (href != currentHref || vm.readingSettings.value.mode == ReadingMode.TAP) return@collectLatest
+            if (href != currentHref || href != readyHref || vm.readingSettings.value.mode == ReadingMode.TAP) return@collectLatest
             vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
         }
     }
