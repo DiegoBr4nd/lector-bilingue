@@ -774,6 +774,74 @@ class ReaderViewModelTest {
         screenJob.cancel()
     }
 
+    /** Guarda en el caché falso "T(P{i}.)" para cada párrafo "P{i}." de [range]. */
+    private fun cacheP(range: IntRange) {
+        for (i in range) {
+            val key = TranslationRules.cacheKey(FakeEngineProvider.OPUS_TAG, enEs, "P$i.")
+            cache.rows[key] = TranslationEntity(key, "T(P$i.)", 1L)
+        }
+    }
+
+    /** Lo que espera en la fila de tarjetas sin pantalla: se recoge ahora, de una vez. */
+    private fun TestScope.pendingOps(vm: ReaderViewModel): List<CardOp> {
+        val ops = mutableListOf<CardOp>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) { vm.cardOps.toList(ops) }
+        job.cancel()
+        return ops
+    }
+
+    // Seguridad 3c-2 (BAJO-2): sin pantalla que recoja (Lector en segundo plano), los cambios de ajustes y de modo no
+    // hacen crecer la fila de tarjetas: al reponer se descarta lo viejo y queda solo lo que vale ahora.
+    @Test fun sinPantallaLaFilaDeTarjetasNoCrece() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        cacheP(0..9)
+        val vm = viewModel()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..9, onScreen = 5))
+        advanceUntilIdle()
+        repeat(20) { k -> vm.updateReadingSettings { it.copy(fontScale = if (k % 2 == 0) 1.2 else 1.1) }; advanceUntilIdle() }
+        repeat(5) {
+            vm.updateReadingSettings { it.copy(mode = ReadingMode.TRANSLATION_ONLY) }; advanceUntilIdle()
+            vm.updateReadingSettings { it.copy(mode = ReadingMode.INTERLEAVED) }; advanceUntilIdle()
+        }
+        val ops = pendingOps(vm)
+        // Sin pérdidas: el último modo y cada tarjeta una vez, con lo que muestra ahora.
+        assertEquals(
+            listOf<CardOp>(CardOp.Mode(ReadingMode.INTERLEAVED)) + (0..9).map { CardOp.Show(c1, it, CardState.Text("T(P$it.)"), screen) },
+            ops,
+        )
+        assertTrue(engine.translatedTexts.isEmpty())
+    }
+
+    // Seguridad 3c-2 (BAJO-2): lo que esperaba del capítulo anterior se descarta al cambiar de capítulo.
+    @Test fun cambiarDeCapituloSinPantallaDescartaLasOpsDelAnterior() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        cacheP(0..9)
+        val vm = viewModel()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..9))
+        advanceUntilIdle()
+        vm.onResourceShown(c2); vm.onVisible(c2, listOf(p(0, "Q0.")))
+        advanceUntilIdle()
+        val ops = pendingOps(vm)
+        assertTrue(ops.none { it is CardOp.Show && it.resource == c1 || it is CardOp.Hide && it.resource == c1 }, "ops de c1: $ops")
+        assertEquals(CardOp.Show(c2, 0, CardState.Text("T(Q0.)"), screen), ops.last())
+    }
+
+    // Lo que sigue valiendo no se pierde: un cierre pendiente del recurso visible queda en la fila tras reponer.
+    @Test fun reponerSinPantallaConservaLosCierresDelVisible() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown(c1); vm.onTap(c1, listOf(p(0, "Hi.")))
+        advanceUntilIdle()
+        vm.onTap(c1, listOf(p(0, "Hi."))) // en Tocar, otro toque la cierra
+        vm.onTap(c1, listOf(p(1, "Two.")))
+        advanceUntilIdle()
+        vm.onResourceShown(c1) // vuelta al frente: se repone
+        val ops = pendingOps(vm)
+        assertEquals(
+            listOf<CardOp>(CardOp.Hide(c1, 0, CardAnchor.SELF), CardOp.Show(c1, 1, CardState.Text("T(Two.)"), CardAnchor.SELF)),
+            ops,
+        )
+    }
+
     // Decisión del controlador: un toque que da con el motor caído o sin modelo en un modo nuevo solo anuncia el aviso.
     @Test fun tocarQueFallaEnUnModoSoloDaElAviso() = runTest(dispatcher) {
         mode(ReadingMode.INTERLEAVED)

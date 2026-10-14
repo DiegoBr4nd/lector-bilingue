@@ -83,6 +83,7 @@ class ReaderViewModel(
     // Sin tope ni pérdidas (revisión Tarea 4): reponer un capítulo manda una op por tarjeta de golpe y la pantalla las
     // aplica de a una con un script; un búfer fijo perdería las primeras (justo donde se lee). Un solo receptor: la
     // pantalla. Lo que llega sin pantalla espera y se aplica al volver (filtra por recurso y la reposición lo corrige).
+    // Para que no crezca sin pantalla (seguridad 3c-2, BAJO-2), cada reposición descarta lo que ya no vale ([compactOps]).
     private val _cardOps = Channel<CardOp>(Channel.UNLIMITED)
     val cardOps: Flow<CardOp> = _cardOps.receiveAsFlow()
 
@@ -548,8 +549,34 @@ class ReaderViewModel(
     /** Vuelve a poner todas las tarjetas del recurso visible tal como se ven en el modo actual. */
     private fun reshow(anchor: CardAnchor) {
         val resource = visible ?: return
+        compactOps(resource)
         cards[resource]?.entries?.sortedBy { it.key }?.forEach { (index, card) ->
             ModeRules.display(mode, card.state, card.toggled)?.let { _cardOps.trySend(CardOp.Show(resource, index, it, anchor)) }
+        }
+    }
+
+    /**
+     * Antes de reponer (seguridad 3c-2, BAJO-2): saca de la fila lo que la pantalla aún no aplicó y deja solo lo que
+     * sigue valiendo, en el mismo orden. Así la fila no crece si la pantalla no recoge (Lector en segundo plano). Sin
+     * pérdidas: la reposición que sigue vuelve a mandar cada tarjeta abierta del recurso [resource] tal como se ve ahora.
+     * - Show: todas fuera (las del visible vuelven con la reposición; las de otro recurso la pantalla ya no las aplica).
+     * - Hide: solo las de [resource], una por párrafo (las de otro recurso tampoco se aplican; al volver se quita todo).
+     * - Mode: solo la última (la página queda en el modo de ahora; las tarjetas que siguen ya vienen adaptadas).
+     * Todo pasa en el hilo principal, como la pantalla: nada se cuela entre sacar y volver a poner.
+     */
+    private fun compactOps(resource: String) {
+        val pending = ArrayList<CardOp>()
+        while (true) pending += _cardOps.tryReceive().getOrNull() ?: break
+        if (pending.isEmpty()) return
+        val lastMode = pending.lastOrNull { it is CardOp.Mode }
+        val hidden = HashSet<Int>()
+        for (op in pending) {
+            val keep = when (op) {
+                is CardOp.Show -> false
+                is CardOp.Hide -> op.resource == resource && hidden.add(op.index)
+                is CardOp.Mode -> op === lastMode
+            }
+            if (keep) _cardOps.trySend(op)
         }
     }
 
