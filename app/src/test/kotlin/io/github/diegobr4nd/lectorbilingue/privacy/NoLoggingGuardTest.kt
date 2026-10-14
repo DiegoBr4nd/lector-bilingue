@@ -17,6 +17,9 @@ class NoLoggingGuardTest {
         Regex("""\bprintln\("""),
         Regex("""\bprintStackTrace\("""),
         Regex("""\bTimber\b"""),
+        // Revisión de seguridad 3c-2 (BAJO-1): tampoco `console.*` en el JavaScript que la app pone en la página del
+        // libro (lo leería cualquiera con la consola del WebView).
+        Regex("""\bconsole\.[a-z]+\("""),
     )
 
     /** Sube desde el directorio de trabajo hasta encontrar settings.gradle.kts. */
