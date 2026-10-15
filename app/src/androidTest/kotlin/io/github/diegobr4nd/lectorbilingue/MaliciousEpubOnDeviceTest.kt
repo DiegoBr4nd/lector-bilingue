@@ -23,12 +23,15 @@ import io.github.diegobr4nd.lectorbilingue.books.ImportResult
 import io.github.diegobr4nd.lectorbilingue.books.readium.HtmlSanitizer
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.reader.Card
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardAnchor
 import io.github.diegobr4nd.lectorbilingue.ui.reader.CardLabels
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ChapterNotice
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ModeRules
 import io.github.diegobr4nd.lectorbilingue.ui.reader.PageParagraph
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphBridge
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ParagraphScripts
@@ -78,11 +81,13 @@ import kotlin.test.assertTrue
  * - El "espía" es un ServerSocket en 127.0.0.1 dentro de la propia prueba: nunca se contacta un servidor de fuera.
  * - Nunca se pulsa "Abrir" en el diálogo de enlaces externos (no se lanza el navegador).
  * - Todo lo que se crea se borra en [cleanUp].
+ * - La caché de traducciones es una base EN MEMORIA ([InMemoryTranslations]): nunca se toca la de Juan.
  */
 @OptIn(ExperimentalReadiumApi::class)
 @RunWith(AndroidJUnit4::class)
 class MaliciousEpubOnDeviceTest {
     @get:Rule val rule = createEmptyComposeRule()
+    @get:Rule val translations = InMemoryTranslations()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val app = instrumentation.targetContext.applicationContext as LectorApp
@@ -720,6 +725,347 @@ class MaliciousEpubOnDeviceTest {
         assertTrue(meta.containsKey("android.webkit.WebView.EnableSafeBrowsing")); assertFalse(meta.getBoolean("android.webkit.WebView.EnableSafeBrowsing", true))
     }
 
+    // ---------- Modos Intercalado y Solo traducción (M), revisión de seguridad 3c-2 ----------
+    // Los libros de T (y algunos nuevos) abiertos en un modo nuevo: no se toca, la guía de modo traduce sola lo que se
+    // ve. Con es → en instalado la tarjeta acaba en "texto" (Intercalado) o "solo" (Solo traducción); sin el modelo,
+    // un solo aviso arriba del capítulo y ninguna tarjeta (los pasos con el puente se hacen igual). Solo después de
+    // eso se inyecta con el puente. Al final: ningún script del libro corrió, el título y el modo son los de la app y
+    // nada se conectó al espía.
+
+    @Test fun m1Intercalado() = m1(ReadingMode.INTERLEAVED)
+    @Test fun m1Solo() = m1(ReadingMode.TRANSLATION_ONLY)
+
+    private fun m1(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val raw = "Dijo \"hola\" y 'adiós' \\ &lt;/script&gt;&lt;script&gt;window.__pwn=1&lt;/script&gt; fin T1Q"
+        val text = "Dijo \"hola\" y 'adiós' \\ </script><script>window.__pwn=1</script> fin T1Q"
+        val id = importOk(write("m1.epub", basic(SPACER + """<p id="q">$raw</p>""")))
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            // (a) visible() lee el texto exacto y lo marca en pantalla.
+            val seen = runBlocking { bridge.visible(10) }.firstOrNull { it.index == 0 }
+            assertNotNull(seen, "visible() sin el párrafo 0")
+            assertEquals(text, seen.text)
+            assertTrue(seen.onScreen, "el párrafo 0 no está en pantalla")
+            // (b) La guía lo traduce sola y nada corrió.
+            waitModeFinal(s, "q", final)
+            assertEquals("true", js(s, "String(window.__pwn === undefined)"))
+            // (c) Una traducción hostil entra como texto.
+            val evil = "\"x\" </script><script>window.__pwn=2</script>"
+            if (mode == ReadingMode.INTERLEAVED) {
+                runBlocking { bridge.show(0, Card.Text(evil), LABELS, CardAnchor.SCREEN) }
+                assertEquals(evil, js(s, "${cardOf("q")}.textContent"))
+                assertEquals("0", js(s, "String(${cardOf("q")}.children.length)"))
+                assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('script').length)"))
+                // (e) En Intercalado no hay original que alternar y #q nunca se oculta.
+                assertEquals("false", js(s, ParagraphScripts.showOriginal(0, true, CardAnchor.SCREEN)))
+                assertHidden(s, "q", false)
+            } else {
+                runBlocking { bridge.show(0, Card.Solo(evil), LABELS, CardAnchor.SCREEN) }
+                assertEquals(evil, js(s, "${cardOf("q")}.querySelector('.lector-traduccion').textContent"))
+                assertEquals("2", js(s, "String(${cardOf("q")}.children.length)"))
+                assertEquals("0", js(s, "String(${cardOf("q")}.querySelectorAll('script, img').length)"))
+                assertOnlyCopiedStyle(s, cardOf("q"))
+                assertHidden(s, "q", true)
+                // (d) Mostrar el original: #q vuelve y la marca "Original" se ve; luego otra vez la traducción.
+                assertEquals("true", js(s, ParagraphScripts.showOriginal(0, true, CardAnchor.SCREEN)))
+                assertHidden(s, "q", false)
+                assertEquals("inline-block", js(s, "getComputedStyle(${cardOf("q")}.querySelector('.lector-marca')).display"))
+                assertEquals("Original", js(s, "${cardOf("q")}.querySelector('.lector-marca').textContent"))
+                assertEquals("true", js(s, ParagraphScripts.showOriginal(0, false, CardAnchor.SCREEN)))
+                assertHidden(s, "q", true)
+            }
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun m2Intercalado() = m2(ReadingMode.INTERLEAVED)
+    @Test fun m2Solo() = m2(ReadingMode.TRANSLATION_ONLY)
+
+    private fun m2(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val id = importOk(write("m2.epub", basic(SPACER + """<p id="q">&lt;img src=x onerror="window.__pwn=1"&gt; T2IMG</p>""")))
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            waitModeFinal(s, "q", final)
+            Thread.sleep(1_000) // por si un onerror llegara a cargarse
+            assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals("true", js(s, "String(window.__pwn === undefined)"))
+            val evil = "<img src=x onerror=window.__pwn=1>"
+            runBlocking { bridge.show(0, if (mode == ReadingMode.INTERLEAVED) Card.Text(evil) else Card.Solo(evil), LABELS, CardAnchor.SCREEN) }
+            Thread.sleep(1_000)
+            assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals(evil, js(s, translationOf("q", mode)))
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun m3Intercalado() = m3(ReadingMode.INTERLEAVED)
+    @Test fun m3Solo() = m3(ReadingMode.TRANSLATION_ONLY)
+
+    private fun m3(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val id = importOk(write("m3.epub", basic(SPACER + "<p id=\"q\">Línea A Línea B Línea C T3LS</p>")))
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            assertTrue(runBlocking { bridge.visible(10) }.isNotEmpty(), "evaluateJavascript no respondió")
+            waitModeFinal(s, "q", final)
+            val separators = "a b c"
+            if (mode == ReadingMode.TRANSLATION_ONLY) {
+                assertEquals("true", js(s, ParagraphScripts.insert(0, Card.Solo(separators), LABELS, CardAnchor.SCREEN)))
+            } else {
+                // Fuera de "solo" una tarjeta Solo no entra; una de texto sí.
+                assertEquals("false", js(s, ParagraphScripts.insert(0, Card.Solo(separators), LABELS, CardAnchor.SCREEN)))
+                assertEquals("true", js(s, ParagraphScripts.insert(0, Card.Text(separators), LABELS, CardAnchor.SCREEN)))
+            }
+            val content = js(s, translationOf("q", mode))!!
+            assertTrue(content.contains(' ') && content.contains(' '), "faltan los separadores")
+            val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+            assertTrue(runBlocking { bridge.hideAll(href) })
+            assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            assertEquals("0", js(s, "String(document.querySelectorAll('.lector-oculto').length)"))
+            assertHidden(s, "q", false)
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun m4Intercalado() = m4(ReadingMode.INTERLEAVED)
+    @Test fun m4Solo() = m4(ReadingMode.TRANSLATION_ONLY)
+
+    // Un párrafo de 50 000 caracteres en un modo: la guía no lo manda al motor; el siguiente se traduce enseguida.
+    private fun m4(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val huge = "Frase enorme de prueba T4. ".repeat(50_000 / 27 + 1).trim()
+        val id = importOk(write("m4.epub", basic("""<p id="g">$huge</p><p id="n">Un párrafo normal y corto T4B.</p>""")))
+        val final = expectedModeFinal(mode)
+        val tooLong = app.getString(R.string.reader_card_too_long)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val start = System.nanoTime()
+            val seen = runBlocking { bridge.visible(10) }
+            assertTrue((System.nanoTime() - start) / 1_000_000 < 2_000, "visible() tardó más de 2 s")
+            val g = seen.firstOrNull { it.index == 0 }
+            assertNotNull(g, "visible() sin el párrafo enorme")
+            assertEquals(TranslationRules.MAX_PARAGRAPH_CHARS + 1, g.text.length)
+            assertTrue(g.cut, "sin la marca de recorte")
+            // Sin tocar: "demasiado largo" (estilo de error) y, en Solo traducción, el original sigue a la vista.
+            waitFinal(s, "g", "error", timeout = 30_000)
+            assertEquals(tooLong, js(s, "${cardOf("g")}.textContent"))
+            assertHidden(s, "g", false)
+            // El párrafo normal llega a su estado final en menos de 30 s.
+            waitModeFinal(s, "n", final, timeout = 30_000)
+            assertEquals(Lifecycle.State.RESUMED, s.state)
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun m5Intercalado() = m5(ReadingMode.INTERLEAVED)
+    @Test fun m5Solo() = m5(ReadingMode.TRANSLATION_ONLY)
+
+    // Marcas falsas del libro: el modo y el tema en <html>, una tarjeta "solo" falsa, un original "oculto" falso y un
+    // párrafo dentro de un div con la clase de la tarjeta.
+    private fun m5(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val body = SPACER + """<p id="a">Real T5A</p><aside class="lector-tarjeta" data-lector-i="0" data-lector-estado="solo" data-lector-original="">FALSA T5</aside>""" +
+            """<p id="b" class="lector-oculto LECTOR-OCULTO x">Visible T5B</p><div class="lector-tarjeta"><p id="c">Dentro T5C</p></div>"""
+        val head = """<style>aside{display:none} html[data-lector-modo="solo"] #b{color:red}</style>"""
+        val raw = xhtml(body, head).replace("<html xmlns=\"http://www.w3.org/1999/xhtml\"", "<html data-lector-modo=\"solo\" data-lector-tema=\"negro\" xmlns=\"http://www.w3.org/1999/xhtml\"")
+        val id = importOk(write("m5.epub", basic(null, c1Raw = raw)))
+        // (a) El HTML servido no trae nuestras marcas (sin importar mayúsculas).
+        val html = served(open(id), "OEBPS/c1.xhtml")!!
+        for (mark in listOf("lector-tarjeta", "lector-oculto", "data-lector-")) assertFalse(html.contains(mark, ignoreCase = true), "$mark en el libro")
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            // #b conserva su clase propia ("x"); lector-oculto, si está, solo puede ser de la app.
+            assertEquals("x", js(s, "Array.prototype.filter.call(document.getElementById('b').classList, function (c) { return c !== 'lector-oculto'; }).join(' ')"))
+            // (b) El modo (lo espera readerIn) y el tema son los de la app.
+            assertEquals("claro", js(s, "document.documentElement.getAttribute('data-lector-tema')"))
+            // (c) #b se ve con su tarjeta de la app (sin modelo: se ve, sin tarjeta).
+            waitModeFinal(s, "b", final)
+            if (final != null && mode == ReadingMode.TRANSLATION_ONLY) {
+                assertEquals("1", js(s, "String(${cardOf("b")}.querySelectorAll('.lector-traduccion').length)"))
+                assertTrue(js(s, "getComputedStyle(${cardOf("b")}).display") != "none", "la tarjeta de #b no se ve")
+            } else {
+                assertHidden(s, "b", false)
+            }
+            // (d) El párrafo dentro del div falso es un párrafo más.
+            assertTrue(runBlocking { bridge.visible(10) }.any { it.text == "Dentro T5C" }, "visible() sin #c")
+            // (e) Toda tarjeta de la app es la hermana siguiente de su párrafo; la falsa sigue intacta.
+            assertEquals("true", js(s, SIBLINGS_OK))
+            assertEquals("FALSA T5", js(s, "$FAKE.textContent"))
+            if (mode == ReadingMode.TRANSLATION_ONLY && final != null) {
+                waitFinal(s, "a", final)
+                assertEquals("true", js(s, ParagraphScripts.showOriginal(0, true, CardAnchor.SCREEN)))
+                assertEquals("true", js(s, "String(${cardOf("a")}.hasAttribute('data-lector-original'))"))
+                assertEquals("false", js(s, "String($FAKE.hasAttribute('data-lector-original') || $FAKE.hasAttribute('data-lector-i'))"))
+                assertEquals("FALSA T5", js(s, "$FAKE.textContent"))
+                assertEquals("true", js(s, ParagraphScripts.showOriginal(0, false, CardAnchor.SCREEN)))
+            } else {
+                assertEquals("false", js(s, ParagraphScripts.showOriginal(0, true, CardAnchor.SCREEN)))
+            }
+            if (final != null) {
+                waitFinal(s, "a", final)
+                assertTrue(js(s, "getComputedStyle(${cardOf("a")}).display") != "none", "la tarjeta de #a no se ve")
+                assertEquals("visible", js(s, "getComputedStyle(${cardOf("a")}).visibility"))
+            }
+            // (f) hideAll quita solo lo de la app.
+            val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+            assertTrue(runBlocking { bridge.hideAll(href) })
+            assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta').length)"))
+            assertEquals("0", js(s, "String(document.querySelectorAll('.lector-oculto').length)"))
+            assertEquals("FALSA T5", js(s, "$FAKE.textContent"))
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    @Test fun m6Intercalado() = m6(ReadingMode.INTERLEAVED)
+    @Test fun m6Solo() = m6(ReadingMode.TRANSLATION_ONLY)
+
+    // Nada en el registro: ni el texto, ni las traducciones, ni las huellas, tampoco al cambiar de modo y de letra.
+    private fun m6(mode: ReadingMode) = runBlocking<Unit> {
+        val texts = mapOf("q" to "FRASE_UNICA_8c41 inventada.", "r" to "FRASE_UNICA_9d52 también inventada.", "t" to "FRASE_UNICA_ae63 otra vez inventada.")
+        val id = importOk(write("m6.epub", basic(SPACER + texts.entries.joinToString("") { (k, v) -> """<p id="$k">$v</p>""" })))
+        val final = expectedModeFinal(mode)
+        val seen = mutableListOf<String>()
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            for (k in texts.keys) waitModeFinal(s, k, final, timeout = 60_000)
+            if (final != null) for (k in texts.keys) seen += js(s, translationOf(k, mode))!!
+            // Con el libro abierto: setMode, reponer y showOriginal pasan por los scripts.
+            for (m in listOf(ReadingMode.TAP, ReadingMode.INTERLEAVED, ReadingMode.TRANSLATION_ONLY)) {
+                app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT, mode = m)
+                rule.waitUntil("modo $m en la página", 10_000) { js(s, MODE_ATTR) == ModeRules.pageMode(m) }
+                Thread.sleep(1_500)
+            }
+            app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT, mode = ReadingMode.TRANSLATION_ONLY, fontScale = 1.5)
+            Thread.sleep(1_500)
+            if (final != null) {
+                // Mostrar el original y volver (lo que hace un toque en Solo traducción).
+                val vm = viewModel(s)
+                val href = s.navigatorOrNull()!!.currentLocator.value.href.toString()
+                repeat(2) {
+                    runBlocking(Dispatchers.Main) { vm.onTap(href, listOf(PageParagraph(0, texts.getValue("q")))) }
+                    Thread.sleep(1_000)
+                }
+            }
+        }
+        val pair = LanguagePair("es", "en")
+        val keys = AndroidEngineProvider(app, Dispatchers.IO).installed(pair).values
+            .flatMap { tag -> texts.values.map { TranslationRules.cacheKey(tag, pair, it) } }
+        val log = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "brief", "--pid", android.os.Process.myPid().toString()))
+            .inputStream.bufferedReader().use { it.readText() }
+        for (t in texts.values) assertFalse(log.contains(t.substringBefore(' ')), "texto en el registro")
+        for (t in seen) assertFalse(log.contains(t), "traducción en el registro")
+        for (k in keys) assertFalse(log.contains(k), "huella en el registro")
+    }
+
+    @Test fun m7Intercalado() = m7(ReadingMode.INTERLEAVED)
+    @Test fun m7Solo() = m7(ReadingMode.TRANSLATION_ONLY)
+
+    // Seguridad 3c-2 (MEDIO): una fuente del libro limitada a letras que solo salen en la traducción (k, w en inglés)
+    // no hace que el WebView la pida al pintar la tarjeta (en Solo traducción la tarjeta copia la font-family).
+    private fun m7(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val css = "@font-face{font-family:SpyK;src:url('${spy.https}/k.woff2');unicode-range:U+006B,U+0077;} " +
+            "p{font-family:SpyK,serif} p::before{content:url('${spy.https}/before.png')}"
+        val id = importOk(write("m7.epub", basic(SPACER + """<p id="q">Ella quiere saber quién viene mañana.</p>""", head = STYLESHEET, itemsExtra = CSS_ITEM, filesExtra = listOf("OEBPS/s.css" to css))))
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            waitModeFinal(s, "q", final)
+            if (mode == ReadingMode.TRANSLATION_ONLY && final != null) {
+                assertTrue(js(s, "${cardOf("q")}.style.getPropertyValue('font-family')").orEmpty().contains("SpyK"), "la tarjeta no copió la fuente")
+            }
+            Thread.sleep(4_000)
+            assertModeUntouched(s, mode)
+        }
+        assertNoConnections(spy)
+    }
+
+    @Test fun m8Intercalado() = m8(ReadingMode.INTERLEAVED)
+    @Test fun m8Solo() = m8(ReadingMode.TRANSLATION_ONLY)
+
+    // La prueba r (ninguna conexión de red) en los modos nuevos.
+    private fun m8(mode: ReadingMode) = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        inMode(mode)
+        for (epub in listOf(networkEpub(spy), svgEpub(), scriptsEpub())) {
+            val id = importOk(epub)
+            readerIn(id, mode) { s ->
+                repeat(2) {
+                    js(s, "window.scrollTo(0, document.body.scrollHeight); 1")
+                    Thread.sleep(1_500)
+                }
+                Thread.sleep(3_000)
+            }
+        }
+        assertNoConnections(spy)
+    }
+
+    // Solo traducción copia el estilo calculado del original: un estilo hostil del libro sigue siendo solo un valor.
+    @Test fun m9SoloEstiloHostilCopiado() = runBlocking<Unit> {
+        val spy = Spy().also { this@MaliciousEpubOnDeviceTest.spy = it }
+        val css = """#q{font-family:"x;}</style><img src=x onerror=window.__pwn=3>",serif; list-style-type:"<img src=x onerror=window.__pwn=4>"; """ +
+            "background-image:url('${spy.https}/bg-q.png'); display:list-item}"
+        val id = importOk(write("m9.epub", basic(SPACER + """<p id="q">Una frase corriente con estilo hostil T9.</p>""", head = STYLESHEET, itemsExtra = CSS_ITEM, filesExtra = listOf("OEBPS/s.css" to css))))
+        val mode = ReadingMode.TRANSLATION_ONLY
+        val final = expectedModeFinal(mode)
+        inMode(mode)
+        readerIn(id, mode) { s ->
+            waitModeFinal(s, "q", final)
+            // Sin el modelo, la tarjeta Solo la pone la prueba (copia el mismo estilo).
+            if (final == null) runBlocking { ParagraphBridge { s.navigatorOrNull() }.show(0, Card.Solo("An ordinary sentence."), LABELS, CardAnchor.SCREEN) }
+            val card = cardOf("q")
+            val copied = js(s, "$card.style.getPropertyValue('font-family')")
+            assertEquals(js(s, "getComputedStyle(document.getElementById('q')).fontFamily"), copied)
+            assertTrue(copied.orEmpty().contains("onerror"), "el estilo hostil no llegó a la página (la prueba no probaría nada)")
+            assertEquals("2", js(s, "String($card.querySelectorAll('*').length)"))
+            Thread.sleep(1_000)
+            assertEquals("0", js(s, "String(document.querySelectorAll('img').length)"))
+            assertEquals("", js(s, "$card.style.backgroundImage"))
+            assertEquals("none", js(s, "getComputedStyle($card).backgroundImage"))
+            assertOnlyCopiedStyle(s, card)
+            Thread.sleep(2_000)
+            assertModeUntouched(s, mode)
+        }
+        assertEquals(0, spy.count(), "conexiones al espía")
+    }
+
+    // Opcional (m10): el capítulo de etiquetas diminutas (i9) en Solo traducción no cuelga el Lector.
+    @Test fun m10SoloCapituloDeEtiquetasDiminutas() = runBlocking<Unit> {
+        val maxMarkup = 8 * 1024 * 1024 // ResourceSanitizing.MAX_MARKUP_BYTES (interno de :books)
+        val (head, tail) = xhtml("@@").split("@@")
+        val body = "<p>a</p>".repeat((maxMarkup - 1024 - head.length - tail.length) / 8)
+        val id = importOk(write("m10.epub", basic(null, c1Raw = head + body + tail)))
+        val mode = ReadingMode.TRANSLATION_ONLY
+        inMode(mode)
+        reader(id) { s ->
+            rule.waitUntil("modo en la página", 30_000) { js(s, MODE_ATTR) == ModeRules.pageMode(mode) }
+            val bridge = ParagraphBridge { s.navigatorOrNull() }
+            val start = System.nanoTime()
+            val seen = runBlocking { bridge.visible(10) }
+            val took = (System.nanoTime() - start) / 1_000_000
+            assertTrue(seen.isNotEmpty(), "visible() vacío")
+            assertTrue(took < 2_000, "visible() tardó $took ms")
+            Thread.sleep(5_000)
+            assertEquals(Lifecycle.State.RESUMED, s.state)
+        }
+    }
+
     // ---------- Ayudas ----------
 
     private val density: Float get() = app.resources.displayMetrics.density
@@ -794,6 +1140,75 @@ class MaliciousEpubOnDeviceTest {
     /** Ningún script del libro corrió y el título sigue. */
     private fun assertUntouched(s: ActivityScenario<ReaderActivity>) {
         assertEquals("true", js(s, "String(window.__pwn === undefined && document.title === 'C1')"))
+    }
+
+    /** Ajustes de la prueba en un modo nuevo, tema claro ([cleanUp] devuelve los de Juan). Antes de abrir el Lector. */
+    private fun inMode(mode: ReadingMode) {
+        app.settings.readingSettings = ReadingSettings(theme = PageTheme.LIGHT, mode = mode)
+    }
+
+    /** Como [reader], y además espera a que la página tenga el modo de la app. */
+    private suspend fun readerIn(id: String, mode: ReadingMode, block: (ActivityScenario<ReaderActivity>) -> Unit) = reader(id) { s ->
+        rule.waitUntil("modo ${ModeRules.pageMode(mode)} en la página", 10_000) { js(s, MODE_ATTR) == ModeRules.pageMode(mode) }
+        block(s)
+    }
+
+    /** Estado final en un modo nuevo (español → inglés): "texto" (Intercalado) o "solo" con el modelo; null sin él. */
+    private suspend fun expectedModeFinal(mode: ReadingMode): String? = when {
+        expectedFinal() != "texto" -> null
+        mode == ReadingMode.INTERLEAVED -> "texto"
+        else -> "solo"
+    }.also { android.util.Log.i("MaliciosoModos", "modo=$mode final=${it ?: "aviso-sin-modelo"}") } // solo nombres de estado
+
+    /**
+     * Espera a que la guía de modo deje la tarjeta de #[id] en [final]. Sin el modelo ([final] null): el aviso único
+     * arriba del capítulo y ninguna tarjeta con traducción.
+     */
+    private fun waitModeFinal(s: ActivityScenario<ReaderActivity>, id: String, final: String?, timeout: Long = 60_000) {
+        if (final != null) return waitFinal(s, id, final, timeout)
+        val vm = viewModel(s)
+        rule.waitUntil("aviso de falta el modelo", timeout) { vm.chapterNotice.value is ChapterNotice.MissingModel }
+        assertEquals("0", js(s, "String(document.querySelectorAll('aside.lector-tarjeta[data-lector-estado=\"texto\"], aside.lector-tarjeta[data-lector-estado=\"solo\"]').length)"))
+    }
+
+    /** La traducción que muestra la tarjeta de #[id]: todo su texto (Intercalado) o el de `.lector-traduccion` (Solo). */
+    private fun translationOf(id: String, mode: ReadingMode) =
+        if (mode == ReadingMode.INTERLEAVED) "${cardOf(id)}.textContent" else "${cardOf(id)}.querySelector('.lector-traduccion').textContent"
+
+    /** #[id] oculto por la app (clase y `display: none`) o a la vista. */
+    private fun assertHidden(s: ActivityScenario<ReaderActivity>, id: String, hidden: Boolean) {
+        assertEquals(hidden.toString(), js(s, "String(document.getElementById('$id').classList.contains('lector-oculto'))"), "#$id lector-oculto")
+        assertEquals(hidden, js(s, "getComputedStyle(document.getElementById('$id')).display") == "none", "#$id display")
+    }
+
+    /** [assertUntouched], el modo de la página es el de la app y no apareció ninguna imagen (el libro limpio tiene [imgs]). */
+    private fun assertModeUntouched(s: ActivityScenario<ReaderActivity>, mode: ReadingMode, imgs: Int = 0) {
+        assertUntouched(s)
+        assertEquals(ModeRules.pageMode(mode), js(s, MODE_ATTR))
+        assertEquals(imgs.toString(), js(s, "String(document.querySelectorAll('img').length)"))
+    }
+
+    /**
+     * El estilo en línea de [card] solo tiene propiedades de [ParagraphScripts.COPIED_STYLE] (falla con las de más).
+     * `font-variant` es abreviada: el navegador la guarda como sus partes (`font-variant-caps`…), que también valen.
+     */
+    private fun assertOnlyCopiedStyle(s: ActivityScenario<ReaderActivity>, card: String) {
+        val extra = js(
+            s,
+            "(function () { var A = $ALLOWED; return Array.prototype.filter.call($card.style, function (n) {" +
+                " return A.indexOf(n) < 0 && !A.some(function (a) { return n.indexOf(a + '-') === 0; }); }).join(','); })()",
+        )
+        assertEquals("", extra, "estilo fuera de la lista fija")
+    }
+
+    /** Ninguna conexión al espía y, de control, una de la propia prueba sí se cuenta. */
+    private fun assertNoConnections(spy: Spy) {
+        Thread.sleep(4_000)
+        assertEquals(0, spy.count(), "conexiones al espía")
+        Socket(InetAddress.getByName("127.0.0.1"), spy.port).close()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (spy.count() < 1 && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        assertEquals(1, spy.count(), "control del espía")
     }
 
     /** Estado final de una tarjeta en estos libros (español → inglés): "texto" con el modelo, "falta-modelo" sin él. */
@@ -1038,6 +1453,18 @@ p::after { content: url('SPY/after.png'); }
     private companion object {
         val MIME = "application/epub+zip".toByteArray()
         val LABELS = CardLabels("Traducción", "Traduciendo…", "Preparando el traductor…", "Original")
+        val ALLOWED: String = JSONArray(ParagraphScripts.COPIED_STYLE).toString()
+        const val MODE_ATTR = "document.documentElement.getAttribute('data-lector-modo')"
+        const val STYLESHEET = """<link rel="stylesheet" type="text/css" href="s.css"/>"""
+        val CSS_ITEM = listOf(Triple("css", "s.css", "text/css"))
+
+        /** El aside falso del libro (m5), por su texto. */
+        const val FAKE = "Array.prototype.find.call(document.querySelectorAll('aside'), function (e) { return e.textContent === 'FALSA T5'; })"
+
+        /** Toda tarjeta de la app (aside.lector-tarjeta con índice) es la hermana siguiente de su párrafo. */
+        val SIBLINGS_OK = "(function () { var sel = '${ParagraphScripts.SELECTOR}'; var all = Array.prototype.filter.call(document.querySelectorAll(sel), " +
+            "function (e) { return !e.closest('.lector-tarjeta') && !e.querySelector(sel); }); var cs = document.querySelectorAll('aside.lector-tarjeta[data-lector-i]');" +
+            " return String(Array.prototype.every.call(cs, function (c) { var i = parseInt(c.dataset.lectorI, 10); return !!all[i] && all[i].nextElementSibling === c; })); })()"
 
         /** Hueco al principio del capítulo: el primer párrafo queda a media pantalla, lejos de las barras del Lector. */
         const val SPACER = """<div style="height: 40vh"></div>"""
