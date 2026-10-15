@@ -419,7 +419,9 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
  * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande y dónde conseguir libros gratis.
  * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, seguido de "Toca «Añadir
  * libro»…" (TalkBack oye el botón y enseguida qué hace) y de los libros gratis; la explicación larga queda al final.
- * Así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba.
+ * Así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba. A letra normal
+ * el orden es dibujo, título, explicación, botón, "Toca «Añadir libro»…" y libros gratis (lo nuevo de la 3c-3 va debajo
+ * del botón para no empujarlo fuera de la pantalla).
  */
 @Composable
 private fun EmptyLibrary(onAdd: () -> Unit) {
@@ -463,9 +465,9 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         if (!largeText) {
-            how()
             Spacer(Modifier.height(Spacing.s))
             AddBookButton(onAdd)
+            how() // después del botón: con letra al 130 % "Añadir libro" sigue viéndose sin desplazar
             FreeBooks(Modifier.fillMaxWidth())
         }
     }
