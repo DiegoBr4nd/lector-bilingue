@@ -141,3 +141,20 @@ Pixel 7, 2026-10-11, build de depuración (base e8dc241), tema claro, letra 100 
 - El `setProperty` en los scripts pasa por `seguridad` (regla 8).
 
 Capturas (no van al repo), en `C:\Users\JUAN\AppData\Local\Temp\claude\C--Users-JUAN-Documents-lector-bilingue\7825bb96-c19c-4248-8529-7df99ae37d55\scratchpad\spike-3c2\`: `m4-s4-1-tocar.png`, `m4-s4-2-intercalado.png`, `m4-s4-3-solo-css.png` (estructura perdida), `m4-s4-3-solo-copia.png`, `m4-s4-4-solo-copia-oscuro.png`; números en `results-m1.txt`, `results-m2.txt`, `results-m3.txt`.
+
+### Tiempos de los modos (Tarea 6)
+
+Pixel 7, 2026-10-14, build de depuración (rama en 3957200), `ModesTimingOnDeviceTest`: motor OPUS inglés → español real, beam 1, libro inventado en inglés (párrafos de ~32 palabras), tema claro, letra 100 %, caché de traducciones en memoria (vacía al empezar). Sin tocar la pantalla: la guía de modo pide sola (un pedido a la vez). Dos corridas.
+
+| Medida | Corrida 1 | Corrida 2 |
+|---|---|---|
+| Solo traducción, primera pantalla traducida, motor **frío** (desde abrir el Lector; incluye cargar el modelo; 7 párrafos en pantalla) | 6,5 s | 9,3 s |
+| Solo traducción, pantalla traducida tras saltar a una parte sin traducir, motor **caliente** (a 0,4 y 0,7 del capítulo) | 6,5 s / 8,3 s | 9,6 s / 10,8 s |
+| Intercalado, primera tarjeta (desde que la página empezó a cargar; incluye el modelo) | 1,9 s | 2,3 s |
+| Intercalado, tiempo por párrafo con el motor cargado (mediana de 14) | 1,30 s (0,77–1,95) | 1,40 s (0,80–2,45) |
+| Intercalado, palabras por segundo (mediana) | 24,5 | 22,7 |
+
+- Por párrafo se cumple la meta del motor (< 2 s y ≥ 15 palabras/s), salvo 1–2 párrafos al empezar.
+- La primera pantalla tarda 6,5–10,8 s, casi lo mismo en frío que en caliente. Cargar el modelo pesa poco (la primera tarjeta llega en ~2 s). Lo que manda es traducir los ~7 párrafos visibles de a uno (`MODE_IN_FLIGHT = 1`, ~1,3 s cada uno), más el antirrebote de la página tras el salto.
+- La segunda corrida fue ~40 % más lenta (probablemente el teléfono, ya caliente tras la primera); solo hay dos muestras.
+- Mientras tanto se ve el original en gris con "Traduciendo…", y las tarjetas se llenan de arriba abajo.
