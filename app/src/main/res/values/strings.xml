@@ -215,4 +215,35 @@
     <string name="reading_chosen_f">Elegida</string>
     <string name="reading_not_chosen_m">No elegido</string>
     <string name="reading_not_chosen_f">No elegida</string>
+    <!-- 3c-3 guía de uso: consejos -->
+    <string name="tip_got_it">Entendido</string>
+    <string name="tip_tap">Toca un párrafo para ver su traducción.</string>
+    <string name="tip_hide_modes">Toca otra vez para ocultarla. En Aa puedes leer todo traducido o intercalado.</string>
+    <string name="tip_chapter_edge">Sigue deslizando para pasar al capítulo siguiente. También puedes usar el %1$s o los botones de abajo.</string>
+    <string name="tip_direction">Este libro se traduce al %1$s. Puedes cambiarlo en %2$s, arriba.</string>
+    <!-- 3c-3: Biblioteca vacía y libros gratis -->
+    <string name="library_empty_how">Toca «Añadir libro» para elegir un archivo EPUB del teléfono.</string>
+    <string name="free_books_intro">¿No tienes libros? Hay EPUB gratis y legales en:</string>
+    <string name="free_books_gutenberg">Project Gutenberg</string>
+    <string name="free_books_standard">Standard Ebooks</string>
+    <string name="free_books_open_desc">Abrir %1$s en el navegador</string>
+    <string name="library_menu_howto">Cómo se usa</string>
+    <!-- 3c-3: Cómo se usa -->
+    <string name="reading_howto_link">¿Cómo se usa la app?</string>
+    <string name="howto_title">Cómo se usa</string>
+    <string name="howto_add_title">Añadir libros</string>
+    <string name="howto_add_body">En la Biblioteca, toca «Añadir libro» y elige un archivo EPUB. La app guarda una copia privada en el teléfono. Por ahora solo abre EPUB.</string>
+    <string name="howto_tap_title">Tocar y traducir</string>
+    <string name="howto_tap_body">Toca un párrafo y su traducción aparece debajo. Tócalo otra vez para ocultarla. La primera vez el traductor tarda unos segundos en prepararse; después es mucho más rápido.</string>
+    <string name="howto_modes_title">Modos de lectura (Aa)</string>
+    <string name="howto_modes_body">En Aa eliges cómo leer: Tocar (traduces lo que tocas), Intercalado (cada párrafo con su traducción debajo) o Solo traducción (ves el libro traducido; toca un párrafo para ver el original). En Aa también cambias la letra, el tamaño, el interlineado, los márgenes y el color de la página.</string>
+    <string name="howto_chapters_title">Capítulos e Índice</string>
+    <string name="howto_chapters_body">Al llegar al final de un capítulo, sigue deslizando para pasar al siguiente. También tienes los botones de capítulo abajo y el Índice arriba.</string>
+    <string name="howto_languages_title">Idiomas y descargas</string>
+    <string name="howto_languages_body">Arriba ves la dirección de traducción, por ejemplo EN → ES; tócala para cambiarla en ese libro. Cada idioma se descarga una sola vez en «Idiomas» (menú ⋮ de la Biblioteca) y después todo funciona sin internet. Allí también puedes borrar las traducciones guardadas.</string>
+    <string name="howto_privacy_title">Privacidad</string>
+    <string name="howto_privacy_body">La traducción ocurre en tu teléfono. Tus libros y lo que lees nunca salen de él. Solo se usa internet para descargar los idiomas.</string>
+    <string name="howto_free_books_title">Libros gratis</string>
+    <string name="howto_reset">Volver a ver los consejos</string>
+    <string name="howto_reset_done">Los consejos volverán a aparecer</string>
 </resources>

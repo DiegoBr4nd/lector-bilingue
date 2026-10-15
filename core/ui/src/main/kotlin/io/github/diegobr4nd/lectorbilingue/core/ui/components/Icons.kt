@@ -27,4 +27,6 @@ object LectorIcons {
     @DrawableRes val ChevronRight = R.drawable.ic_chevron_right
     @DrawableRes val Toc = R.drawable.ic_toc
     @DrawableRes val Error = R.drawable.ic_error
+    @DrawableRes val Lightbulb = R.drawable.ic_lightbulb
+    @DrawableRes val Help = R.drawable.ic_help
 }
