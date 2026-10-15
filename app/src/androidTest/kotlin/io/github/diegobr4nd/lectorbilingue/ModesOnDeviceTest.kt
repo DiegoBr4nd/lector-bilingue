@@ -38,25 +38,19 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
-import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
-import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
-import io.github.diegobr4nd.lectorbilingue.data.TranslationService
-import io.github.diegobr4nd.lectorbilingue.data.translationScope
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ChapterNoticeBand
 import io.github.diegobr4nd.lectorbilingue.ui.reader.NoticeTexts
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -69,7 +63,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import java.io.File
-import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.test.assertEquals
@@ -99,35 +92,21 @@ class ModesOnDeviceTest {
     /** Los ajustes de Juan: se devuelven tal cual en [cleanUp]. */
     private val saved = app.settings.readingSettings
 
-    // Servicio de traducción de la prueba: motor real, caché en memoria. Reemplaza al de la app (el `by lazy` de
-    // LectorApp) hasta [cleanUp]; el Lector lo toma de `app.translations` al crear su ViewModel.
-    private val db = Room.inMemoryDatabaseBuilder(app, LectorDatabase::class.java).build()
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-prueba-modos") }.asCoroutineDispatcher()
-    private val service = TranslationService(AndroidEngineProvider(app, worker), db.translations(), worker = worker, scope = translationScope(worker))
-    private val delegate = LectorApp::class.java.getDeclaredField("translations\$delegate").apply { isAccessible = true }
-    private val appDelegate = (delegate.get(app) as Lazy<*>).also { original ->
-        // Si el servicio de la app ya existía (otra prueba del mismo proceso), se suelta su motor antes de cambiarlo:
-        // así no quedan dos motores cargados. Si no existía, no se crea.
-        if (original.isInitialized()) (original.value as TranslationService).release()
-        delegate.set(app, lazyOf(service))
-    }
+    // Servicio de traducción de la prueba: motor real, caché en memoria (nunca la de Juan). La regla lo pone en lugar
+    // del de la app antes de cada prueba y lo devuelve siempre al terminar, aunque algo falle al prepararla.
+    @get:Rule val translations = InMemoryTranslations()
 
     @After fun cleanUp() = runBlocking<Unit> {
-        // Primero el servicio de la app (pase lo que pase después) y luego los ajustes de Juan.
         try {
-            delegate.set(app, appDelegate)
+            for (id in created) {
+                app.openBooks.close(id)
+                app.books.delete(id)
+            }
+            dir.deleteRecursively()
+            if (!shots) shotsDir.deleteRecursively()
         } finally {
             app.settings.readingSettings = saved
         }
-        service.release()
-        for (id in created) {
-            app.openBooks.close(id)
-            app.books.delete(id)
-        }
-        dir.deleteRecursively()
-        if (!shots) shotsDir.deleteRecursively()
-        db.close()
-        worker.close()
     }
 
     // ---------- Intercalado ----------
