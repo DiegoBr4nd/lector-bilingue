@@ -54,6 +54,13 @@ sealed interface CardOp {
      * que ya vienen adaptadas (una tarjeta Solo solo entra en una página en modo "solo").
      */
     data class Mode(val mode: ReadingMode) : CardOp
+
+    /**
+     * Salió el aviso del capítulo: la pantalla quita de la página de [resource] TODAS las tarjetas en espera
+     * ("Traduciendo…", "Preparando…", el gris de Solo) y devuelve sus originales. Las ya traducidas se quedan.
+     * Va después de los `Hide` de cada tarjeta: es la segunda barrera si alguno no llegó.
+     */
+    data class RemoveWaiting(val resource: String) : CardOp
 }
 
 /**

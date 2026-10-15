@@ -676,6 +676,7 @@ class ReaderViewModelTest {
             is CardOp.Show -> it.anchor
             is CardOp.Hide -> it.anchor
             is CardOp.Mode -> null
+            is CardOp.RemoveWaiting -> null
         }
     }
 
@@ -890,6 +891,7 @@ class ReaderViewModelTest {
                 }
                 is CardOp.Hide -> waiting -= op.resource to op.index
                 is CardOp.Mode -> Unit
+                is CardOp.RemoveWaiting -> waiting.removeAll { it.first == op.resource }
             }
             max = maxOf(max, waiting.size)
         }
@@ -1030,6 +1032,40 @@ class ReaderViewModelTest {
         advanceUntilIdle()
         assertNull(vm.chapterNotice.value)
         for (i in 0..4) assertEquals(CardOp.Show(c1, i, CardState.Solo("T(P$i.)"), screen), ops.lastFor(i))
+    }
+
+    // Diseño (Tarea 6, ALTO): al salir el aviso no queda ninguna tarjeta en espera; las ya traducidas se quedan.
+    @Test fun elAvisoQuitaTodasLasEsperasEnIntercalado() = runTest(dispatcher) { avisoQuitaEsperas(ReadingMode.INTERLEAVED) }
+
+    @Test fun elAvisoQuitaTodasLasEsperasEnSolo() = runTest(dispatcher) { avisoQuitaEsperas(ReadingMode.TRANSLATION_ONLY) }
+
+    private suspend fun TestScope.avisoQuitaEsperas(m: ReadingMode) {
+        run {
+            mode(m)
+            provider.installedEngines = mapOf(EngineId.OPUS to FakeEngineProvider.OPUS_TAG)
+            val (vm, ops) = vmWithOps()
+            vm.onResourceShown(c1); vm.onVisible(c1, ps(0..1))
+            advanceUntilIdle()
+            val final = if (m == ReadingMode.INTERLEAVED) CardState.Text("T(P0.)") else CardState.Solo("T(P0.)")
+            assertEquals(CardOp.Show(c1, 0, final, screen), ops.lastFor(0))
+            // Se pierde el modelo y la página trae más: el aviso sale con varias tarjetas en espera.
+            provider.installedEngines = emptyMap()
+            vm.onLanguagesClosed(); advanceUntilIdle()
+            vm.onTap(c1, listOf(p(50, "Cincuenta."))) // una abierta con un toque, también en espera
+            vm.onVisible(c1, ps(0..8)); advanceUntilIdle()
+            assertEquals(ChapterNotice.MissingModel(EngineId.OPUS), vm.chapterNotice.value)
+            assertTrue(ops.noneWaiting((2..8) + 50), "$m: $ops")
+            assertTrue((2..8).all { vm.cardState(c1, it) == null } && vm.cardState(c1, 50) == null)
+            assertEquals(CardOp.Show(c1, 0, final, screen), ops.lastFor(0)) // la final se queda
+            // La página recibe además el barrido de esperas, después de las ops de las tarjetas (nunca antes).
+            val sweep = ops.indexOfLast { it == CardOp.RemoveWaiting(c1) }
+            assertTrue(sweep >= 0 && ops.drop(sweep).none { it is CardOp.Show }, "$m: $ops")
+            // Reintentar: vuelve la espera normal y la guía rellena.
+            provider.installedEngines = mapOf(EngineId.OPUS to FakeEngineProvider.OPUS_TAG)
+            vm.retryChapter(c1); advanceUntilIdle()
+            assertNull(vm.chapterNotice.value)
+            for (i in 2..8) assertTrue(ops.lastFor(i).let { it is CardOp.Show && it.card != CardState.Skeleton }, "$m $i")
+        }
     }
 
     @Test fun tocarEnIntercaladoOcultaYMuestra() = runTest(dispatcher) {

@@ -481,6 +481,19 @@ class ReaderViewModel(
         guideRound++
         if (cards[resource]?.get(index) === card) removeCard(resource, index)
         dropQueued { true }
+        // Diseño T6: ninguna otra tarjeta en espera (p. ej. abierta con un toque) se queda en "Traduciendo…" para siempre.
+        // Las ya traducidas se quedan; sus pedidos pendientes llegan después y no encuentran su tarjeta.
+        for ((res, open) in cards) {
+            val it = open.entries.iterator()
+            while (it.hasNext()) {
+                val (i, c) = it.next()
+                if (c.state != CardState.Skeleton && c.state != CardState.Preparing) continue
+                it.remove()
+                if (visible == res) _cardOps.trySend(CardOp.Hide(res, i, ModeRules.anchor(mode)))
+            }
+        }
+        // Y la segunda barrera, en la página: cualquier espera que haya quedado.
+        visible?.let { _cardOps.trySend(CardOp.RemoveWaiting(it)) }
     }
 
     /** Saca de la fila del modo los pedidos que cumplen [which] y quita sus tarjetas (aún en espera). */
@@ -575,6 +588,7 @@ class ReaderViewModel(
                 is CardOp.Show -> false
                 is CardOp.Hide -> op.resource == resource && hidden.add(op.index)
                 is CardOp.Mode -> op === lastMode
+                is CardOp.RemoveWaiting -> false // la reposición ya no trae esperas: el barrido sobra
             }
             if (keep) _cardOps.trySend(op)
         }

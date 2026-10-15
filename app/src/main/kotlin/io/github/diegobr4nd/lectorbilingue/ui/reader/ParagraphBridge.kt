@@ -43,6 +43,11 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
      */
     suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
 
+    /** Quita de la página visible todas las tarjetas en espera y devuelve sus originales (aviso del capítulo). */
+    suspend fun hideWaiting() {
+        run(ParagraphScripts.removeWaiting())
+    }
+
     /** Pone el tema de la tarjeta ("claro", "sepia", "oscuro" o "negro") en la página visible. */
     suspend fun setTheme(theme: String) {
         run(ParagraphScripts.setTheme(theme))

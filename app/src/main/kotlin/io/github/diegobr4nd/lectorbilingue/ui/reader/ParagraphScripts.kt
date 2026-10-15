@@ -401,6 +401,33 @@ object ParagraphScripts {
     )
 
     /**
+     * Quita de la página TODAS las tarjetas en espera (esqueleto, preparando y la espera de Solo) y vuelve a mostrar los
+     * originales que quedaron ocultos sin tarjeta; las tarjetas ya traducidas (texto, solo, error, falta el modelo) no se
+     * tocan. Es lo que se hace cuando sale el aviso del capítulo. Sin saltos (Ruling C, ancla de pantalla). Responde cuántas
+     * quitó. Solo quita: sin marcado ni texto del libro.
+     */
+    fun removeWaiting(): String = script(
+        JSONObject().put("sel", SELECTOR),
+        """
+        $PARAGRAPHS
+        $ANCHOR
+        var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
+        var n = 0;
+        for (var k = 0; k < cards.length; k++) {
+          var c = cards[k], st = c.dataset.lectorEstado;
+          if (st === 'esqueleto' || st === 'preparando' || st === 'espera') { c.remove(); n++; }
+        }
+        var hidden = document.querySelectorAll('.$HIDDEN_CLASS');
+        for (var k = 0; k < hidden.length; k++) {
+          var s = hidden[k].nextElementSibling;
+          if (!(s && s.matches('aside.$CARD_CLASS[data-lector-i]'))) hidden[k].classList.remove('$HIDDEN_CLASS');
+        }
+        $KEEP_ANCHOR
+        return n;
+        """,
+    )
+
+    /**
      * Si la página ya cargó del todo y es el recurso [path] (el `href` del localizador, sin `#`), quita TODAS nuestras
      * tarjetas y responde true; si no, false (la pantalla reintenta poco después). Así una tarjeta vieja (de un capítulo
      * vecino que el ViewPager tenía cargado) no queda antes de reponer las abiertas (spec §12, Ruling K). Solo quita.

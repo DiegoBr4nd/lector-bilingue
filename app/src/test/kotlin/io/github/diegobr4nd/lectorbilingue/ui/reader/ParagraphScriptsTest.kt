@@ -28,6 +28,7 @@ class ParagraphScriptsTest {
             ParagraphScripts.remove(1, CardAnchor.SELF),
             ParagraphScripts.indexAt(1.0, 2.0),
             ParagraphScripts.removeAll("OEBPS/c1.xhtml"),
+            ParagraphScripts.removeWaiting(),
             ParagraphScripts.edges(),
             ParagraphScripts.setTheme("oscuro"),
             ParagraphScripts.insert(0, Card.Skeleton, labels, CardAnchor.SELF),
@@ -472,5 +473,18 @@ class ParagraphScriptsTest {
     @Test fun `removeAll y remove vuelven a mostrar los originales ocultos`() {
         assertTrue(ParagraphScripts.removeAll("OEBPS/c1.xhtml").contains("classList.remove('lector-oculto')"))
         assertTrue(ParagraphScripts.remove(1, CardAnchor.SELF).contains("p.classList.remove('lector-oculto')"))
+    }
+
+    // Diseño T6 (ALTO): al salir el aviso del capítulo se quitan las tarjetas en espera y se devuelven sus originales.
+    @Test fun `removeWaiting solo quita las esperas y no deja originales ocultos sin tarjeta`() {
+        val js = ParagraphScripts.removeWaiting()
+        for (part in listOf(
+            "'esqueleto'", "'preparando'", "'espera'", "c.remove()", "classList.remove('lector-oculto')",
+            "nextElementSibling", "window.scrollBy(0, d)", "anchor()",
+        )) assertTrue(js.contains(part), "falta $part: $js")
+        // Las finales (texto, solo, error, falta-modelo) no se nombran: no se tocan.
+        for (final in listOf("'texto'", "'solo'", "'error'", "'falta-modelo'")) assertFalse(js.contains(final), final)
+        assertFalse(js.contains("console"), js)
+        forbidden.forEach { assertFalse(js.contains(it), "usa $it") }
     }
 }

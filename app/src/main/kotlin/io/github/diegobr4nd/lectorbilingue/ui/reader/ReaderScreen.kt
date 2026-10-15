@@ -239,6 +239,7 @@ fun ReaderScreen(
                     CardRules.originalShown(op.card)?.let { bridge.showOriginal(op.index, it, op.anchor) }
                 }
                 is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index, op.anchor)
+                is CardOp.RemoveWaiting -> if (op.resource == currentHref) bridge.hideWaiting()
                 is CardOp.Mode -> {
                     bridge.setMode(ModeRules.pageMode(op.mode))
                     // Al entrar en un modo nuevo (sobre todo desde Tocar, donde el ViewModel olvidó lo visible), lo que
