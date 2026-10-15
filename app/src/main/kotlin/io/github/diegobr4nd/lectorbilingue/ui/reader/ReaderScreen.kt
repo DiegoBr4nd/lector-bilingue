@@ -628,7 +628,8 @@ internal fun noticeTexts(notice: ChapterNotice, texts: CardTexts): NoticeTexts =
  * Aviso único del capítulo en Intercalado y Solo traducción (boceto 5a §4): una banda bajo la barra superior.
  * - Fallo del motor: `errorContainer` con "Reintentar"; falta el idioma: `secondaryContainer` con "Descargar" (no es
  *   un fallo). Ícono + texto + botón: nunca solo el color.
- * - Botón de 48 dp a la derecha; con letra grande (poco ancho por letra) baja debajo del texto. El texto no se corta.
+ * - Botón de 48 dp a la derecha, texto en 2 líneas como máximo. Con letra grande (≥ 150 %) el texto se ve entero y
+ *   el botón baja debajo: quien usa letra grande es quien necesita leerlo.
  * - TalkBack: el texto es una región viva (se anuncia al aparecer, con "a" y "megabytes"); el botón va aparte.
  * Sin estado: se previsualiza sola.
  */
@@ -645,7 +646,9 @@ fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifi
                     .padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs),
             ) {
                 // Ancho "a letra normal": con letra al 200 % cada texto ocupa el doble (la misma idea que la hoja "Aa").
-                val stacked = maxWidth / LocalDensity.current.fontScale < NoticeRowMin
+                val fontScale = LocalDensity.current.fontScale
+                val largeText = fontScale >= LargeNoticeFontScale
+                val stacked = largeText || maxWidth / fontScale < NoticeRowMin
                 val message = @Composable { m: Modifier ->
                     Row(
                         m.clearAndSetSemantics {
@@ -660,8 +663,13 @@ fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifi
                             contentDescription = null, // decorativo: el texto lo dice
                             modifier = Modifier.size(24.dp),
                         )
-                        // Máximo 2 líneas (con letra al 200 % la banda no tapa media página): lo completo lo dice la descripción.
-                        Text(texts.message, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // A letra normal, máximo 2 líneas (lo completo lo dice la descripción); con letra grande, entero.
+                        Text(
+                            texts.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = if (largeText) Int.MAX_VALUE else 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 val button = @Composable {
@@ -695,6 +703,9 @@ fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifi
 
 /** Debajo de esto (dp a letra normal) el aviso y su botón no caben en una fila ni con 2 líneas de texto: el botón baja. */
 private val NoticeRowMin = 140.dp
+
+/** Desde esta escala de letra el aviso se muestra entero, con el botón debajo. */
+private const val LargeNoticeFontScale = 1.5f
 
 /** Estados de espera de una tarjeta: "Traduciendo…", "Preparando…" o, en Solo traducción, el original en gris. */
 private fun CardState.isWaiting() = this == CardState.Skeleton || this == CardState.Preparing || this == CardState.Waiting

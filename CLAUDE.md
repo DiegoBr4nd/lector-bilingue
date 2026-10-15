@@ -16,7 +16,7 @@ Detalles y evidencia: `docs/contexto-y-decisiones.md`.
 - `docs/agentes/04-diseno.md`: interfaz y accesibilidad
 
 ## Fase actual
-**Fase 3 · Lector EPUB + tocar y traducir** (2a calidad, 2b gestor de modelos, 2c motor Firefox + EngineSelector, 2d diseño + Bienvenida e Idiomas, **3a abrir y leer** y **3b tocar y traducir**: hechas; sigue **3c-1 ajustes de lectura**, luego 3c-2 modos de traducción y 3c-3 guía de uso) ← Juan actualiza esta línea al pasar cada puerta.
+**Fase 3 · Lector EPUB + tocar y traducir** (2a calidad, 2b gestor de modelos, 2c motor Firefox + EngineSelector, 2d diseño + Bienvenida e Idiomas, **3a abrir y leer**, **3b tocar y traducir**, **3c-1 ajustes de lectura** y **3c-2 modos de traducción**: hechas; sigue **3c-3 guía de uso**, luego Fase 6 publicación) ← Juan actualiza esta línea al pasar cada puerta.
 
 ## Reglas siempre vigentes
 1. Responder a Juan **en español**, en frases cortas y con viñetas. Juan es nuevo en Kotlin/Android: definir cada término nuevo en una línea, con una analogía si ayuda.
