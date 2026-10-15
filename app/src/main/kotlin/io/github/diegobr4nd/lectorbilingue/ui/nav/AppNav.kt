@@ -20,6 +20,7 @@ import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.welcome.WelcomeScreen
 
@@ -33,7 +34,7 @@ fun AppNav(
     translationCache: TranslationCacheApi? = null,
     onClose: () -> Unit = {},
     // "Ranura" (slot): un hueco que llena quien llama (MainActivity pone la Biblioteca; las pruebas, lo que necesiten).
-    library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) -> Unit = { _, _ -> },
+    library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?, onHowTo: () -> Unit) -> Unit = { _, _, _ -> },
 ) {
     val backStack = rememberSaveable(
         saver = listSaver<MutableList<Route>, String>(
@@ -84,10 +85,17 @@ fun AppNav(
                     )
                 }
                 Route.Library -> NavEntry(key) {
-                    library({ backStack.add(Route.Languages) }, if (developer.available) ({ backStack.add(Route.Developer) }) else null)
+                    library(
+                        { backStack.add(Route.Languages) },
+                        if (developer.available) ({ backStack.add(Route.Developer) }) else null,
+                        { backStack.add(Route.HowTo) },
+                    )
                 }
                 Route.Languages -> NavEntry(key) {
                     LanguagesScreen(hub = hub, settings = settings, onBack = { pop() }, cache = translationCache)
+                }
+                Route.HowTo -> NavEntry(key) {
+                    HowToScreen(onBack = { pop() }, onResetTips = { settings.resetTips() })
                 }
                 Route.Developer -> NavEntry(key) {
                     // Sin pantalla de desarrollador (release) esta ruta no se alcanza: Routes la descarta.

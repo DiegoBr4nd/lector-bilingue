@@ -37,6 +37,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
+import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
+import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryContent
+import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryUiState
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -263,6 +270,108 @@ class TipsOnDeviceTest {
             Espresso.pressBack()
             waitForTip(tipTap)
             assertFalse(TipId.TAP in app.settings.seenTipsFlow.value, "esconderlo no lo marca visto")
+        }
+    }
+
+    // ---------- Cómo se usa y Biblioteca vacía ----------
+
+    /** Biblioteca vacía: "Toca «Añadir libro»…", los dos botones de libros gratis (≥ 48 dp); "Cómo se usa" desde ⋮. */
+    @Test fun bibliotecaVaciaYComoSeUsa() {
+        var howTo by mutableStateOf(false)
+        ActivityScenario.launch(ComponentActivity::class.java).use { s ->
+            s.onActivity { a ->
+                a.setContent {
+                    LectorTheme {
+                        Box(Modifier.testTag("shot")) {
+                            if (howTo) {
+                                HowToScreen(onBack = { howTo = false }, onResetTips = { app.settings.resetTips() })
+                            } else {
+                                // Base vacía de prueba: nada de la biblioteca de Juan.
+                                LibraryContent(
+                                    state = LibraryUiState(loaded = true),
+                                    onAdd = {}, onOpen = {}, onDelete = {}, onLanguages = {}, onDeveloper = null,
+                                    snackbar = SnackbarHostState(),
+                                    onHowTo = { howTo = true },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            rule.waitForIdle()
+            rule.onNodeWithText(app.getString(R.string.library_empty_how)).assertIsDisplayed()
+            if (shots) saveShot("biblioteca-vacia.png")
+            val gutenberg = app.getString(R.string.free_books_open_desc, app.getString(R.string.free_books_gutenberg))
+            val standard = app.getString(R.string.free_books_open_desc, app.getString(R.string.free_books_standard))
+            for (desc in listOf(gutenberg, standard)) {
+                rule.onNode(hasContentDescription(desc) and hasClickAction()).assertHeightIsAtLeast(48.dp)
+            }
+
+            // ⋮ → "Cómo se usa".
+            rule.onNodeWithContentDescription(app.getString(R.string.library_menu)).performClick()
+            rule.onNode(hasText(app.getString(R.string.library_menu_howto)) and hasClickAction()).performClick()
+            rule.waitForIdle()
+            val heading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+            rule.onNode(hasText(app.getString(R.string.howto_title)) and heading).assertIsDisplayed()
+            val sections = listOf(
+                R.string.howto_add_title, R.string.howto_tap_title, R.string.howto_modes_title,
+                R.string.howto_chapters_title, R.string.howto_languages_title, R.string.howto_privacy_title,
+            )
+            for (title in sections) {
+                rule.onNode(hasText(app.getString(title)) and heading).assertExists("falta el título ${app.getString(title)}")
+            }
+            if (shots) saveShot("como-se-usa-arriba.png")
+
+            // Abajo: libros gratis y "Volver a ver los consejos".
+            rule.onNode(hasText(app.getString(R.string.howto_free_books_title)) and heading).performScrollTo()
+            rule.onNode(hasContentDescription(gutenberg) and hasClickAction()).assertHeightIsAtLeast(48.dp)
+            val reset = rule.onNode(hasText(app.getString(R.string.howto_reset)) and hasClickAction())
+            reset.performScrollTo()
+            reset.assertHeightIsAtLeast(48.dp)
+            if (shots) saveShot("como-se-usa-abajo.png")
+            app.settings.markTipSeen(TipId.TAP) // algo que borrar (KeepTips lo devuelve todo al terminar)
+            reset.performClick()
+            rule.waitForIdle()
+            assertTrue(app.settings.seenTipsFlow.value.isEmpty(), "los consejos no se reiniciaron")
+            rule.onNodeWithText(app.getString(R.string.howto_reset_done)).assertIsDisplayed()
+
+            // Atrás vuelve a la Biblioteca.
+            rule.onNodeWithContentDescription(app.getString(R.string.languages_back)).performClick()
+            rule.waitForIdle()
+            rule.onNodeWithText(app.getString(R.string.library_empty_how)).assertIsDisplayed()
+        }
+    }
+
+    /** Desde la hoja Aa del Lector: "¿Cómo se usa la app?" abre la capa; atrás vuelve al mismo sitio del libro. */
+    @Test fun comoSeUsaDesdeAa() = runBlocking<Unit> {
+        // Sin traducir nada: no hace falta el modelo.
+        openReader(EnglishBook.importAndOpen(app, dir).also { created += it }) { s ->
+            fun locator() = runBlocking(Dispatchers.Main) {
+                var nav: EpubNavigatorFragment? = null
+                s.onActivity { nav = navigator(it) }
+                nav!!.currentLocator.value
+            }
+            val before = locator()
+            val aa = app.getString(R.string.reading_title)
+            waitFor("botón Aa") { rule.onAllNodes(hasContentDescription(aa)).fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithContentDescription(aa).performClick()
+            val link = rule.onNode(hasText(app.getString(R.string.reading_howto_link)) and hasClickAction())
+            waitFor("enlace a Cómo se usa") { rule.onAllNodes(hasText(app.getString(R.string.reading_howto_link))).fetchSemanticsNodes().isNotEmpty() }
+            link.performScrollTo()
+            link.assertHeightIsAtLeast(48.dp)
+            link.performClick()
+
+            val title = hasText(app.getString(R.string.howto_title)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+            waitFor("capa Cómo se usa") { rule.onAllNodes(title).fetchSemanticsNodes().isNotEmpty() }
+            assertFalse(hasTip(tipTap), "un consejo con la capa abierta")
+            screenshot("como-se-usa-capa")
+
+            Espresso.pressBack()
+            waitFor("capa cerrada") { rule.onAllNodes(title).fetchSemanticsNodes().isEmpty() }
+            waitFor("el Lector otra vez") { rule.onAllNodes(hasContentDescription(aa)).fetchSemanticsNodes().isNotEmpty() }
+            val after = locator()
+            assertEquals(before.href, after.href, "cambió el capítulo")
+            assertEquals(before.locations.progression, after.locations.progression, "cambió la posición")
         }
     }
 

@@ -8,6 +8,7 @@ sealed interface Route {
     data object Library : Route
     data object Languages : Route
     data object Developer : Route
+    data object HowTo : Route
 
     companion object {
         /** La Bienvenida tiene 3 pasos. */
@@ -21,6 +22,7 @@ internal fun Route.encode(): String = when (this) {
     Route.Library -> "library"
     Route.Languages -> "languages"
     Route.Developer -> "developer"
+    Route.HowTo -> "howto"
 }
 
 /** Lo inválido da `null`: un paso fuera de 1..3, un texto raro, o Desarrollador en una versión que no lo trae. */
@@ -29,6 +31,7 @@ internal fun decodeRoute(text: String): Route? = when {
         text.removePrefix("welcome:").toIntOrNull()?.takeIf { it in 1..Route.WELCOME_STEPS }?.let { Route.Welcome(it) }
     text == "library" || text == "home" -> Route.Library // "home" = pila guardada por la versión 2d
     text == "languages" -> Route.Languages
+    text == "howto" -> Route.HowTo
     text == "developer" -> if (DeveloperEntries.current.available) Route.Developer else null
     else -> null
 }

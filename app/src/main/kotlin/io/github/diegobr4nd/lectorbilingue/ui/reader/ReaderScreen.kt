@@ -90,6 +90,7 @@ import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
@@ -570,6 +571,12 @@ fun ReaderScreen(
             BackHandler(onBack = close)
             LanguagesScreen(app.hub, app.settings, onBack = close, cache = app.translations)
         }
+
+        // "Cómo se usa" a pantalla completa sobre el Lector (desde la hoja Aa): el libro sigue abierto debajo.
+        if (howToOpen) {
+            BackHandler { howToOpen = false }
+            HowToScreen(onBack = { howToOpen = false }, onResetTips = { app.settings.resetTips() })
+        }
     }
 
     if (tocOpen) {
@@ -613,13 +620,14 @@ fun ReaderScreen(
                 view.announce(resetDone) // sin snackbar: no tapa la hoja
             },
             onDismiss = { settingsOpen = false },
+            onHowTo = { settingsOpen = false; howToOpen = true },
         )
     }
 
     // Mientras Idiomas tapa el libro, TalkBack no debe entrar en la página de debajo.
-    LaunchedEffect(languagesOpen, navigator) {
+    LaunchedEffect(languagesOpen, howToOpen, navigator) {
         navigator?.view?.importantForAccessibility =
-            if (languagesOpen) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            if (languagesOpen || howToOpen) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     }
 
     link?.let { url ->

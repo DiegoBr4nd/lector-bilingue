@@ -104,6 +104,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenMaxWidth
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.tips.FreeBooks
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,6 +120,7 @@ fun LibraryScreen(
     app: LectorApp,
     onLanguages: () -> Unit,
     onDeveloper: (() -> Unit)?,
+    onHowTo: () -> Unit,
     onOpenBook: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -173,6 +175,7 @@ fun LibraryScreen(
         onDelete = vm::delete,
         onLanguages = onLanguages,
         onDeveloper = onDeveloper,
+        onHowTo = onHowTo,
         snackbar = snackbar,
         modifier = modifier,
     )
@@ -206,6 +209,7 @@ fun LibraryContent(
     onDeveloper: (() -> Unit)?,
     snackbar: SnackbarHostState,
     modifier: Modifier = Modifier,
+    onHowTo: () -> Unit = {},
 ) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
@@ -225,7 +229,7 @@ fun LibraryContent(
                         modifier = Modifier.semantics { heading() },
                     )
                 },
-                actions = { OverflowMenu(onLanguages, onDeveloper) },
+                actions = { OverflowMenu(onLanguages, onHowTo, onDeveloper) },
                 // En reposo, del color del fondo: sin franja de otro tono. Al desplazar la lista sí cambia (se nota el borde).
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 scrollBehavior = scroll,
@@ -311,7 +315,7 @@ private fun Modifier.animatedItem(scope: LazyItemScope, reduceMotion: Boolean): 
     if (reduceMotion) this else with(scope) { this@animatedItem.animateItem() }
 
 @Composable
-private fun OverflowMenu(onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) {
+private fun OverflowMenu(onLanguages: () -> Unit, onHowTo: () -> Unit, onDeveloper: (() -> Unit)?) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
@@ -324,6 +328,14 @@ private fun OverflowMenu(onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) {
                 onClick = {
                     menuOpen = false
                     onLanguages()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_menu_howto)) },
+                leadingIcon = { Icon(painterResource(LectorIcons.Help), contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onHowTo()
                 },
             )
             if (onDeveloper != null) {
@@ -430,9 +442,18 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
-        if (largeText) AddBookButton(onAdd)
+        if (largeText) {
+            AddBookButton(onAdd)
+            FreeBooks(Modifier.fillMaxWidth())
+        }
         Text(
             stringResource(R.string.library_empty_body),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            stringResource(R.string.library_empty_how),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -440,6 +461,7 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
         if (!largeText) {
             Spacer(Modifier.height(Spacing.s))
             AddBookButton(onAdd)
+            FreeBooks(Modifier.fillMaxWidth())
         }
     }
 }

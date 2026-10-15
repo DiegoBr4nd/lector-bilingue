@@ -110,6 +110,7 @@ fun ReadingSettingsSheet(
     onStepScale: (up: Boolean) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
+    onHowTo: (() -> Unit)? = null,
 ) {
     // El libro se ve detrás (spec §4): la hoja ocupa a lo sumo [SheetMaxFraction] de la ventana y se desplaza por
     // dentro; el velo es leve para que cada cambio (tema, tamaño…) se vea al instante con sus colores reales.
@@ -123,6 +124,7 @@ fun ReadingSettingsSheet(
         ReadingSettingsContent(
             settings, onChange, onStepScale, onReset,
             modifier = Modifier.heightIn(max = windowHeight * SheetMaxFraction),
+            onHowTo = onHowTo,
         )
     }
 }
@@ -148,6 +150,7 @@ fun ReadingSettingsContent(
     onStepScale: (up: Boolean) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
+    onHowTo: (() -> Unit)? = null,
 ) {
     val chosenM = stringResource(R.string.reading_chosen_m)
     val chosenF = stringResource(R.string.reading_chosen_f)
@@ -296,6 +299,18 @@ fun ReadingSettingsContent(
                     .semantics { if (canReset) onClick(label = resetAction) { onReset(); true } },
             ) {
                 Text(stringResource(R.string.reading_reset), style = MaterialTheme.typography.labelLarge)
+            }
+
+            // ----- Enlace a "Cómo se usa" (solo en el Lector) -----
+            if (onHowTo != null) {
+                TextButton(
+                    onClick = onHowTo,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.l).heightIn(min = 48.dp),
+                ) {
+                    Icon(painterResource(LectorIcons.Help), contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(Spacing.s))
+                    Text(stringResource(R.string.reading_howto_link), style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }
