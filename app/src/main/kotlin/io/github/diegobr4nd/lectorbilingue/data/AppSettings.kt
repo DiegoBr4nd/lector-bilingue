@@ -148,7 +148,49 @@ class AppSettings(private val prefs: SharedPreferences) {
         return ReadingSettings.normalizeScale(raw)
     }
 
+    private val tipsState = MutableStateFlow<Set<TipId>>(emptySet())
+    private val tipsLoaded = MutableStateFlow(false)
+
+    /** Los consejos ya vistos (3c-3). Vacío hasta que [seenTipsLoaded] sea true. */
+    val seenTipsFlow: StateFlow<Set<TipId>> = tipsState.asStateFlow()
+
+    /** true cuando [seenTipsFlow] ya tiene lo guardado: antes, ningún consejo se muestra (no parpadean). */
+    val seenTipsLoaded: StateFlow<Boolean> = tipsLoaded.asStateFlow()
+
+    /** Lee los consejos vistos fuera del hilo principal y los publica. Repetirla no hace nada. */
+    suspend fun loadSeenTips(io: CoroutineDispatcher = Dispatchers.IO) {
+        if (tipsLoaded.value) return
+        val stored = withContext(io) { readTips() }
+        // Si mientras tanto se marcó uno, se suma a lo guardado.
+        synchronized(tipsState) { if (!tipsLoaded.value) tipsState.value = stored + tipsState.value }
+        tipsLoaded.value = true
+    }
+
+    /** Marca [id] como visto (no vuelve a salir). */
+    fun markTipSeen(id: TipId) {
+        synchronized(tipsState) {
+            val all = (if (tipsLoaded.value) tipsState.value else readTips() + tipsState.value) + id
+            prefs.edit { putString(KEY_TIPS, all.joinToString(",") { it.wire }) }
+            tipsState.value = all
+            tipsLoaded.value = true
+        }
+    }
+
+    /** "Volver a ver los consejos": borra todas las marcas. */
+    fun resetTips() {
+        synchronized(tipsState) {
+            prefs.edit { remove(KEY_TIPS) }
+            tipsState.value = emptySet()
+            tipsLoaded.value = true
+        }
+    }
+
+    // Ilegible (otro tipo) → nada visto: en el peor caso un consejo sale otra vez. Ids desconocidos se ignoran.
+    private fun readTips(): Set<TipId> =
+        safeString(KEY_TIPS)?.split(',')?.mapNotNull { TipId.fromWire(it.trim()) }?.toSet() ?: emptySet()
+
     companion object {
+        private const val KEY_TIPS = "tips_seen"
         private const val KEY_READING_THEME = "reading_theme"
         private const val KEY_READING_SCALE = "reading_scale"
         private const val KEY_READING_FONT = "reading_font"

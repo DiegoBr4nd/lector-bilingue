@@ -3,6 +3,7 @@ package io.github.diegobr4nd.lectorbilingue.data
 import android.content.SharedPreferences
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import kotlin.test.Test
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -125,5 +126,44 @@ class AppSettingsTest {
         fresh.enginePreference = EnginePreference.QUALITY
         fresh.loadEnginePreference(io = kotlinx.coroutines.Dispatchers.Unconfined)
         assertEquals(EnginePreference.QUALITY, fresh.enginePreferenceFlow.value)
+    }
+
+    @Test fun `por defecto no hay consejos vistos`() = runTest {
+        val settings = AppSettings(MemoryPrefs())
+        settings.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(emptySet(), settings.seenTipsFlow.value)
+        assertTrue(settings.seenTipsLoaded.value)
+    }
+
+    @Test fun `marcar un consejo lo guarda y lo publica`() = runTest {
+        val prefs = MemoryPrefs()
+        val settings = AppSettings(prefs)
+        settings.markTipSeen(TipId.TAP)
+        settings.markTipSeen(TipId.DIRECTION)
+        assertEquals(setOf(TipId.TAP, TipId.DIRECTION), settings.seenTipsFlow.value)
+        val again = AppSettings(prefs)
+        again.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(setOf(TipId.TAP, TipId.DIRECTION), again.seenTipsFlow.value)
+    }
+
+    @Test fun `ids desconocidos se ignoran y un valor de otro tipo es vacio`() = runTest {
+        val prefs = MemoryPrefs()
+        prefs.values["tips_seen"] = "tap,futuro,,chapter_edge"
+        val a = AppSettings(prefs)
+        a.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(setOf(TipId.TAP, TipId.CHAPTER_EDGE), a.seenTipsFlow.value)
+        prefs.values["tips_seen"] = 42
+        val b = AppSettings(prefs)
+        b.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(emptySet(), b.seenTipsFlow.value)
+    }
+
+    @Test fun `volver a ver los consejos borra las marcas`() = runTest {
+        val prefs = MemoryPrefs()
+        val settings = AppSettings(prefs)
+        settings.markTipSeen(TipId.TAP)
+        settings.resetTips()
+        assertEquals(emptySet(), settings.seenTipsFlow.value)
+        assertFalse("tips_seen" in prefs.values && prefs.values["tips_seen"] != "")
     }
 }
