@@ -38,19 +38,34 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
+import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
+import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.EngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.TranslationService
+import io.github.diegobr4nd.lectorbilingue.data.translationScope
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
+import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
+import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.engine.api.TranslationEngine
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ChapterNotice
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ChapterNoticeBand
 import io.github.diegobr4nd.lectorbilingue.ui.reader.NoticeTexts
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
+import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -63,6 +78,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import java.io.File
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.test.assertEquals
@@ -317,8 +333,11 @@ class ModesOnDeviceTest {
                 val button = rule.onNode(hasText(texts.action!!) and hasClickAction())
                 button.assertHeightIsAtLeast(48.dp)
                 val b = button.fetchSemanticsNode().boundsInRoot
-                if (f == 2f) assertTrue(b.top >= message.boundsInRoot.bottom - 1, "$where: el botón no bajó")
-                else assertTrue(b.top < message.boundsInRoot.bottom, "$where: el botón no está al lado")
+                // Diseño T6: compacta (texto en 2 líneas como máximo, botón en la misma fila), también con letra al 200 %.
+                assertTrue(b.top < message.boundsInRoot.bottom, "$where: el botón no está al lado")
+                val bandDp = rule.onNodeWithTag("shot").fetchSemanticsNode().size.height / (px / 360f)
+                Log.i(TAG, "banda $where: ${bandDp.toInt()} dp")
+                assertTrue(bandDp <= 97f, "$where: la banda mide $bandDp dp")
                 if (shots) {
                     val bmp = rule.onNodeWithTag("shot").captureToImage().asAndroidBitmap()
                     shotsDir.mkdirs()
@@ -330,6 +349,64 @@ class ModesOnDeviceTest {
             rule.onNode(hasText(FAILED.action!!) and hasClickAction()).performClick()
             assertEquals(before + 1, clicks)
         }
+    }
+
+    /**
+     * Diseño T6 (ALTO): con un motor que no carga sale el aviso y NINGUNA tarjeta queda en espera ("Traduciendo…",
+     * "Preparando…", el gris de Solo) ni un original oculto sin su tarjeta final. Motor falso solo en la prueba; la
+     * caché es la de memoria de la regla y el servicio de la app se devuelve siempre.
+     */
+    @Test fun elAvisoNoDejaEsperasEnLaPaginaEnIntercaladoYSolo() = runBlocking<Unit> {
+        assumeTrue("falta el modelo inglés → español en el teléfono", enEsInstalled())
+        val delegate = LectorApp::class.java.getDeclaredField("translations\$delegate").apply { isAccessible = true }
+        val before = delegate.get(app)
+        val db = Room.inMemoryDatabaseBuilder(app, LectorDatabase::class.java).build()
+        val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-falla") }.asCoroutineDispatcher()
+        val real = AndroidEngineProvider(app, worker)
+        val failing = object : EngineProvider by real {
+            override fun engine(id: EngineId): TranslationEngine = object : TranslationEngine {
+                override val id = id.wire
+                override suspend fun load(pair: LanguagePair, config: EngineConfig) = throw IllegalStateException("carga fallida")
+                override suspend fun translate(sentences: List<String>): List<String> = throw IllegalStateException("sin motor")
+                override fun unload() = Unit
+            }
+        }
+        val service = TranslationService(failing, db.translations(), worker = worker, scope = translationScope(worker))
+        try {
+            delegate.set(app, lazyOf(service))
+            for (mode in listOf(ReadingMode.INTERLEAVED, ReadingMode.TRANSLATION_ONLY)) {
+                open(mode) { s ->
+                    val vm = viewModel(s)
+                    waitFor("aviso de motor", 60_000) { vm.chapterNotice.value == ChapterNotice.EngineFailed }
+                    settle()
+                    val waiting = "document.querySelectorAll('aside.lector-tarjeta[data-lector-estado=\"esqueleto\"], aside.lector-tarjeta[data-lector-estado=\"preparando\"], aside.lector-tarjeta[data-lector-estado=\"espera\"]').length"
+                    val orphans = "Array.prototype.filter.call(document.querySelectorAll('.lector-oculto'), function (e) { var c = e.nextElementSibling; return !(c && c.matches('aside.lector-tarjeta')); }).length"
+                    // La página aplica las ops una a una; con el aviso ya puesto, las esperas se quitan enseguida.
+                    waitFor("sin esperas en la página", 8_000) { js(s, "String($waiting)") == "0" }
+                    assertEquals("0", js(s, "String($waiting)"), "$mode: tarjetas en espera")
+                    assertEquals("0", js(s, "String($orphans)"), "$mode: originales ocultos sin tarjeta")
+                    Log.i(TAG, "aviso $mode: 0 esperas, 0 huérfanos")
+                    screenshot("aviso-sin-esperas-$mode")
+                }
+            }
+        } finally {
+            delegate.set(app, before)
+            runCatching { service.release() }
+            db.close()
+            worker.close()
+        }
+    }
+
+    /** El ViewModel que el Lector ya creó (la prueba no crea otro). */
+    private fun viewModel(s: ActivityScenario<ReaderActivity>): ReaderViewModel {
+        var vm: ReaderViewModel? = null
+        s.onActivity { a ->
+            val noNew = object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T = error("el Lector no creó su ViewModel")
+            }
+            vm = ViewModelProvider(a.viewModelStore, noNew)[ReaderViewModel::class.java]
+        }
+        return vm!!
     }
 
     private var clicks = 0

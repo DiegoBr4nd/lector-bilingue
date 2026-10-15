@@ -677,8 +677,8 @@ fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifi
     }
 }
 
-/** Debajo de esto (dp a letra normal) el texto del aviso y su botón no caben en una fila: el botón baja. */
-private val NoticeRowMin = 180.dp
+/** Debajo de esto (dp a letra normal) el aviso y su botón no caben en una fila ni con 2 líneas de texto: el botón baja. */
+private val NoticeRowMin = 140.dp
 
 /** Estados de espera de una tarjeta: "Traduciendo…", "Preparando…" o, en Solo traducción, el original en gris. */
 private fun CardState.isWaiting() = this == CardState.Skeleton || this == CardState.Preparing || this == CardState.Waiting

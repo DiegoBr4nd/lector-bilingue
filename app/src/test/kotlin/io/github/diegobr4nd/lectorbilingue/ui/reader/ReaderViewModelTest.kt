@@ -1068,6 +1068,22 @@ class ReaderViewModelTest {
         }
     }
 
+    // Diseño T6 (ALTO), prueba en el Pixel: la pantalla aplica las ops una a una y despacio; las esperas que el aviso
+    // ya dejó sin tarjeta no deben esperar su turno en la fila (se verían un buen rato antes de quitarse).
+    @Test fun elAvisoSacaDeLaFilaLosShowDeEsperasQueNadieHaAplicado() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        engine.failLoads = 100
+        val vm = viewModel() // nadie recoge cardOps: todo queda en la fila, como con la pantalla ocupada
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.EngineFailed, vm.chapterNotice.value)
+        val late = mutableListOf<CardOp>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.cardOps.toList(late) }
+        runCurrent()
+        assertTrue(late.none { it is CardOp.Show }, "quedaron Show de esperas sin aplicar: $late")
+        assertTrue(late.contains(CardOp.RemoveWaiting(c1)), "$late")
+    }
+
     @Test fun tocarEnIntercaladoOcultaYMuestra() = runTest(dispatcher) {
         mode(ReadingMode.INTERLEAVED)
         val (vm, ops) = vmWithOps()

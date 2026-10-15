@@ -492,8 +492,23 @@ class ReaderViewModel(
                 if (visible == res) _cardOps.trySend(CardOp.Hide(res, i, ModeRules.anchor(mode)))
             }
         }
+        purgeDeadShows()
         // Y la segunda barrera, en la página: cualquier espera que haya quedado.
         visible?.let { _cardOps.trySend(CardOp.RemoveWaiting(it)) }
+    }
+
+    /**
+     * La pantalla aplica las ops una a una y la fila puede llevar varias aún sin aplicar: los `Show` de tarjetas que ya no
+     * existen (esperas que el aviso acaba de quitar) se sacan de la fila, para que la página no las pinte un rato antes de
+     * quitarlas. Los `Hide` y lo demás se quedan en su orden. Todo en el hilo principal, como la pantalla (ver [compactOps]).
+     */
+    private fun purgeDeadShows() {
+        val pending = ArrayList<CardOp>()
+        while (true) pending += _cardOps.tryReceive().getOrNull() ?: break
+        for (op in pending) {
+            if (op is CardOp.Show && cards[op.resource]?.get(op.index) == null) continue
+            _cardOps.trySend(op)
+        }
     }
 
     /** Saca de la fila del modo los pedidos que cumplen [which] y quita sus tarjetas (aún en espera). */
