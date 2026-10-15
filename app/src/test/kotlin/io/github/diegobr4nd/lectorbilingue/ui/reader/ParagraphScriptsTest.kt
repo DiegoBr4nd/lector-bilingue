@@ -164,6 +164,29 @@ class ParagraphScriptsTest {
         assertTrue(js.contains("\"kind\":\"falta-modelo\""), js)
     }
 
+    // Revisión final 3c-2 (I1): al volver al frente, si la página es la misma (sin recargar), no se toca nada.
+    @Test fun `removeAll al volver al frente deja la pagina si no se recargo`() {
+        val keep = ParagraphScripts.removeAll("OEBPS/c1.xhtml", keepIfSame = true)
+        val full = ParagraphScripts.removeAll("OEBPS/c1.xhtml")
+        // La marca la pone la app en la página al dejarla lista (una propiedad de window: el marcado del libro no puede).
+        assertTrue(full.contains("window.__lectorLista = true"), full)
+        assertTrue(keep.contains("\"keep\":true"), keep)
+        assertTrue(full.contains("\"keep\":false"), full)
+        // La comprobación va después de "página lista y del recurso esperado", y antes de quitar nada.
+        val check = keep.indexOf("if (a.keep && window.__lectorLista === true) return 'misma';")
+        assertTrue(check > keep.indexOf("location.pathname"), keep)
+        assertTrue(check < keep.indexOf(".remove()"), keep)
+        assertFalse(keep.contains("setAttribute"))
+    }
+
+    @Test fun `leer la respuesta de removeAll con la pagina misma`() {
+        assertEquals(PageReady.CLEARED, ParagraphScripts.parsePageReady("true"))
+        assertEquals(PageReady.SAME, ParagraphScripts.parsePageReady("\"misma\""))
+        assertEquals(PageReady.NOT_READY, ParagraphScripts.parsePageReady("false"))
+        assertEquals(PageReady.NOT_READY, ParagraphScripts.parsePageReady(null))
+        assertEquals(PageReady.NOT_READY, ParagraphScripts.parsePageReady("\"otra\""))
+    }
+
     @Test fun `leer la respuesta de removeAll`() {
         assertTrue(ParagraphScripts.parseReady("true"))
         assertFalse(ParagraphScripts.parseReady("false"))

@@ -38,19 +38,15 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.ImportResult
-import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
-import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.EngineProvider
-import io.github.diegobr4nd.lectorbilingue.data.TranslationService
-import io.github.diegobr4nd.lectorbilingue.data.translationScope
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineConfig
 import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
@@ -65,7 +61,6 @@ import io.github.diegobr4nd.lectorbilingue.ui.reader.NoticeTexts
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -78,7 +73,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import java.io.File
-import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.test.assertEquals
@@ -358,42 +352,80 @@ class ModesOnDeviceTest {
      */
     @Test fun elAvisoNoDejaEsperasEnLaPaginaEnIntercaladoYSolo() = runBlocking<Unit> {
         assumeTrue("falta el modelo inglés → español en el teléfono", enEsInstalled())
-        val delegate = LectorApp::class.java.getDeclaredField("translations\$delegate").apply { isAccessible = true }
-        val before = delegate.get(app)
-        val db = Room.inMemoryDatabaseBuilder(app, LectorDatabase::class.java).build()
-        val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-falla") }.asCoroutineDispatcher()
-        val real = AndroidEngineProvider(app, worker)
-        val failing = object : EngineProvider by real {
-            override fun engine(id: EngineId): TranslationEngine = object : TranslationEngine {
-                override val id = id.wire
-                override suspend fun load(pair: LanguagePair, config: EngineConfig) = throw IllegalStateException("carga fallida")
-                override suspend fun translate(sentences: List<String>): List<String> = throw IllegalStateException("sin motor")
-                override fun unload() = Unit
-            }
-        }
-        val service = TranslationService(failing, db.translations(), worker = worker, scope = translationScope(worker))
-        try {
-            delegate.set(app, lazyOf(service))
-            for (mode in listOf(ReadingMode.INTERLEAVED, ReadingMode.TRANSLATION_ONLY)) {
-                open(mode) { s ->
-                    val vm = viewModel(s)
-                    waitFor("aviso de motor", 60_000) { vm.chapterNotice.value == ChapterNotice.EngineFailed }
-                    settle()
-                    val waiting = "document.querySelectorAll('aside.lector-tarjeta[data-lector-estado=\"esqueleto\"], aside.lector-tarjeta[data-lector-estado=\"preparando\"], aside.lector-tarjeta[data-lector-estado=\"espera\"]').length"
-                    val orphans = "Array.prototype.filter.call(document.querySelectorAll('.lector-oculto'), function (e) { var c = e.nextElementSibling; return !(c && c.matches('aside.lector-tarjeta')); }).length"
-                    // La página aplica las ops una a una; con el aviso ya puesto, las esperas se quitan enseguida.
-                    waitFor("sin esperas en la página", 8_000) { js(s, "String($waiting)") == "0" }
-                    assertEquals("0", js(s, "String($waiting)"), "$mode: tarjetas en espera")
-                    assertEquals("0", js(s, "String($orphans)"), "$mode: originales ocultos sin tarjeta")
-                    Log.i(TAG, "aviso $mode: 0 esperas, 0 huérfanos")
-                    screenshot("aviso-sin-esperas-$mode")
+        // Motor falso solo en esta prueba, por la regla (m6): misma caché en memoria y devolución del de la app.
+        translations.wrapEngine { real ->
+            object : EngineProvider by real {
+                override fun engine(id: EngineId): TranslationEngine = object : TranslationEngine {
+                    override val id = id.wire
+                    override suspend fun load(pair: LanguagePair, config: EngineConfig) = throw IllegalStateException("carga fallida")
+                    override suspend fun translate(sentences: List<String>): List<String> = throw IllegalStateException("sin motor")
+                    override fun unload() = Unit
                 }
             }
-        } finally {
-            delegate.set(app, before)
-            runCatching { service.release() }
-            db.close()
-            worker.close()
+        }
+        for (mode in listOf(ReadingMode.INTERLEAVED, ReadingMode.TRANSLATION_ONLY)) {
+            open(mode) { s ->
+                val vm = viewModel(s)
+                waitFor("aviso de motor", 60_000) { vm.chapterNotice.value == ChapterNotice.EngineFailed }
+                settle()
+                // La página aplica las ops una a una; con el aviso ya puesto, las esperas se quitan enseguida.
+                waitFor("sin esperas en la página", 8_000) { js(s, WAITING_COUNT) == "0" }
+                assertEquals("0", js(s, WAITING_COUNT), "$mode: tarjetas en espera")
+                assertEquals("0", js(s, "String($ORPHANS)"), "$mode: originales ocultos sin tarjeta")
+                Log.i(TAG, "aviso $mode: 0 esperas, 0 huérfanos")
+                screenshot("aviso-sin-esperas-$mode")
+            }
+        }
+    }
+
+    // ---------- Volver al frente ----------
+
+    /**
+     * Revisión final 3c-2 (I1): apagar y encender la pantalla (pausa y vuelta, sin recargar la página) no quita ni vuelve
+     * a poner las tarjetas de Intercalado y Solo traducción, ni mueve lo que se lee; en Solo no reaparece ningún original.
+     */
+    @Test fun volverAlFrenteNoRehaceLasTarjetasEnIntercalado() = runBlocking<Unit> { resumeKeepsCards(ReadingMode.INTERLEAVED, "texto") }
+
+    @Test fun volverAlFrenteNoRehaceLasTarjetasEnSolo() = runBlocking<Unit> { resumeKeepsCards(ReadingMode.TRANSLATION_ONLY, "solo") }
+
+    private suspend fun resumeKeepsCards(mode: ReadingMode, state: String) {
+        open(mode) { s ->
+            goTo(s, 0.5)
+            waitFor("pantalla traducida", FILL_TIMEOUT) { filled(s, state) }
+            // Y los siguientes también: así ninguna tarjeta nueva de la guía se cuenta como un cambio por volver.
+            waitFor("sin esperas", FILL_TIMEOUT) { js(s, WAITING_COUNT) == "0" }
+            settle()
+            // Una marca en cada tarjeta: si se quitan y se vuelven a poner, son otras y no la llevan.
+            js(s, "window.__marca = 7; Array.prototype.forEach.call(document.querySelectorAll('aside.lector-tarjeta'), function (c) { c.__vieja = 1; }); 'ok'")
+            val cards = js(s, CARD_COUNT)!!
+            val anchor = js(s, startRecording(boxes = true))!!
+            assertTrue(anchor != "none", "no hay párrafo que empiece en pantalla")
+            // Además, cada cuadro: ¿se vio en Solo algún original sin su tarjeta? (lo que hacía removeAll al volver).
+            // Y cuántos originales ocultos hay (Solo): si baja, alguno volvió a verse en lugar de su traducción.
+            val hidden = js(s, HIDDEN_COUNT)!!
+            js(s, "window.__huerfanos = 0; window.__minOcultos = $hidden; (function f() { if (!window.__grabando) return; var n = $ORPHANS; if (n > window.__huerfanos) window.__huerfanos = n;" +
+                " var o = document.querySelectorAll('.lector-oculto').length; if (o < window.__minOcultos) window.__minOcultos = o; requestAnimationFrame(f); })(); 'ok'")
+            s.moveToState(Lifecycle.State.CREATED) // como apagar la pantalla (onPause y onStop)
+            s.moveToState(Lifecycle.State.RESUMED) // y volver
+            settle()
+            settle()
+            val orphansSeen = js(s, "String(window.__huerfanos)")
+            val minHidden = js(s, "String(window.__minOcultos)")
+            val (jump, frames) = stopRecording(s)
+            Log.i(TAG, "volver al frente $mode: ancla $anchor, salto máximo $jump px en $frames cuadros, $cards tarjetas, $hidden ocultos (mínimo $minHidden)")
+            // Las de antes siguen todas (ni quitadas ni rehechas). Al volver, la guía pide lo visible y los siguientes:
+            // puede sumar alguna de los siguientes, siempre bajo la pantalla (no toca lo que se lee).
+            val kept = js(s, "String(Array.prototype.filter.call(document.querySelectorAll('aside.lector-tarjeta'), function (c) { return c.__vieja === 1 && c.isConnected; }).length)")
+            val freshOnScreen = js(s, "String(Array.prototype.filter.call(document.querySelectorAll('aside.lector-tarjeta'), function (c) { return c.__vieja !== 1 && c.getBoundingClientRect().top < window.innerHeight; }).length)")
+            Log.i(TAG, "volver al frente $mode: $kept de $cards tarjetas siguen, ${js(s, CARD_COUNT)} ahora, $freshOnScreen nuevas en pantalla")
+            assertEquals("7", js(s, "String(window.__marca)"), "la página se recargó")
+            assertEquals(cards, kept, "$mode: se quitaron o rehicieron tarjetas")
+            assertEquals("0", freshOnScreen, "$mode: tarjetas nuevas en pantalla")
+            assertEquals("0", orphansSeen, "$mode: un original oculto sin su tarjeta")
+            assertEquals(hidden, minHidden, "$mode: reapareció algún original")
+            if (mode == ReadingMode.TRANSLATION_ONLY) assertTrue(hidden.toInt() > 0, "Solo sin originales ocultos")
+            assertTrue(jump <= 2.0, "$mode: lo que se lee se movió $jump px")
+            assertTrue(filled(s, state), "$mode: la pantalla quedó sin traducir")
         }
     }
 
@@ -546,6 +578,11 @@ class ModesOnDeviceTest {
         val ModeAttr = mapOf(ReadingMode.TAP to "tocar", ReadingMode.INTERLEAVED to "intercalado", ReadingMode.TRANSLATION_ONLY to "solo")
         val MISSING = NoticeTexts("Falta el idioma inglés → español (45 MB)", "Falta el idioma inglés a español, 45 megabytes. Descargar", "Descargar", error = false)
         val FAILED = NoticeTexts("No se pudo preparar el traductor", "No se pudo preparar el traductor", "Reintentar", error = true)
+        /** Originales ocultos sin su tarjeta (no debería haber ninguno). */
+        const val ORPHANS = "Array.prototype.filter.call(document.querySelectorAll('.lector-oculto'), function (e) { var c = e.nextElementSibling; return !(c && c.matches('aside.lector-tarjeta')); }).length"
+        const val WAITING_COUNT = "String(document.querySelectorAll('aside.lector-tarjeta[data-lector-estado=\"esqueleto\"], aside.lector-tarjeta[data-lector-estado=\"preparando\"], aside.lector-tarjeta[data-lector-estado=\"espera\"]').length)"
+        const val HIDDEN_COUNT = "String(document.querySelectorAll('.lector-oculto').length)"
+        const val CARD_COUNT = "String(document.querySelectorAll('aside.lector-tarjeta').length)"
         const val WAITING = "document.querySelector('aside.lector-tarjeta[data-lector-estado=\"espera\"]')"
         /** La primera tarjeta Solo de un `<p>` (la del h1 copia su letra de título, 2 em). */
         const val FIRST_SOLO = "document.querySelector('p + aside.lector-tarjeta[data-lector-estado=\"solo\"]')"
@@ -559,8 +596,10 @@ class ModesOnDeviceTest {
             " var r = all[k].getBoundingClientRect(); if (r.height > 0 && r.top >= 0 && r.top < h) return String(k); } return 'none'; })()"
 
         /** Fija el párrafo que se lee y mide en cada cuadro cuánto se aleja de su lugar (máximo y número de cuadros). */
-        fun startRecording() = "(function () { $LEAVES var h = window.innerHeight, b = null, k = 0;" +
-            " for (; k < all.length; k++) { var r = all[k].getBoundingClientRect(); if (r.height > 0 && r.top >= 0 && r.top < h) { b = all[k]; break; } }" +
+        fun startRecording(boxes: Boolean = false) = "(function () { $LEAVES var h = window.innerHeight, b = null, k = 0;" +
+            // [boxes]: lo que se ve de cada párrafo (en Solo, su tarjeta si el original está oculto), como el ancla de la app.
+            " function box(e) { var c = e.nextElementSibling; return ${if (boxes) "e.classList.contains('lector-oculto') && c && c.matches('aside.lector-tarjeta') ? c : e" else "e"}; }" +
+            " for (; k < all.length; k++) { var r = box(all[k]).getBoundingClientRect(); if (r.height > 0 && r.top >= 0 && r.top < h) { b = box(all[k]); break; } }" +
             " if (!b) return 'none'; window.__b = b; window.__top0 = b.getBoundingClientRect().top; window.__salto = 0;" +
             " window.__cuadros = 0; window.__grabando = true;" +
             " function f() { if (!window.__grabando) return; var d = Math.abs(window.__b.getBoundingClientRect().top - window.__top0);" +

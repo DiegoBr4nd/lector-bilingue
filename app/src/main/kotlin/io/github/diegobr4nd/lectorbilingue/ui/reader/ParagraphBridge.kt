@@ -43,6 +43,13 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
      */
     suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
 
+    /**
+     * Como [hideAll], y con [keepIfSame] (vuelta al frente) no toca la página si es la misma que se dejó (no se
+     * recargó): responde [PageReady.SAME] y sus tarjetas siguen ahí.
+     */
+    suspend fun prepare(resource: String, keepIfSame: Boolean): PageReady =
+        ParagraphScripts.parsePageReady(run(ParagraphScripts.removeAll(resource, keepIfSame)))
+
     /** Quita de la página visible todas las tarjetas en espera y devuelve sus originales (aviso del capítulo). */
     suspend fun hideWaiting() {
         run(ParagraphScripts.removeWaiting())

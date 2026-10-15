@@ -263,13 +263,29 @@ fun ReaderScreen(
             view.announce(if (op.card is CardState.Text) announceTranslation.format(spoken) else spoken)
         }
     }
+    // Revisión final 3c-2 (m3): un toque que vuelve a dar el aviso ya puesto. La banda no cambia (su región viva calla):
+    // se dice otra vez aquí, solo por TalkBack.
+    LaunchedEffect(vm) {
+        vm.noticeAgain.collect { again ->
+            if (vm.readingSettings.value.mode == ReadingMode.TAP) return@collect
+            view.announce(noticeTexts(again, cardTexts).spoken)
+        }
+    }
     // Recurso nuevo (o vuelta al frente): cuando la página está lista y es ese recurso, primero se quitan todas las
     // tarjetas (las viejas de un capítulo vecino ya cargado) y luego el ViewModel repone las abiertas (spec §12).
+    // Revisión final 3c-2 (I1): al volver al frente con la MISMA página (no se recargó: conserva la marca de lista), no
+    // se quita ni se repone nada; así Intercalado y Solo traducción no se rehacen ni mueven lo que se lee.
     LaunchedEffect(currentHref, resumes) {
         val href = currentHref ?: return@LaunchedEffect
+        // Solo si este recurso ya había quedado listo del todo (si no, la pasada anterior se cortó a medias).
+        val resumed = readyHref == href
         readyHref = null // recurso nuevo o vuelta al frente: la página pudo recargarse sin el modo
         var tries = 0
-        while (!bridge.hideAll(href) && tries++ < PageReadyTries) delay(PageReadyDelayMs)
+        var ready = bridge.prepare(href, keepIfSame = resumed)
+        while (ready == PageReady.NOT_READY && tries++ < PageReadyTries) {
+            delay(PageReadyDelayMs)
+            ready = bridge.prepare(href, keepIfSame = resumed)
+        }
         // El tema de la tarjeta va en cada página nueva, antes de reponer las tarjetas: así nunca salen con otro color.
         bridge.setTheme(cardTheme)
         // Y el modo (Tarea 4): una página recargada no lo tiene y sin él una tarjeta Solo no se pone. El ViewModel no
@@ -277,7 +293,7 @@ fun ReaderScreen(
         val mode = vm.readingSettings.value.mode
         bridge.setMode(ModeRules.pageMode(mode))
         // Aun si la página nunca respondió, el ViewModel debe saber cuál es el recurso visible.
-        vm.onResourceShown(href)
+        vm.onResourceShown(href, reloaded = ready != PageReady.SAME)
         readyHref = href
         // En Intercalado y Solo traducción se pide lo que se ve (y los siguientes) apenas la página está lista.
         if (mode != ReadingMode.TAP) vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))

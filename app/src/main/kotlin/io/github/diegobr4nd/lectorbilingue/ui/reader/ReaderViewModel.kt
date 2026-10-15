@@ -122,6 +122,13 @@ class ReaderViewModel(
     /** Aviso único arriba del capítulo en los modos nuevos (falta el modelo o el motor no carga); null = nada. */
     val chapterNotice: StateFlow<ChapterNotice?> = _chapterNotice.asStateFlow()
 
+    // Revisión final 3c-2 (m3): un toque que vuelve a fallar con el MISMO aviso puesto. El aviso no cambia (su región
+    // viva calla), así que la pantalla lo vuelve a decir a TalkBack; la banda no se repite.
+    private val _noticeAgain = MutableSharedFlow<ChapterNotice>(extraBufferCapacity = 4)
+
+    /** El aviso que un toque volvió a dar estando ya puesto (para anunciarlo otra vez). */
+    val noticeAgain: SharedFlow<ChapterNotice> = _noticeAgain.asSharedFlow()
+
     init {
         viewModelScope.launch {
             position.filterNotNull().debounce(1_000).collect { save(it) }
@@ -184,8 +191,12 @@ class ReaderViewModel(
         request(resource, tapped.index, card, hit.takeIf { mode == ReadingMode.TAP }, announce = true)
     }
 
-    /** El recurso visible cambió o se recargó: se cancela la pretraducción de los demás y se reponen sus tarjetas. */
-    fun onResourceShown(resource: String) {
+    /**
+     * El recurso visible cambió o se recargó: se cancela la pretraducción de los demás y se reponen sus tarjetas.
+     * [reloaded] = false: vuelta al frente con la MISMA página (no se recargó, sus tarjetas siguen ahí): no se repone
+     * nada, así no se mueve lo que se lee (revisión final 3c-2, I1).
+     */
+    fun onResourceShown(resource: String, reloaded: Boolean = true) {
         val changed = visible != resource
         visible = resource
         translations.cancelPrefetchExcept(resource)
@@ -194,7 +205,7 @@ class ReaderViewModel(
             guideRound++
             dropQueued { it.resource != resource }
         }
-        reshow(ModeRules.anchor(mode))
+        if (reloaded || changed) reshow(ModeRules.anchor(mode))
     }
 
     /**
@@ -342,8 +353,11 @@ class ReaderViewModel(
             val notice = result.toNotice()
             if (mode != ReadingMode.TAP && notice != null) {
                 // Modos nuevos: sin tarjeta de error por párrafo ni su anuncio; un solo aviso arriba (decisión del
-                // controlador: la pantalla anuncia solo el aviso, al cambiar chapterNotice).
+                // controlador: la pantalla anuncia solo el aviso, al cambiar chapterNotice). Si ya estaba puesto, no
+                // cambia: se vuelve a decir por noticeAgain (m3).
+                val already = _chapterNotice.value == notice
                 chapterFailed(notice, resource, index, card)
+                if (announce && already && visible == resource) _noticeAgain.tryEmit(notice)
                 return@launch
             }
             card.state = result.toCardState()

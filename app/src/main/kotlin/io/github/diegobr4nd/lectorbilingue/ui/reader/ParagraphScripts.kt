@@ -12,6 +12,18 @@ import org.json.JSONTokener
  */
 data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false, val onScreen: Boolean = false)
 
+/** Respuesta de [ParagraphScripts.removeAll]. */
+enum class PageReady {
+    /** Aún no cargó, o es otro recurso: se reintenta. */
+    NOT_READY,
+
+    /** Lista y ya sin tarjetas: hay que reponerlas. */
+    CLEARED,
+
+    /** La misma página de antes (no se recargó): conserva sus tarjetas y no se tocó. */
+    SAME,
+}
+
 /** Lo que muestra la tarjeta bajo un párrafo. */
 sealed interface Card {
     /** "Traduciendo…" */
@@ -429,28 +441,42 @@ object ParagraphScripts {
 
     /**
      * Si la página ya cargó del todo y es el recurso [path] (el `href` del localizador, sin `#`), quita TODAS nuestras
-     * tarjetas y responde true; si no, false (la pantalla reintenta poco después). Así una tarjeta vieja (de un capítulo
-     * vecino que el ViewPager tenía cargado) no queda antes de reponer las abiertas (spec §12, Ruling K). Solo quita.
+     * tarjetas, marca la página como lista (`window.__lectorLista`) y responde true; si no, false (la pantalla reintenta
+     * poco después). Así una tarjeta vieja (de un capítulo vecino que el ViewPager tenía cargado) no queda antes de reponer
+     * las abiertas (spec §12, Ruling K). Solo quita.
+     *
+     * [keepIfSame] (al volver al frente, revisión final 3c-2 I1): si la página aún tiene la marca, es la misma que se dejó
+     * (no se recargó) y conserva sus tarjetas; no se toca nada y responde "misma". La marca es una propiedad de `window`,
+     * no un atributo: el marcado del libro no puede ponerla.
      */
-    fun removeAll(path: String): String = script(
-        JSONObject().put("path", path.substringBefore('#').substringBefore('?')),
+    fun removeAll(path: String, keepIfSame: Boolean = false): String = script(
+        JSONObject().put("path", path.substringBefore('#').substringBefore('?')).put("keep", keepIfSame),
         """
         if (document.readyState !== 'complete') return false;
         var here, want;
         try { here = decodeURIComponent(location.pathname); want = decodeURIComponent(a.path); } catch (e) { return false; }
         want = '/' + want.replace(/^\/+/, '');
         if (here.slice(-want.length) !== want) return false;
+        if (a.keep && window.__lectorLista === true) return 'misma';
         var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
         for (var k = 0; k < cards.length; k++) cards[k].remove();
         // Sin tarjetas, ningún original puede quedar oculto (Solo traducción).
         var hidden = document.querySelectorAll('.$HIDDEN_CLASS');
         for (var k = 0; k < hidden.length; k++) hidden[k].classList.remove('$HIDDEN_CLASS');
+        window.__lectorLista = true;
         return true;
         """,
     )
 
-    /** Lee la respuesta de [removeAll]: true solo si la página estaba lista (y ya sin tarjetas). */
-    fun parseReady(json: String?): Boolean = parse(json) == true
+    /** Lee la respuesta de [removeAll]: true solo si la página estaba lista (y ya sin tarjetas o, con keepIfSame, la misma). */
+    fun parseReady(json: String?): Boolean = parsePageReady(json) != PageReady.NOT_READY
+
+    /** Lee la respuesta de [removeAll]: lista y sin tarjetas, la misma de antes (sin tocar) o aún no lista. */
+    fun parsePageReady(json: String?): PageReady = when (parse(json)) {
+        true -> PageReady.CLEARED
+        "misma" -> PageReady.SAME
+        else -> PageReady.NOT_READY
+    }
 
     /** Índice del párrafo o de la tarjeta bajo el punto (px CSS); -1 si no hay ninguno. Para cerrar tocando la tarjeta. */
     fun indexAt(xCss: Double, yCss: Double): String = script(

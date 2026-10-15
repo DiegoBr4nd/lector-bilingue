@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
+import io.github.diegobr4nd.lectorbilingue.data.EngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.data.translationScope
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
@@ -25,6 +26,7 @@ class InMemoryTranslations : ExternalResource() {
     private var original: Any? = null
     private var db: LectorDatabase? = null
     private var worker: ExecutorCoroutineDispatcher? = null
+    private var engines: EngineProvider? = null
 
     /** El servicio de la prueba (válido entre [before] y [after]). */
     lateinit var service: TranslationService
@@ -34,7 +36,8 @@ class InMemoryTranslations : ExternalResource() {
         try {
             val db = Room.inMemoryDatabaseBuilder(app, LectorDatabase::class.java).build().also { db = it }
             val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "motor-prueba") }.asCoroutineDispatcher().also { worker = it }
-            service = TranslationService(AndroidEngineProvider(app, worker), db.translations(), worker = worker, scope = translationScope(worker))
+            val engines = AndroidEngineProvider(app, worker).also { engines = it }
+            service = TranslationService(engines, db.translations(), worker = worker, scope = translationScope(worker))
             val appLazy = delegate.get(app) as Lazy<*>
             // Si el servicio de la app ya existía (otra prueba del mismo proceso), se suelta su motor antes de cambiarlo:
             // así no quedan dos motores cargados. Si no existía, no se crea.
@@ -47,6 +50,18 @@ class InMemoryTranslations : ExternalResource() {
         }
     }
 
+    /**
+     * Cambia el servicio de la prueba por uno cuyo proveedor de motores es [wrap] del real (misma caché en memoria y
+     * mismo hilo). Se llama dentro de la prueba, antes de abrir el Lector; [after] lo suelta y devuelve el de la app.
+     */
+    fun wrapEngine(wrap: (EngineProvider) -> EngineProvider) {
+        val db = checkNotNull(db) { "la regla aún no empezó" }
+        val worker = checkNotNull(worker)
+        runCatching { service.release() }
+        service = TranslationService(wrap(checkNotNull(engines)), db.translations(), worker = worker, scope = translationScope(worker))
+        delegate.set(app, lazyOf(service))
+    }
+
     override fun after() {
         try {
             original?.let { delegate.set(app, it) }
@@ -55,6 +70,7 @@ class InMemoryTranslations : ExternalResource() {
             if (::service.isInitialized) runCatching { service.release() }
             db?.close(); db = null
             worker?.close(); worker = null
+            engines = null
         }
     }
 }

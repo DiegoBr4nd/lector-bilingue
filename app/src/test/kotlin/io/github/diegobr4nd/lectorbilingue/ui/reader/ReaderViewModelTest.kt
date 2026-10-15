@@ -1244,4 +1244,45 @@ class ReaderViewModelTest {
             ops.drop(before),
         )
     }
+
+    // Revisión final 3c-2 (I1): volver al frente sin que la página se recargue no repone nada (las tarjetas siguen ahí).
+    @Test fun volverAlFrenteSinRecargarNoReponeEnIntercalado() = runTest(dispatcher) { resumeWithoutReload(ReadingMode.INTERLEAVED) }
+
+    @Test fun volverAlFrenteSinRecargarNoReponeEnSolo() = runTest(dispatcher) { resumeWithoutReload(ReadingMode.TRANSLATION_ONLY) }
+
+    private suspend fun TestScope.resumeWithoutReload(m: ReadingMode) {
+        mode(m)
+        cacheP(0..4)
+        val (vm, ops) = vmWithOps()
+        vm.onResourceShown(c1); vm.onVisible(c1, ps(0..4))
+        advanceUntilIdle()
+        assertTrue(ops.any { it is CardOp.Show }, "$m: no puso tarjetas")
+        val before = ops.size
+        vm.onResourceShown(c1, reloaded = false)
+        advanceUntilIdle()
+        assertEquals(emptyList(), ops.drop(before), "$m: repuso sin recarga")
+        // Con recarga, sí: cada tarjeta otra vez.
+        vm.onResourceShown(c1)
+        advanceUntilIdle()
+        assertEquals((0..4).toList(), ops.drop(before).filterIsInstance<CardOp.Show>().map { it.index }, "$m")
+    }
+
+    // Revisión final 3c-2 (m3): un toque que vuelve a fallar con el aviso ya puesto se anuncia otra vez (el aviso no
+    // cambia, así que su región viva calla); el primero no (lo dice la región viva al salir el aviso).
+    @Test fun tocarConElAvisoPuestoLoVuelveADecir() = runTest(dispatcher) {
+        mode(ReadingMode.INTERLEAVED)
+        provider.installedEngines = emptyMap()
+        val (vm, _, said) = vmWithAnnouncements()
+        val again = mutableListOf<ChapterNotice>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.noticeAgain.toList(again) }
+        vm.onResourceShown(c1); vm.onTap(c1, listOf(p(7, "Siete.")))
+        advanceUntilIdle()
+        assertEquals(ChapterNotice.MissingModel(EngineId.OPUS), vm.chapterNotice.value)
+        assertTrue(again.isEmpty(), "el primero ya lo dice la región viva: $again")
+        vm.onTap(c1, listOf(p(8, "Ocho.")))
+        advanceUntilIdle()
+        assertEquals(listOf<ChapterNotice>(ChapterNotice.MissingModel(EngineId.OPUS)), again)
+        assertTrue(said.isEmpty(), "ninguna tarjeta: $said")
+        assertNull(vm.cardState(c1, 8))
+    }
 }
