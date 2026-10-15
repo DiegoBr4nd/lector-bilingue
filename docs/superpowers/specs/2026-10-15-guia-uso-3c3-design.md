@@ -45,7 +45,7 @@ Reglas:
 
 ## 4. Comportamiento de la tarjeta (`TipCard`)
 
-- Posición: sobre la barra inferior del lector, ancho completo con márgenes del tema; no cubre el área de lectura más allá de la barra. Si las barras se esconden al desplazarse, la tarjeta se esconde con ellas y vuelve con ellas.
+- Posición: sobre la barra inferior del lector, ancho completo con márgenes del tema; flota sobre el texto como las barras: puede tapar las últimas líneas de la pantalla mientras se ve (es breve, se cierra con «Entendido» o al hacer lo que dice), nunca el párrafo del medio. El consejo del borde se ve aunque las barras estén ocultas (ruling D de la ejecución). Si las barras se esconden al desplazarse, la tarjeta se esconde con ellas y vuelve con ellas.
 - Contenido: ícono de bombilla (decorativo), texto (`bodyMedium`, sin límite de líneas), botón de texto "Entendido" (≥ 48 dp). Con letra ≥ 150 % el botón baja debajo del texto (misma idea que la banda del aviso de 3c-2).
 - Colores: `secondaryContainer` / `onSecondaryContainer` del tema de la app (no los de la página), borde `outlineVariant`; contraste AA en claro y oscuro.
 - TalkBack: el texto es una región viva Polite (se anuncia una vez al aparecer); "Entendido" es un botón aparte. Nada se anuncia dos veces.
