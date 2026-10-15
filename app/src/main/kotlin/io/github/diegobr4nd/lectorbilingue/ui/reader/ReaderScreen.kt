@@ -45,6 +45,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,6 +86,7 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
+import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
@@ -92,6 +94,9 @@ import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
+import io.github.diegobr4nd.lectorbilingue.ui.tips.tipText
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -149,6 +154,8 @@ fun ReaderScreen(
     var directionOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var languagesOpen by rememberSaveable { mutableStateOf(false) }
+    // "Cómo se usa" a pantalla completa sobre el Lector (la abre la Tarea 4 de la 3c-3; hasta entonces, siempre false).
+    var howToOpen by rememberSaveable { mutableStateOf(false) }
     var resumes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val view by rememberUpdatedState(LocalView.current)
@@ -179,6 +186,7 @@ fun ReaderScreen(
     val cardTheme by rememberUpdatedState(ReadingRules.cardTheme(readingSettings, systemDark))
     val currentSystemDark by rememberUpdatedState(systemDark)
     val notice by vm.chapterNotice.collectAsStateWithLifecycle()
+    val tip by vm.tip.collectAsStateWithLifecycle()
     // Las últimas preferencias mandadas a Readium: si no cambian, no se vuelven a mandar (ni se mueve la página).
     var appliedPreferences by remember { mutableStateOf(startPreferences) }
     // Un envío de preferencias a la vez: quien llega segundo espera a que Readium aplique el primero.
@@ -208,6 +216,12 @@ fun ReaderScreen(
     }
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
+    // Consejos (3c-3): con una hoja, "Idiomas", "Cómo se usa" o la banda del aviso a la vista, el consejo espera.
+    // La banda: la misma condición con que se dibuja (más abajo).
+    val noticeShown = notice != null && readingSettings.mode != ReadingMode.TAP
+    LaunchedEffect(tocOpen, directionOpen, settingsOpen, languagesOpen, howToOpen, noticeShown) {
+        vm.setTipBlocked(tocOpen || directionOpen || settingsOpen || languagesOpen || howToOpen || noticeShown)
+    }
     // Por si se abrió el Lector antes de que la Biblioteca leyera los ajustes (fuera del hilo principal).
     LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
     // Ajustes al instante, sin recargar la página. Readium deja la página en el mismo píxel al cambiar el tamaño (y el
@@ -318,8 +332,19 @@ fun ReaderScreen(
             vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
         }
     }
-    val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
     val readingOrder = remember(publication) { publication.readingOrder.map { it.url().toString() } }
+    // Consejo del borde (3c-3): con la página quieta, ¿se llegó al final de un capítulo que no es el último? Solo
+    // mientras ese consejo no se haya visto (cada vuelta lee los bordes con un script).
+    LaunchedEffect(navigator) {
+        navigator?.currentLocator?.collectLatest { locator ->
+            if (TipId.CHAPTER_EDGE in app.settings.seenTipsFlow.value) return@collectLatest
+            delay(VisibleSettleMs)
+            val href = locator.href.toString()
+            if (href != currentHref || !ReaderRules.chapterButtons(readingOrder, href).second) return@collectLatest
+            if (bridge.edges()?.atBottom == true) vm.onChapterEnd()
+        }
+    }
+    val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
     /**
      * Un paso de capítulo (+1 siguiente, -1 anterior) para el gesto del borde y para los botones: misma función de
      * Readium, mismo guardia, mismo anuncio de TalkBack con el título del capítulo nuevo. [toEnd]: al final del
@@ -455,8 +480,14 @@ fun ReaderScreen(
                     title = title,
                     direction = direction,
                     onBack = onBack,
-                    onSettings = { settingsOpen = true },
-                    onDirection = { directionOpen = true },
+                    onSettings = {
+                        settingsOpen = true
+                        vm.onTipEvent(TipEvent.SETTINGS_OPENED)
+                    },
+                    onDirection = {
+                        directionOpen = true
+                        vm.onTipEvent(TipEvent.DIRECTION_OPENED)
+                    },
                     onToc = { tocOpen = true },
                 )
             }
@@ -477,19 +508,42 @@ fun ReaderScreen(
                 )
             }
         }
-        AnimatedVisibility(
-            visible = barsVisible && (positionText(label) != null || hasPrevious || hasNext),
-            enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
-            exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            ReaderBottomBar(
-                label = label,
-                hasPrevious = hasPrevious,
-                hasNext = hasNext,
-                onPrevious = { onChapterButton(-1) },
-                onNext = { onChapterButton(1) },
-            )
+        // Abajo, en orden: el consejo (3c-3, spec §4) y la barra inferior. El consejo se esconde y vuelve con las barras.
+        val bottomBarShown = barsVisible && (positionText(label) != null || hasPrevious || hasNext)
+        // El último consejo mostrado: su texto no desaparece durante el fundido de salida.
+        var lastTip by remember { mutableStateOf<TipId?>(null) }
+        val cardTip = tip ?: lastTip
+        SideEffect { if (tip != null) lastTip = tip }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            AnimatedVisibility(
+                visible = barsVisible && tip != null,
+                enter = if (reduceMotion) EnterTransition.None else fadeIn(),
+                exit = if (reduceMotion) ExitTransition.None else fadeOut(),
+            ) {
+                // Sin barra inferior la tarjeta queda sobre la barra de navegación del teléfono. A los lados, fuera de
+                // los recortes de pantalla (como la banda del aviso).
+                val bottomInset = if (bottomBarShown) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                cardTip?.let { t ->
+                    TipCard(
+                        text = tipText(t, directionLabel(direction), languageName(direction.target)),
+                        onDismiss = vm::dismissTip,
+                        modifier = bottomInset.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visible = bottomBarShown,
+                enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+                exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
+            ) {
+                ReaderBottomBar(
+                    label = label,
+                    hasPrevious = hasPrevious,
+                    hasNext = hasNext,
+                    onPrevious = { onChapterButton(-1) },
+                    onNext = { onChapterButton(1) },
+                )
+            }
         }
 
         // Idiomas a pantalla completa sobre el Lector (desde una tarjeta "Falta el idioma"): el libro sigue abierto debajo.

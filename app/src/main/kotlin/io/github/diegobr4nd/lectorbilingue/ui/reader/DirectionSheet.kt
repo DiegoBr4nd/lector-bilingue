@@ -58,12 +58,17 @@ internal fun DirectionButton(direction: LanguagePair, onClick: () -> Unit) {
         },
     ) {
         Text(
-            stringResource(R.string.reader_direction, direction.source.uppercase(), direction.target.uppercase()),
+            directionLabel(direction),
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
         )
     }
 }
+
+/** La etiqueta del botón de dirección ("EN → ES"); el consejo de dirección la nombra igual (3c-3). */
+@Composable
+internal fun directionLabel(direction: LanguagePair): String =
+    stringResource(R.string.reader_direction, direction.source.uppercase(), direction.target.uppercase())
 
 /** "Traducir de" en una hoja inferior. Elegir una dirección la guarda para el libro y cierra la hoja. */
 @OptIn(ExperimentalMaterial3Api::class)

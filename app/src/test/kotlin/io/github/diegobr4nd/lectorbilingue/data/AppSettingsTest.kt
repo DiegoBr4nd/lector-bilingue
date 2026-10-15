@@ -166,4 +166,16 @@ class AppSettingsTest {
         assertEquals(emptySet(), settings.seenTipsFlow.value)
         assertFalse("tips_seen" in prefs.values && prefs.values["tips_seen"] != "")
     }
+
+    @Test fun `marcar uno antes de leer los vistos no pierde los guardados`() = runTest {
+        val prefs = MemoryPrefs()
+        prefs.values["tips_seen"] = "tap"
+        val settings = AppSettings(prefs)
+        settings.markTipSeen(TipId.DIRECTION)
+        settings.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(setOf(TipId.TAP, TipId.DIRECTION), settings.seenTipsFlow.value)
+        val again = AppSettings(prefs)
+        again.loadSeenTips(StandardTestDispatcher(testScheduler))
+        assertEquals(setOf(TipId.TAP, TipId.DIRECTION), again.seenTipsFlow.value)
+    }
 }
