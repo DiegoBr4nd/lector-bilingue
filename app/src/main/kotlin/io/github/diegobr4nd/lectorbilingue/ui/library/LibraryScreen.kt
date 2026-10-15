@@ -90,6 +90,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
+import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.LectorApp
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.books.Book
@@ -127,6 +129,10 @@ fun LibraryScreen(
     LaunchedEffect(Unit) { app.settings.loadEnginePreference() } // Primera lectura fuera del hilo principal.
     // Los ajustes de lectura, listos antes de abrir un libro (el Lector arranca con ellos).
     LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
+    // La tarjeta "¿Primera vez?…" sale hasta que se abre "Cómo se usa" o se cierra (vuelve con "Volver a ver los consejos").
+    LaunchedEffect(Unit) { app.settings.loadSeenTips() }
+    val seenTips by app.settings.seenTipsFlow.collectAsStateWithLifecycle()
+    val tipsLoaded by app.settings.seenTipsLoaded.collectAsStateWithLifecycle()
     val vm: LibraryViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -175,9 +181,14 @@ fun LibraryScreen(
         onDelete = vm::delete,
         onLanguages = onLanguages,
         onDeveloper = onDeveloper,
-        onHowTo = onHowTo,
+        onHowTo = {
+            app.settings.markTipSeen(TipId.LIBRARY_HOWTO)
+            onHowTo()
+        },
         snackbar = snackbar,
         modifier = modifier,
+        showHowToCard = tipsLoaded && TipId.LIBRARY_HOWTO !in seenTips,
+        onHowToCardClose = { app.settings.markTipSeen(TipId.LIBRARY_HOWTO) },
     )
     failedId?.let { id ->
         OpenFailedDialog(
@@ -210,6 +221,9 @@ fun LibraryContent(
     onDeveloper: (() -> Unit)?,
     snackbar: SnackbarHostState,
     modifier: Modifier = Modifier,
+    /** Tarjeta "¿Primera vez? Mira cómo se usa la app" arriba de la lista (3c-3, puerta de Juan). */
+    showHowToCard: Boolean = false,
+    onHowToCardClose: () -> Unit = {},
 ) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
@@ -229,7 +243,13 @@ fun LibraryContent(
                         modifier = Modifier.semantics { heading() },
                     )
                 },
-                actions = { OverflowMenu(onLanguages, onHowTo, onDeveloper) },
+                actions = {
+                    // "Cómo se usa" siempre a la vista (puerta 3c-3); también sigue en el menú ⋮.
+                    IconButton(onClick = onHowTo, modifier = Modifier.size(48.dp)) {
+                        Icon(painterResource(LectorIcons.Help), contentDescription = stringResource(R.string.library_menu_howto))
+                    }
+                    OverflowMenu(onLanguages, onHowTo, onDeveloper)
+                },
                 // En reposo, del color del fondo: sin franja de otro tono. Al desplazar la lista sí cambia (se nota el borde).
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 scrollBehavior = scroll,
@@ -264,6 +284,18 @@ fun LibraryContent(
                         LoadingLine(stringResource(R.string.library_loading), Modifier.padding(horizontal = Spacing.l))
                     }
                     return@LazyColumn
+                }
+                if (showHowToCard) {
+                    item(key = "howto") {
+                        TipCard(
+                            text = stringResource(R.string.library_howto_card),
+                            onDismiss = onHowToCardClose,
+                            actionLabel = stringResource(R.string.library_howto_card_open),
+                            onAction = onHowTo,
+                            dismissLabel = stringResource(R.string.library_howto_card_close),
+                            modifier = Modifier.animatedItem(this, reduceMotion),
+                        )
+                    }
                 }
                 state.notice?.let { notice ->
                     item(key = "notice") { NoticeCard(notice, onLanguages, Modifier.animatedItem(this, reduceMotion)) }

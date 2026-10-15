@@ -9,6 +9,9 @@ enum class TipId(val wire: String) {
     TAP("tap"),
     HIDE_AND_MODES("hide_modes"),
     CHAPTER_EDGE("chapter_edge"),
+
+    /** Tarjeta "¿Primera vez? Mira cómo se usa la app" de la Biblioteca (no es del Lector: TipRules nunca la elige). */
+    LIBRARY_HOWTO("library_howto"),
     ;
 
     companion object {

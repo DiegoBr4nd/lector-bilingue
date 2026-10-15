@@ -42,6 +42,12 @@ class TipRulesTest {
         assertEquals(TipId.CHAPTER_EDGE, TipRules.next(s, null))
     }
 
+    @Test fun `la tarjeta de la Biblioteca nunca sale en el Lector`() {
+        val reader = TipId.entries - TipId.LIBRARY_HOWTO
+        assertNull(TipRules.next(fresh.copy(seen = reader.toSet(), sourceIsSpanish = true, reachedChapterEnd = true), null))
+        assertNull(TipRules.next(fresh.copy(seen = reader.toSet()), TipId.LIBRARY_HOWTO))
+    }
+
     @Test fun `un consejo visto no vuelve`() {
         val all = TipId.entries.toSet()
         assertNull(TipRules.next(fresh.copy(seen = all, sourceIsSpanish = true, reachedChapterEnd = true), null))

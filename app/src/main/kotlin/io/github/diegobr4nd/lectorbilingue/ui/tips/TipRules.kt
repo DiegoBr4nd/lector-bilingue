@@ -42,6 +42,7 @@ object TipRules {
         TipId.TAP -> event == TipEvent.TAPPED
         TipId.HIDE_AND_MODES -> event == TipEvent.CARD_HIDDEN || event == TipEvent.SETTINGS_OPENED
         TipId.CHAPTER_EDGE -> event == TipEvent.CHAPTER_CHANGED
+        TipId.LIBRARY_HOWTO -> false
     }
 
     /**
@@ -55,6 +56,7 @@ object TipRules {
         TipId.TAP -> s.mode == ReadingMode.TAP && !s.translatedByTap
         TipId.HIDE_AND_MODES -> s.mode == ReadingMode.TAP && s.translatedByTap
         TipId.CHAPTER_EDGE -> s.reachedChapterEnd
+        TipId.LIBRARY_HOWTO -> false // se muestra en la Biblioteca, no en el Lector
     }
 }
 

@@ -51,6 +51,11 @@ fun TipCard(
     modifier: Modifier = Modifier,
     spoken: String = text,
     announce: Boolean = true,
+    /** Botón de acción opcional antes del de cerrar (la tarjeta de la Biblioteca: "Ver"). */
+    actionLabel: String? = null,
+    onAction: () -> Unit = {},
+    /** Texto del botón de cerrar; por defecto "Entendido". */
+    dismissLabel: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val largeText = LocalDensity.current.fontScale >= LargeTipFontScale
@@ -74,15 +79,22 @@ fun TipCard(
                 Text(text, style = MaterialTheme.typography.bodyMedium)
             }
         }
+        val buttonColors = ButtonDefaults.textButtonColors(contentColor = colors.onSecondaryContainer)
         val button = @Composable {
-            TextButton(
-                onClick = onDismiss,
-                colors = ButtonDefaults.textButtonColors(contentColor = colors.onSecondaryContainer),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.tip_got_it), style = MaterialTheme.typography.labelLarge) }
+            Row {
+                if (actionLabel != null) {
+                    TextButton(onClick = onAction, colors = buttonColors, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                TextButton(onClick = onDismiss, colors = buttonColors, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(dismissLabel ?: stringResource(R.string.tip_got_it), style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
         val inner = Modifier.padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs)
-        if (largeText) {
+        // Con dos botones no caben al lado del texto: van debajo, como con letra grande.
+        if (largeText || actionLabel != null) {
             Column(inner) {
                 message(Modifier.fillMaxWidth().padding(vertical = Spacing.s))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { button() }
@@ -121,4 +133,5 @@ fun tipText(tip: TipId, direction: LanguagePair): TipText = when (tip) {
         spoken = stringResource(R.string.tip_hide_modes_spoken, stringResource(R.string.reading_title)),
     )
     TipId.CHAPTER_EDGE -> TipText(stringResource(R.string.tip_chapter_edge, stringResource(R.string.reader_toc)))
+    TipId.LIBRARY_HOWTO -> TipText(stringResource(R.string.library_howto_card))
 }

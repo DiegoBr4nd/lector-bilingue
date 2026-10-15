@@ -232,6 +232,10 @@
     <string name="free_books_standard">Standard Ebooks</string>
     <string name="free_books_open_desc">Abrir %1$s en el navegador</string>
     <string name="library_menu_howto">Cómo se usa</string>
+    <!-- 3c-3 puerta: "Cómo se usa" a la vista en la Biblioteca -->
+    <string name="library_howto_card">¿Primera vez? Mira cómo se usa la app.</string>
+    <string name="library_howto_card_open">Ver</string>
+    <string name="library_howto_card_close">Cerrar</string>
     <!-- 3c-3: Cómo se usa -->
     <string name="reading_howto_link">¿Cómo se usa la app?</string>
     <string name="howto_title">Cómo se usa</string>

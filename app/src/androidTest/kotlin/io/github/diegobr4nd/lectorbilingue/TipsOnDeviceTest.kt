@@ -293,6 +293,7 @@ class TipsOnDeviceTest {
     @Test fun bibliotecaVaciaYComoSeUsa() {
         val emptyHow = app.getString(R.string.library_empty_how, app.getString(R.string.library_add))
         var howTo by mutableStateOf(false)
+        var cardClosed by mutableStateOf(false)
         ActivityScenario.launch(ComponentActivity::class.java).use { s ->
             s.onActivity { a ->
                 a.setContent {
@@ -307,12 +308,34 @@ class TipsOnDeviceTest {
                                     onAdd = {}, onOpen = {}, onDelete = {}, onLanguages = {},
                                     onHowTo = { howTo = true }, onDeveloper = null,
                                     snackbar = SnackbarHostState(),
+                                    showHowToCard = !cardClosed,
+                                    onHowToCardClose = { cardClosed = true },
                                 )
                             }
                         }
                     }
                 }
             }
+            rule.waitForIdle()
+            // "Cómo se usa" a la vista (puerta 3c-3): botón "?" en la barra y tarjeta "¿Primera vez?…" con Ver y Cerrar.
+            val howToLabel = app.getString(R.string.library_menu_howto)
+            rule.onNode(hasContentDescription(howToLabel) and hasClickAction()).assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+            rule.onNode(hasContentDescription(app.getString(R.string.library_howto_card))).assertIsDisplayed() // texto en la región viva
+            val open = rule.onNode(hasText(app.getString(R.string.library_howto_card_open)) and hasClickAction())
+            open.assertHeightIsAtLeast(48.dp)
+            if (shots) saveShot("biblioteca-tarjeta-como-se-usa.png")
+            open.performClick()
+            rule.waitForIdle()
+            assertTrue(howTo, "«Ver» no abrió Cómo se usa")
+            howTo = false
+            rule.waitForIdle()
+            rule.onNode(hasText(app.getString(R.string.library_howto_card_close)) and hasClickAction()).performClick()
+            rule.waitForIdle()
+            rule.onNode(hasContentDescription(app.getString(R.string.library_howto_card))).assertDoesNotExist()
+            rule.onNode(hasContentDescription(howToLabel) and hasClickAction()).performClick()
+            rule.waitForIdle()
+            assertTrue(howTo, "el botón «?» no abrió Cómo se usa")
+            howTo = false
             rule.waitForIdle()
             rule.onNodeWithText(emptyHow).assertIsDisplayed()
             if (shots) saveShot("biblioteca-vacia.png")
