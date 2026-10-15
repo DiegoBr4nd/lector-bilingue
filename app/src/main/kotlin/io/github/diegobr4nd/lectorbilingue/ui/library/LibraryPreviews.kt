@@ -45,6 +45,7 @@ private fun Muestra(state: LibraryUiState) = LectorTheme {
         onOpen = {},
         onDelete = {},
         onLanguages = {},
+        onHowTo = {},
         onDeveloper = {},
         snackbar = remember { SnackbarHostState() },
     )

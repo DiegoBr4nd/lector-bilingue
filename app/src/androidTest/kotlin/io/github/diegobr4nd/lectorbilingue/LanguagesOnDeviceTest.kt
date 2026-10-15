@@ -189,12 +189,12 @@ class LanguagesOnDeviceTest {
             LectorTheme {
                 AppNav(
                     settings, hub,
-                    library = { onLanguages, _ ->
+                    library = { onLanguages, _, _ ->
                         val notice by remember { languageNotices(hub, settings) }.collectAsState(null)
                         LibraryContent(
                             state = LibraryUiState(loaded = true, notice = notice),
                             onAdd = {}, onOpen = {}, onDelete = {},
-                            onLanguages = onLanguages, onDeveloper = null,
+                            onLanguages = onLanguages, onHowTo = {}, onDeveloper = null,
                             snackbar = remember { SnackbarHostState() },
                         )
                     },

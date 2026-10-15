@@ -42,6 +42,9 @@ import kotlin.test.assertTrue
 class ReaderOnDeviceTest {
     @get:Rule val rule = createEmptyComposeRule()
 
+    // Los consejos vistos de Juan no cambian; en la prueba todos cuentan como vistos (ninguna tarjeta tapa nada).
+    @get:Rule val keepTips = KeepTips()
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val app = instrumentation.targetContext.applicationContext as LectorApp
     private val dir = File(app.cacheDir, "reader_test").apply { deleteRecursively(); mkdirs() }

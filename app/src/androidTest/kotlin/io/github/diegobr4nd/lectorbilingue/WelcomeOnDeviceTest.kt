@@ -92,7 +92,7 @@ class WelcomeOnDeviceTest {
 
     // La Biblioteca de verdad necesita la base de la app: aquí basta una marca para saber que se llegó.
     private fun setNav(hub: ModelHubApi) = rule.setContent {
-        LectorTheme { AppNav(settings, hub, library = { _, _ -> Text("Biblioteca de prueba") }) }
+        LectorTheme { AppNav(settings, hub, library = { _, _, _ -> Text("Biblioteca de prueba") }) }
     }
 
     @Test

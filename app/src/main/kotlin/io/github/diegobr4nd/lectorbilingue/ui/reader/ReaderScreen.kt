@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -45,6 +46,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,13 +87,20 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
+import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.tips.ChapterEdgeWatch
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipRules
+import io.github.diegobr4nd.lectorbilingue.ui.tips.tipText
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -149,6 +158,8 @@ fun ReaderScreen(
     var directionOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var languagesOpen by rememberSaveable { mutableStateOf(false) }
+    // "Cómo se usa" a pantalla completa sobre el Lector (la abre la Tarea 4 de la 3c-3; hasta entonces, siempre false).
+    var howToOpen by rememberSaveable { mutableStateOf(false) }
     var resumes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
     val view by rememberUpdatedState(LocalView.current)
@@ -179,6 +190,7 @@ fun ReaderScreen(
     val cardTheme by rememberUpdatedState(ReadingRules.cardTheme(readingSettings, systemDark))
     val currentSystemDark by rememberUpdatedState(systemDark)
     val notice by vm.chapterNotice.collectAsStateWithLifecycle()
+    val tip by vm.tip.collectAsStateWithLifecycle()
     // Las últimas preferencias mandadas a Readium: si no cambian, no se vuelven a mandar (ni se mueve la página).
     var appliedPreferences by remember { mutableStateOf(startPreferences) }
     // Un envío de preferencias a la vez: quien llega segundo espera a que Readium aplique el primero.
@@ -208,6 +220,12 @@ fun ReaderScreen(
     }
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
+    // Consejos (3c-3): con una hoja, "Idiomas", "Cómo se usa" o la banda del aviso a la vista, el consejo espera.
+    // La banda: la misma condición con que se dibuja (más abajo).
+    val noticeShown = notice != null && readingSettings.mode != ReadingMode.TAP
+    LaunchedEffect(tocOpen, directionOpen, settingsOpen, languagesOpen, howToOpen, noticeShown) {
+        vm.setTipBlocked(tocOpen || directionOpen || settingsOpen || languagesOpen || howToOpen || noticeShown)
+    }
     // Por si se abrió el Lector antes de que la Biblioteca leyera los ajustes (fuera del hilo principal).
     LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
     // Ajustes al instante, sin recargar la página. Readium deja la página en el mismo píxel al cambiar el tamaño (y el
@@ -318,8 +336,23 @@ fun ReaderScreen(
             vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
         }
     }
-    val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
     val readingOrder = remember(publication) { publication.readingOrder.map { it.url().toString() } }
+    // Consejo del borde (3c-3): con la página quieta, ¿se llegó al final de un capítulo que no es el último? Solo
+    // mientras ese consejo no se haya visto (cada vuelta lee los bordes con un script).
+    // Solo cuenta llegar al final leyendo (ChapterEdgeWatch): al caer en el final del anterior con un paso hacia atrás
+    // o al abrir el libro ya en el final, "Sigue deslizando…" no tiene sentido.
+    LaunchedEffect(navigator) {
+        val edgeWatch = ChapterEdgeWatch()
+        navigator?.currentLocator?.collectLatest { locator ->
+            val href = locator.href.toString()
+            if (!edgeWatch.onPosition(href) || !vm.wantsChapterEdge()) return@collectLatest
+            delay(VisibleSettleMs)
+            if (href != currentHref || !ReaderRules.chapterButtons(readingOrder, href).second) return@collectLatest
+            val edges = bridge.edges() ?: return@collectLatest
+            if (edgeWatch.onMeasured(href, edges.atBottom)) vm.onChapterEnd()
+        }
+    }
+    val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
     /**
      * Un paso de capítulo (+1 siguiente, -1 anterior) para el gesto del borde y para los botones: misma función de
      * Readium, mismo guardia, mismo anuncio de TalkBack con el título del capítulo nuevo. [toEnd]: al final del
@@ -455,8 +488,15 @@ fun ReaderScreen(
                     title = title,
                     direction = direction,
                     onBack = onBack,
-                    onSettings = { settingsOpen = true },
-                    onDirection = { directionOpen = true },
+                    // Primero se bloquea el consejo y luego se marca (Ruling E): así no asoma el siguiente.
+                    onSettings = {
+                        settingsOpen = true
+                        vm.onSheetOpened(TipEvent.SETTINGS_OPENED)
+                    },
+                    onDirection = {
+                        directionOpen = true
+                        vm.onSheetOpened(TipEvent.DIRECTION_OPENED)
+                    },
                     onToc = { tocOpen = true },
                 )
             }
@@ -477,19 +517,56 @@ fun ReaderScreen(
                 )
             }
         }
-        AnimatedVisibility(
-            visible = barsVisible && (positionText(label) != null || hasPrevious || hasNext),
-            enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
-            exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            ReaderBottomBar(
-                label = label,
-                hasPrevious = hasPrevious,
-                hasNext = hasNext,
-                onPrevious = { onChapterButton(-1) },
-                onNext = { onChapterButton(1) },
-            )
+        // Abajo, en orden: el consejo (3c-3, spec §4) y la barra inferior. El consejo se esconde y vuelve con las barras,
+        // salvo el del borde (TipRules.cardVisible). El ViewModel sabe si se ve: solo se marca lo que se vio.
+        val bottomBarShown = barsVisible && (positionText(label) != null || hasPrevious || hasNext)
+        val bottomBar = remember { MutableTransitionState(bottomBarShown) }
+        bottomBar.targetState = bottomBarShown
+        val cardVisible = TipRules.cardVisible(tip, barsVisible)
+        LaunchedEffect(cardVisible) { vm.setTipOnScreen(cardVisible) }
+        // El último consejo mostrado: su texto no desaparece durante el fundido de salida.
+        var lastTip by remember { mutableStateOf<TipId?>(null) }
+        val cardTip = tip ?: lastTip
+        SideEffect { if (tip != null) lastTip = tip }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            AnimatedVisibility(
+                visible = cardVisible,
+                enter = if (reduceMotion) EnterTransition.None else fadeIn(),
+                exit = if (reduceMotion) ExitTransition.None else fadeOut(),
+            ) {
+                // Sin barra inferior la tarjeta queda sobre la barra de navegación del teléfono. Mientras la barra aún
+                // sale (o entra) cuenta como puesta: así la tarjeta no salta en su fundido. A los lados, fuera de los
+                // recortes de pantalla (como la banda del aviso).
+                val barPresent = bottomBar.currentState || bottomBar.targetState
+                val bottomInset = if (barPresent) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                cardTip?.let { t ->
+                    // Se dice solo la primera vez que sale en esta sesión (spec §4): al volver tras una hoja, callada. Se
+                    // decide al entrar la tarjeta y no cambia mientras está (si no, el VM la apagaría al anunciarla).
+                    val announce = remember(t) { vm.shouldAnnounceTip(t) }
+                    LaunchedEffect(t) { vm.onTipAnnounced(t) }
+                    val texts = tipText(t, direction)
+                    TipCard(
+                        text = texts.shown,
+                        spoken = texts.spoken,
+                        announce = announce,
+                        onDismiss = vm::dismissTip,
+                        modifier = bottomInset.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visibleState = bottomBar,
+                enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+                exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
+            ) {
+                ReaderBottomBar(
+                    label = label,
+                    hasPrevious = hasPrevious,
+                    hasNext = hasNext,
+                    onPrevious = { onChapterButton(-1) },
+                    onNext = { onChapterButton(1) },
+                )
+            }
         }
 
         // Idiomas a pantalla completa sobre el Lector (desde una tarjeta "Falta el idioma"): el libro sigue abierto debajo.
@@ -500,6 +577,12 @@ fun ReaderScreen(
             }
             BackHandler(onBack = close)
             LanguagesScreen(app.hub, app.settings, onBack = close, cache = app.translations)
+        }
+
+        // "Cómo se usa" a pantalla completa sobre el Lector (desde la hoja Aa): el libro sigue abierto debajo.
+        if (howToOpen) {
+            BackHandler { howToOpen = false }
+            HowToScreen(onBack = { howToOpen = false }, onResetTips = { app.settings.resetTips() })
         }
     }
 
@@ -544,13 +627,14 @@ fun ReaderScreen(
                 view.announce(resetDone) // sin snackbar: no tapa la hoja
             },
             onDismiss = { settingsOpen = false },
+            onHowTo = { settingsOpen = false; howToOpen = true },
         )
     }
 
     // Mientras Idiomas tapa el libro, TalkBack no debe entrar en la página de debajo.
-    LaunchedEffect(languagesOpen, navigator) {
+    LaunchedEffect(languagesOpen, howToOpen, navigator) {
         navigator?.view?.importantForAccessibility =
-            if (languagesOpen) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            if (languagesOpen || howToOpen) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     }
 
     link?.let { url ->

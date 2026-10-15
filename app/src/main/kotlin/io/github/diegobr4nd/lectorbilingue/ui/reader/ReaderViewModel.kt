@@ -7,13 +7,19 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.Priority
 import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
+import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.data.TranslateRequest
 import io.github.diegobr4nd.lectorbilingue.data.TranslateResult
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.data.TranslationService
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipRules
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -25,9 +31,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -50,6 +60,8 @@ data class ReaderPosition(val json: String, val totalProgression: Double?, val c
  * - Modos (3c-2, spec §5.3): en Intercalado y Solo traducción, la "guía de modo" pide sola lo visible ([onVisible]),
  *   de a un pedido por vez al servicio y con su propia fila (así, al desplazar rápido, lo viejo se descarta antes de
  *   llegar al motor). La tarjeta guarda el estado de la traducción; lo que ve la página sale de [ModeRules.display].
+ * - Consejos (3c-3): [tip] es el que se ve ahora, calculado con [TipRules] a partir de los vistos, el modo, la
+ *   dirección y lo que pasó en esta sesión. Los eventos que lo cierran llegan por [onTipEvent].
  * - Se llama desde el hilo principal (todo el estado de las tarjetas vive ahí, sin candados).
  *
  * No guarda ni registra texto del libro ni traducciones (solo el localizador, que es una dirección dentro del EPUB).
@@ -63,6 +75,8 @@ class ReaderViewModel(
     private val languages: List<String>,
     /** Ajustes del teléfono: de aquí salen y aquí se guardan los ajustes de lectura (iguales para todos los libros). */
     private val settings: AppSettings,
+    /** Dónde se leen los consejos vistos del disco (en las pruebas, el hilo de prueba). */
+    private val tipsIo: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val position = MutableStateFlow<ReaderPosition?>(null)
     private var lastSaved: ReaderPosition? = null
@@ -129,7 +143,108 @@ class ReaderViewModel(
     /** El aviso que un toque volvió a dar estando ya puesto (para anunciarlo otra vez). */
     val noticeAgain: SharedFlow<ChapterNotice> = _noticeAgain.asSharedFlow()
 
+    // ---------- Consejos (3c-3) ----------
+    // Va después de _direction (Ruling A): stateIn empieza a leerla al crearse.
+
+    /** Lo que solo sabe el Lector en esta sesión (los vistos, el modo y la dirección vienen de sus propios flujos). */
+    private data class TipInputs(
+        val pageShown: Boolean = false,
+        val blocked: Boolean = false,
+        val tapTranslated: Boolean = false,
+        val chapterEnd: Boolean = false,
+    )
+
+    private val tipInputs = MutableStateFlow(TipInputs())
+    private var shownTip: TipId? = null // el que está en pantalla: se queda hasta cerrarse (TipRules.next)
+    private var tipOnScreen = false // la pantalla de verdad dibuja la tarjeta (setTipOnScreen)
+    private val announcedTips = mutableSetOf<TipId>() // los que TalkBack ya dijo en esta sesión
+
+    /** El consejo que la pantalla muestra ahora, o null (spec 3c-3 §3). */
+    val tip: StateFlow<TipId?> = combine(
+        settings.seenTipsFlow,
+        settings.seenTipsLoaded,
+        settings.readingSettingsFlow,
+        _direction,
+        tipInputs,
+    ) { seen, loaded, reading, dir, local ->
+        val state = TipState(
+            seen = seen,
+            seenLoaded = loaded,
+            pageReady = local.pageShown,
+            blocked = local.blocked,
+            mode = reading.mode,
+            sourceIsSpanish = dir.source == "es",
+            translatedByTap = local.tapTranslated,
+            reachedChapterEnd = local.chapterEnd,
+        )
+        // Mientras está bloqueado se recuerda el de antes: al desbloquear vuelve el mismo.
+        TipRules.next(state, shownTip).also { if (!state.blocked) shownTip = it }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** "Entendido": el consejo en pantalla queda visto. */
+    fun dismissTip() {
+        tip.value?.let { settings.markTipSeen(it) }
+    }
+
+    /**
+     * Algo que hizo la persona: si cierra el consejo que se VE, queda visto (TipRules.dismissedBy). Uno elegido pero
+     * escondido (p. ej. con las barras) no se marca: la persona no lo leyó (Ruling D).
+     */
+    fun onTipEvent(event: TipEvent) {
+        val current = tip.value ?: return
+        if (tipOnScreen && TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
+    }
+
+    /**
+     * Se abre una hoja (Aa o dirección): primero se bloquea y luego se aplica [event] (Ruling E). Al revés, marcar el
+     * consejo dejaría asomar (y anunciar) el siguiente antes de que la pantalla bloquee.
+     */
+    fun onSheetOpened(event: TipEvent) {
+        val current = tip.value
+        setTipBlocked(true)
+        if (current != null && tipOnScreen && TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
+    }
+
+    /**
+     * ¿TalkBack debe decir [tip] al aparecer su tarjeta? Solo la primera vez en esta sesión: un consejo que vuelve tras
+     * cerrarse una hoja (o con las barras) sale callado (spec §4: "Nada se anuncia dos veces").
+     */
+    fun shouldAnnounceTip(tip: TipId): Boolean = tip !in announcedTips
+
+    /** La pantalla ya dejó que TalkBack dijera [tip]. */
+    fun onTipAnnounced(tip: TipId) {
+        announcedTips += tip
+    }
+
+    /** La pantalla dice si la tarjeta del consejo está de verdad a la vista (ver [TipRules.cardVisible]). */
+    fun setTipOnScreen(onScreen: Boolean) {
+        tipOnScreen = onScreen
+    }
+
+    /** La lectura llegó al final de un capítulo que no es el último (lo mide la pantalla al asentarse). */
+    fun onChapterEnd() = tipInputs.update { it.copy(chapterEnd = true) }
+
+    /**
+     * ¿Vale la pena medir el borde? Solo con los vistos ya leídos, el del borde sin ver y aún sin llegar al final de
+     * este capítulo (así la pantalla no corre el script en cada posición).
+     */
+    fun wantsChapterEdge(): Boolean =
+        settings.seenTipsLoaded.value && TipId.CHAPTER_EDGE !in settings.seenTipsFlow.value && !tipInputs.value.chapterEnd
+
+    /** Hay una hoja, "Idiomas", "Cómo se usa" o la banda del aviso: el consejo espera (no se marca). */
+    fun setTipBlocked(blocked: Boolean) = tipInputs.update { it.copy(blocked = blocked) }
+
     init {
+        // Los vistos se leen fuera del hilo principal antes de que nada los marque (así marcar no lee el disco aquí).
+        viewModelScope.launch { settings.loadSeenTips(tipsIo) }
+        // "Volver a ver los consejos" con el libro abierto: lo de esta sesión también se olvida y se empieza por el
+        // principio (si no, tras haber traducido saldría "Toca otra vez…" antes que "Toca un párrafo…").
+        viewModelScope.launch {
+            settings.tipsResets.drop(1).collect {
+                announcedTips.clear()
+                tipInputs.update { it.copy(tapTranslated = false, chapterEnd = false) }
+            }
+        }
         viewModelScope.launch {
             position.filterNotNull().debounce(1_000).collect { save(it) }
         }
@@ -155,6 +270,8 @@ class ReaderViewModel(
     fun onTap(resource: String, hit: List<PageParagraph>) {
         val tapped = hit.firstOrNull() ?: return
         if (visible == null) onResourceShown(resource)
+        // Antes de abrir la tarjeta: "Toca un párrafo…" queda visto al tocar aunque la traducción tarde.
+        onTipEvent(TipEvent.TAPPED)
         val open = cards.getOrPut(resource) { LinkedHashMap() }
         val anchor = ModeRules.anchor(mode)
         val existing = open[tapped.index]
@@ -163,6 +280,10 @@ class ReaderViewModel(
             TapAction.CLOSE -> {
                 open.remove(tapped.index)
                 _cardOps.trySend(CardOp.Hide(resource, tapped.index, anchor))
+                onTipEvent(TipEvent.CARD_HIDDEN)
+                // "Toca otra vez para ocultarla" habla de una tarjeta abierta: ocultada, ya no toca (vuelve con la
+                // próxima traducción por toque). Así no sale si se tradujo con otro consejo arriba y ya se ocultó.
+                tipInputs.update { it.copy(tapTranslated = false) }
                 return
             }
             TapAction.TOGGLE -> {
@@ -197,8 +318,15 @@ class ReaderViewModel(
      * nada, así no se mueve lo que se lee (revisión final 3c-2, I1).
      */
     fun onResourceShown(resource: String, reloaded: Boolean = true) {
-        val changed = visible != resource
+        val previous = visible
+        val changed = previous != resource
         visible = resource
+        tipInputs.update { it.copy(pageShown = true) }
+        if (changed && previous != null) {
+            // Otro capítulo: cierra "Sigue deslizando…" y el borde se vuelve a medir en el nuevo.
+            onTipEvent(TipEvent.CHAPTER_CHANGED)
+            tipInputs.update { it.copy(chapterEnd = false) }
+        }
         translations.cancelPrefetchExcept(resource)
         if (changed) {
             // Lo que la guía de modo aún no pidió del capítulo anterior ya no se pide (y no deja esqueletos).
@@ -297,6 +425,7 @@ class ReaderViewModel(
             for (index in open.keys) _cardOps.trySend(CardOp.Hide(resource, index, anchor))
         }
         cards.clear()
+        tipInputs.update { it.copy(tapTranslated = false) } // sin tarjetas, nada que ocultar
         modeQueue.clear()
         guideRound++
         _chapterNotice.value = null // el aviso era de la otra dirección
@@ -364,6 +493,9 @@ class ReaderViewModel(
             // En otro recurso no se inserta; queda guardado y se repone al volver (onResourceShown).
             showIfVisible(resource, index)
             val shown = ModeRules.display(mode, card.state, card.toggled)
+            // Primera traducción mostrada por un toque: toca "Toca otra vez para ocultarla…".
+            // Solo si se ve: llegada con otro capítulo a la vista, "Toca otra vez" hablaría de una tarjeta que no está.
+            if (announce && mode == ReadingMode.TAP && result is TranslateResult.Done && visible == resource) tipInputs.update { it.copy(tapTranslated = true) }
             if (announce && visible == resource && shown != null) _announcements.tryEmit(CardOp.Show(resource, index, shown, anchor))
             // Solo si tradujo: tras un fallo o sin modelo, cada pretraducción volvería a intentar cargar el motor.
             if (hit != null && result is TranslateResult.Done) prefetch(resource, pair, hit)

@@ -90,6 +90,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
+import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.LectorApp
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.books.Book
@@ -104,6 +106,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.LoadingLine
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenMaxWidth
 import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.tips.FreeBooks
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,12 +122,17 @@ fun LibraryScreen(
     app: LectorApp,
     onLanguages: () -> Unit,
     onDeveloper: (() -> Unit)?,
+    onHowTo: () -> Unit,
     onOpenBook: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(Unit) { app.settings.loadEnginePreference() } // Primera lectura fuera del hilo principal.
     // Los ajustes de lectura, listos antes de abrir un libro (el Lector arranca con ellos).
     LaunchedEffect(Unit) { app.settings.loadReadingSettings() }
+    // La tarjeta "¿Primera vez?…" sale hasta que se abre "Cómo se usa" o se cierra (vuelve con "Volver a ver los consejos").
+    LaunchedEffect(Unit) { app.settings.loadSeenTips() }
+    val seenTips by app.settings.seenTipsFlow.collectAsStateWithLifecycle()
+    val tipsLoaded by app.settings.seenTipsLoaded.collectAsStateWithLifecycle()
     val vm: LibraryViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -173,8 +181,14 @@ fun LibraryScreen(
         onDelete = vm::delete,
         onLanguages = onLanguages,
         onDeveloper = onDeveloper,
+        onHowTo = {
+            app.settings.markTipSeen(TipId.LIBRARY_HOWTO)
+            onHowTo()
+        },
         snackbar = snackbar,
         modifier = modifier,
+        showHowToCard = tipsLoaded && TipId.LIBRARY_HOWTO !in seenTips,
+        onHowToCardClose = { app.settings.markTipSeen(TipId.LIBRARY_HOWTO) },
     )
     failedId?.let { id ->
         OpenFailedDialog(
@@ -203,9 +217,13 @@ fun LibraryContent(
     onOpen: (String) -> Unit,
     onDelete: (String) -> Unit,
     onLanguages: () -> Unit,
+    onHowTo: () -> Unit,
     onDeveloper: (() -> Unit)?,
     snackbar: SnackbarHostState,
     modifier: Modifier = Modifier,
+    /** Tarjeta "¿Primera vez? Mira cómo se usa la app" arriba de la lista (3c-3, puerta de Juan). */
+    showHowToCard: Boolean = false,
+    onHowToCardClose: () -> Unit = {},
 ) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
@@ -225,7 +243,13 @@ fun LibraryContent(
                         modifier = Modifier.semantics { heading() },
                     )
                 },
-                actions = { OverflowMenu(onLanguages, onDeveloper) },
+                actions = {
+                    // "Cómo se usa" siempre a la vista (puerta 3c-3); también sigue en el menú ⋮.
+                    IconButton(onClick = onHowTo, modifier = Modifier.size(48.dp)) {
+                        Icon(painterResource(LectorIcons.Help), contentDescription = stringResource(R.string.library_menu_howto))
+                    }
+                    OverflowMenu(onLanguages, onHowTo, onDeveloper)
+                },
                 // En reposo, del color del fondo: sin franja de otro tono. Al desplazar la lista sí cambia (se nota el borde).
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 scrollBehavior = scroll,
@@ -260,6 +284,22 @@ fun LibraryContent(
                         LoadingLine(stringResource(R.string.library_loading), Modifier.padding(horizontal = Spacing.l))
                     }
                     return@LazyColumn
+                }
+                if (showHowToCard) {
+                    item(key = "howto") {
+                        TipCard(
+                            text = stringResource(R.string.library_howto_card),
+                            onDismiss = onHowToCardClose,
+                            actionLabel = stringResource(R.string.library_howto_card_open),
+                            onAction = onHowTo,
+                            dismissLabel = stringResource(R.string.library_howto_card_close),
+                            // Contenido fijo de la lista, no algo que acaba de pasar: TalkBack la lee al recorrer, sin
+                            // anunciarla en cada visita.
+                            announce = false,
+                            // 4 + 12 dp de la tarjeta = 16 dp, el mismo borde que el aviso de idiomas.
+                            modifier = Modifier.animatedItem(this, reduceMotion).padding(horizontal = Spacing.xs),
+                        )
+                    }
                 }
                 state.notice?.let { notice ->
                     item(key = "notice") { NoticeCard(notice, onLanguages, Modifier.animatedItem(this, reduceMotion)) }
@@ -311,7 +351,7 @@ private fun Modifier.animatedItem(scope: LazyItemScope, reduceMotion: Boolean): 
     if (reduceMotion) this else with(scope) { this@animatedItem.animateItem() }
 
 @Composable
-private fun OverflowMenu(onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) {
+private fun OverflowMenu(onLanguages: () -> Unit, onHowTo: () -> Unit, onDeveloper: (() -> Unit)?) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
@@ -324,6 +364,14 @@ private fun OverflowMenu(onLanguages: () -> Unit, onDeveloper: (() -> Unit)?) {
                 onClick = {
                     menuOpen = false
                     onLanguages()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_menu_howto)) },
+                leadingIcon = { Icon(painterResource(LectorIcons.Help), contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onHowTo()
                 },
             )
             if (onDeveloper != null) {
@@ -404,9 +452,12 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
 }
 
 /**
- * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande.
- * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, antes de la explicación:
- * así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba.
+ * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande y dónde conseguir libros gratis.
+ * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, seguido de "Toca «Añadir
+ * libro»…" (TalkBack oye el botón y enseguida qué hace) y de los libros gratis; la explicación larga queda al final.
+ * Así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba. A letra normal
+ * el orden es dibujo, título, explicación, botón, "Toca «Añadir libro»…" y libros gratis (lo nuevo de la 3c-3 va debajo
+ * del botón para no empujarlo fuera de la pantalla).
  */
 @Composable
 private fun EmptyLibrary(onAdd: () -> Unit) {
@@ -430,7 +481,19 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
-        if (largeText) AddBookButton(onAdd)
+        val how = @Composable {
+            Text(
+                stringResource(R.string.library_empty_how, stringResource(R.string.library_add)),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (largeText) {
+            AddBookButton(onAdd)
+            how()
+            FreeBooks(Modifier.fillMaxWidth())
+        }
         Text(
             stringResource(R.string.library_empty_body),
             style = MaterialTheme.typography.bodyLarge,
@@ -440,6 +503,8 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
         if (!largeText) {
             Spacer(Modifier.height(Spacing.s))
             AddBookButton(onAdd)
+            how() // después del botón: con letra al 130 % "Añadir libro" sigue viéndose sin desplazar
+            FreeBooks(Modifier.fillMaxWidth())
         }
     }
 }
