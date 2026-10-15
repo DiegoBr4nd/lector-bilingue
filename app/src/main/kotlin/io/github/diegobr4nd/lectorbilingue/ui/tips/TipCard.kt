@@ -3,6 +3,7 @@ package io.github.diegobr4nd.lectorbilingue.ui.tips
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,7 +82,8 @@ fun TipCard(
         }
         val buttonColors = ButtonDefaults.textButtonColors(contentColor = colors.onSecondaryContainer)
         val button = @Composable {
-            Row {
+            // Con letra grande y dos botones, el segundo baja de línea en vez de salirse.
+            FlowRow(horizontalArrangement = Arrangement.End) {
                 if (actionLabel != null) {
                     TextButton(onClick = onAction, colors = buttonColors, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(actionLabel, style = MaterialTheme.typography.labelLarge)

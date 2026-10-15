@@ -293,7 +293,11 @@ fun LibraryContent(
                             actionLabel = stringResource(R.string.library_howto_card_open),
                             onAction = onHowTo,
                             dismissLabel = stringResource(R.string.library_howto_card_close),
-                            modifier = Modifier.animatedItem(this, reduceMotion),
+                            // Contenido fijo de la lista, no algo que acaba de pasar: TalkBack la lee al recorrer, sin
+                            // anunciarla en cada visita.
+                            announce = false,
+                            // 4 + 12 dp de la tarjeta = 16 dp, el mismo borde que el aviso de idiomas.
+                            modifier = Modifier.animatedItem(this, reduceMotion).padding(horizontal = Spacing.xs),
                         )
                     }
                 }
