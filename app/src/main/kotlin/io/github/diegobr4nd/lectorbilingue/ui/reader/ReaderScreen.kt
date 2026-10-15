@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -621,58 +622,63 @@ fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifi
     val container = if (texts.error) colors.errorContainer else colors.secondaryContainer
     val content = if (texts.error) colors.onErrorContainer else colors.onSecondaryContainer
     Surface(color = container, contentColor = content, modifier = modifier.fillMaxWidth()) {
-        BoxWithConstraints(
-            Modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs),
-        ) {
-            // Ancho "a letra normal": con letra al 200 % cada texto ocupa el doble (la misma idea que la hoja "Aa").
-            val stacked = maxWidth / LocalDensity.current.fontScale < NoticeRowMin
-            val message = @Composable { m: Modifier ->
-                Row(
-                    m.clearAndSetSemantics {
-                        contentDescription = texts.spoken
-                        liveRegion = LiveRegionMode.Polite
-                    },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.m),
-                ) {
-                    Icon(
-                        painterResource(if (texts.error) LectorIcons.Error else LectorIcons.Download),
-                        contentDescription = null, // decorativo: el texto lo dice
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Text(texts.message, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            val button = @Composable {
-                if (texts.action != null) {
-                    TextButton(
-                        onClick = onAction,
-                        colors = ButtonDefaults.textButtonColors(contentColor = content),
-                        modifier = Modifier.heightIn(min = 48.dp),
+        Column {
+            BoxWithConstraints(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs),
+            ) {
+                // Ancho "a letra normal": con letra al 200 % cada texto ocupa el doble (la misma idea que la hoja "Aa").
+                val stacked = maxWidth / LocalDensity.current.fontScale < NoticeRowMin
+                val message = @Composable { m: Modifier ->
+                    Row(
+                        m.clearAndSetSemantics {
+                            contentDescription = texts.spoken
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
                     ) {
-                        Text(texts.action, style = MaterialTheme.typography.labelLarge)
+                        Icon(
+                            painterResource(if (texts.error) LectorIcons.Error else LectorIcons.Download),
+                            contentDescription = null, // decorativo: el texto lo dice
+                            modifier = Modifier.size(24.dp),
+                        )
+                        // Máximo 2 líneas (con letra al 200 % la banda no tapa media página): lo completo lo dice la descripción.
+                        Text(texts.message, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                val button = @Composable {
+                    if (texts.action != null) {
+                        TextButton(
+                            onClick = onAction,
+                            colors = ButtonDefaults.textButtonColors(contentColor = content),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text(texts.action, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                if (stacked) {
+                    Column {
+                        message(Modifier.fillMaxWidth().padding(vertical = Spacing.xs))
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { button() }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        message(Modifier.weight(1f).padding(vertical = Spacing.xs))
+                        button()
                     }
                 }
             }
-            if (stacked) {
-                Column {
-                    message(Modifier.fillMaxWidth().padding(vertical = Spacing.s))
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { button() }
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    message(Modifier.weight(1f).padding(vertical = Spacing.s))
-                    button()
-                }
-            }
+            // Borde inferior: en oscuro la banda no se funde con la barra ni con la página.
+            HorizontalDivider(thickness = 1.dp, color = colors.outlineVariant)
         }
     }
 }
 
 /** Debajo de esto (dp a letra normal) el texto del aviso y su botón no caben en una fila: el botón baja. */
-private val NoticeRowMin = 300.dp
+private val NoticeRowMin = 180.dp
 
 /** Estados de espera de una tarjeta: "Traduciendo…", "Preparando…" o, en Solo traducción, el original en gris. */
 private fun CardState.isWaiting() = this == CardState.Skeleton || this == CardState.Preparing || this == CardState.Waiting

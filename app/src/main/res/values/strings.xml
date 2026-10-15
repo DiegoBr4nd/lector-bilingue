@@ -107,7 +107,7 @@
     <string name="reader_card_preparing">Preparando el traductor…</string>
     <!-- Solo traducción (3c-2): marca pequeña bajo el original que se muestra al tocar. -->
     <string name="reader_card_original">Original</string>
-    <string name="reader_card_missing">Falta el idioma %1$s (%2$d MB)</string>
+    <string name="reader_card_missing">Falta el idioma %1$s (%2$d MB)</string>
     <string name="reader_card_missing_nosize">Falta el idioma %1$s</string>
     <plurals name="reader_card_missing_spoken">
         <item quantity="one">Falta el idioma %1$s a %2$s, %3$d megabyte. Descargar</item>
@@ -149,12 +149,12 @@
     <string name="languages_redownload_title">¿Descargar %1$s otra vez?</string>
     <string name="languages_redownload_body">Modelo %2$s. Ya lo tienes instalado. Se volverán a bajar %1$d MB y se reemplazará.</string>
     <string name="languages_redownload_confirm">Descargar</string>
-    <string name="languages_cache_label">Traducciones guardadas: aprox. %1$s MB</string>
+    <string name="languages_cache_label">Traducciones guardadas: aprox. %1$s MB</string>
     <string name="languages_cache_none">Traducciones guardadas: ninguna</string>
     <string name="languages_cache_unknown">Traducciones guardadas: tamaño desconocido</string>
     <string name="languages_cache_delete_description_unknown">Borrar las traducciones guardadas</string>
     <string name="languages_cache_delete">Borrar</string>
-    <string name="languages_cache_delete_description">Borrar las traducciones guardadas, aprox. %1$s MB</string>
+    <string name="languages_cache_delete_description">Borrar las traducciones guardadas, aprox. %1$s MB</string>
     <string name="languages_cache_confirm_title">¿Borrar las traducciones guardadas?</string>
     <string name="languages_cache_confirm_body">Se volverán a traducir cuando toques los párrafos.</string>
     <string name="languages_cache_cleared">Traducciones borradas</string>
