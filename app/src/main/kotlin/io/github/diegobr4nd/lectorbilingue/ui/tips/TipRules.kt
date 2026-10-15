@@ -44,6 +44,12 @@ object TipRules {
         TipId.CHAPTER_EDGE -> event == TipEvent.CHAPTER_CHANGED
     }
 
+    /**
+     * ¿Se dibuja la tarjeta de [tip]? Se esconde con las barras, salvo la del borde: sale justo cuando se lee hacia
+     * adelante (barras ocultas) y es el momento en que sirve (Ruling D).
+     */
+    fun cardVisible(tip: TipId?, barsVisible: Boolean): Boolean = tip != null && (barsVisible || tip == TipId.CHAPTER_EDGE)
+
     private fun eligible(tip: TipId, s: TipState): Boolean = when (tip) {
         TipId.DIRECTION -> s.sourceIsSpanish
         TipId.TAP -> s.mode == ReadingMode.TAP && !s.translatedByTap

@@ -26,11 +26,13 @@ import io.github.diegobr4nd.lectorbilingue.engine.api.EngineId
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
 import io.github.diegobr4nd.lectorbilingue.ui.library.FakeBookDao
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -72,13 +74,14 @@ class ReaderViewModelTest {
         engine: FakeEngine? = null,
         languages: List<String> = listOf("en"),
         direction: String? = null,
+        tipsIo: CoroutineDispatcher = dispatcher,
     ): ReaderViewModel {
         val files = BookFiles(tmp.root)
         dao.insert(BookEntity(id, "T", null, null, 1, null, 0f, null, direction))
         val importer = BookImporter(files, dao, readMetadata = { MetadataRead.Ok(BookMetadata("T", null, null)) }, saveCover = { _, _ -> })
         val p = if (engine == null) provider else FakeEngineProvider(opus = engine, installedEngines = provider.installedEngines)
         service = TranslationService(p, cache, clock = { 1L }, worker = dispatcher, scope = this) // no backgroundScope: advanceUntilIdle no espera esas tareas
-        return ReaderViewModel(id, BookRepository(dao, files, importer), service, languages, settings, tipsIo = dispatcher)
+        return ReaderViewModel(id, BookRepository(dao, files, importer), service, languages, settings, tipsIo = tipsIo)
     }
 
     /** El VM y la lista de todo lo que emite `cardOps` (se suscribe enseguida: no se pierde nada). */
@@ -1289,16 +1292,19 @@ class ReaderViewModelTest {
     }
 
     // ---------- Consejos (3c-3) ----------
+    // El VM lee los vistos en su init (hilo de prueba): las llamadas a loadSeenTips de aquí no hacen falta salvo donde
+    // la lectura del VM se deja en espera a propósito.
 
     @Test fun `libro nuevo en Tocar muestra tocar y al tocar pasa a ocultar y modos`() = runTest(dispatcher) {
         val vm = viewModel()
-        settings.loadSeenTips(dispatcher)
         val tips = mutableListOf<TipId?>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.tip.toList(tips) }
+        runCurrent()
         assertNull(vm.tip.value) // sin página todavía
         vm.onResourceShown("c1.xhtml")
         runCurrent()
         assertEquals(TipId.TAP, vm.tip.value)
+        vm.setTipOnScreen(true)
         vm.onTap("c1.xhtml", listOf(p(0, "Hello world.")))
         advanceUntilIdle()
         assertTrue(TipId.TAP in settings.seenTipsFlow.value) // tocar lo cerró y lo marcó
@@ -1307,25 +1313,34 @@ class ReaderViewModelTest {
         runCurrent()
         assertTrue(TipId.HIDE_AND_MODES in settings.seenTipsFlow.value)
         assertNull(vm.tip.value)
+        assertEquals(listOf(null, TipId.TAP, null, TipId.HIDE_AND_MODES, null), tips)
     }
 
-    @Test fun `libro en espanol muestra primero la direccion y abrir la hoja la cierra`() = runTest(dispatcher) {
+    @Test fun `libro en espanol muestra primero la direccion y abrir la hoja la cierra sin mostrar otro`() = runTest(dispatcher) {
         val vm = viewModel(languages = listOf("es"))
-        settings.loadSeenTips(dispatcher)
+        val tips = mutableListOf<TipId?>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.tip.toList(tips) }
         vm.onResourceShown("c1.xhtml")
         advanceUntilIdle()
         assertEquals(TipId.DIRECTION, vm.tip.value)
-        vm.onTipEvent(TipEvent.DIRECTION_OPENED)
+        vm.setTipOnScreen(true)
+        vm.onSheetOpened(TipEvent.DIRECTION_OPENED)
         runCurrent()
         assertTrue(TipId.DIRECTION in settings.seenTipsFlow.value)
+        assertNull(vm.tip.value) // con la hoja abierta, nada
+        assertEquals(listOf(null, TipId.DIRECTION, null), tips) // "tocar" no se asomó (ni se anunció) al abrir la hoja
+        vm.setTipBlocked(false) // se cerró la hoja
+        runCurrent()
         assertEquals(TipId.TAP, vm.tip.value)
     }
 
     @Test fun `Entendido marca el consejo y uno ya visto no parpadea al abrir`() = runTest(dispatcher) {
         prefs.values["tips_seen"] = "tap"
-        val vm = viewModel()
+        // La lectura del VM queda en espera (otro planificador que nadie avanza): aún no hay vistos.
+        val vm = viewModel(tipsIo = StandardTestDispatcher(TestCoroutineScheduler()))
         vm.onResourceShown("c1.xhtml")
         runCurrent()
+        assertFalse(settings.seenTipsLoaded.value)
         assertNull(vm.tip.value) // aún sin leer los vistos: nada (no parpadea "tocar")
         settings.loadSeenTips(dispatcher); runCurrent()
         assertNull(vm.tip.value) // TAP ya visto; nada más elegible
@@ -1338,7 +1353,6 @@ class ReaderViewModelTest {
 
     @Test fun `bloqueado no muestra nada y al desbloquear vuelve el mismo`() = runTest(dispatcher) {
         val vm = viewModel()
-        settings.loadSeenTips(dispatcher)
         vm.onResourceShown("c1.xhtml"); runCurrent()
         vm.setTipBlocked(true); runCurrent()
         assertNull(vm.tip.value)
@@ -1347,14 +1361,89 @@ class ReaderViewModelTest {
         assertFalse(TipId.TAP in settings.seenTipsFlow.value) // ocultarlo no lo marca
     }
 
+    @Test fun `un evento con el consejo bloqueado no marca nada`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        vm.setTipOnScreen(true)
+        vm.setTipBlocked(true); runCurrent()
+        vm.onTipEvent(TipEvent.TAPPED); runCurrent()
+        assertFalse(TipId.TAP in settings.seenTipsFlow.value)
+        vm.setTipBlocked(false); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+    }
+
+    @Test fun `un evento no marca un consejo que no esta en pantalla`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+        vm.setTipOnScreen(false) // p. ej. barras ocultas
+        vm.onTipEvent(TipEvent.TAPPED); runCurrent()
+        assertFalse(TipId.TAP in settings.seenTipsFlow.value)
+        vm.setTipOnScreen(true)
+        vm.onTipEvent(TipEvent.TAPPED); runCurrent()
+        assertTrue(TipId.TAP in settings.seenTipsFlow.value)
+    }
+
     @Test fun `cambiar de capitulo cierra el consejo del borde`() = runTest(dispatcher) {
         prefs.values["tips_seen"] = "tap"
         val vm = viewModel()
-        settings.loadSeenTips(dispatcher)
         vm.onResourceShown("c1.xhtml"); vm.onChapterEnd(); runCurrent()
         assertEquals(TipId.CHAPTER_EDGE, vm.tip.value)
+        vm.setTipOnScreen(true)
         vm.onResourceShown("c2.xhtml"); runCurrent()
         assertTrue(TipId.CHAPTER_EDGE in settings.seenTipsFlow.value)
+        assertNull(vm.tip.value)
+    }
+
+    @Test fun `cambiar de capitulo sin verlo no lo marca y olvida el final del anterior`() = runTest(dispatcher) {
+        prefs.values["tips_seen"] = "tap"
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); vm.onChapterEnd(); runCurrent()
+        assertEquals(TipId.CHAPTER_EDGE, vm.tip.value)
+        assertFalse(vm.wantsChapterEdge()) // ya se llegó al final: la pantalla no vuelve a medir
+        vm.onResourceShown("c2.xhtml"); runCurrent() // nunca estuvo en pantalla
+        assertFalse(TipId.CHAPTER_EDGE in settings.seenTipsFlow.value)
+        assertNull(vm.tip.value) // el final era del capítulo anterior
+        assertTrue(vm.wantsChapterEdge())
+    }
+
+    @Test fun `abrir Aa marca ocultar y modos sin mostrar otro`() = runTest(dispatcher) {
+        prefs.values["tips_seen"] = "tap"
+        val vm = viewModel()
+        val tips = mutableListOf<TipId?>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.tip.toList(tips) }
+        vm.onResourceShown("c1.xhtml")
+        vm.onTap("c1.xhtml", listOf(p(0, "Hello world.")))
+        advanceUntilIdle()
+        assertEquals(TipId.HIDE_AND_MODES, vm.tip.value)
+        vm.onChapterEnd(); runCurrent() // el del borde espera su turno
+        assertEquals(TipId.HIDE_AND_MODES, vm.tip.value)
+        vm.setTipOnScreen(true)
+        vm.onSheetOpened(TipEvent.SETTINGS_OPENED); runCurrent()
+        assertTrue(TipId.HIDE_AND_MODES in settings.seenTipsFlow.value)
+        assertNull(vm.tip.value)
+        assertFalse(TipId.CHAPTER_EDGE in tips, "el del borde se asomó al abrir la hoja: $tips")
+        vm.setTipBlocked(false); runCurrent()
+        assertEquals(TipId.CHAPTER_EDGE, vm.tip.value)
+    }
+
+    @Test fun `la traduccion que llega con otro capitulo a la vista no trae ocultar y modos`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        vm.setTipOnScreen(true)
+        vm.onTap("c1.xhtml", listOf(p(0, "Hello world.")))
+        vm.onResourceShown("c2.xhtml") // se fue antes de que llegara la traducción
+        advanceUntilIdle()
+        assertTrue(TipId.TAP in settings.seenTipsFlow.value)
+        assertNull(vm.tip.value)
+    }
+
+    @Test fun `el borde solo se mide con los vistos leidos y sin verlo`() = runTest(dispatcher) {
+        val vm = viewModel(tipsIo = StandardTestDispatcher(TestCoroutineScheduler()))
+        assertFalse(vm.wantsChapterEdge()) // sin los vistos todavía
+        settings.loadSeenTips(dispatcher)
+        assertTrue(vm.wantsChapterEdge())
+        settings.markTipSeen(TipId.CHAPTER_EDGE)
+        assertFalse(vm.wantsChapterEdge())
     }
 }
-

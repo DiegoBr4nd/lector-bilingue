@@ -87,6 +87,9 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 class MaliciousEpubOnDeviceTest {
     @get:Rule val rule = createEmptyComposeRule()
+
+    // Los consejos vistos de Juan no cambian; en la prueba todos cuentan como vistos (ninguna tarjeta tapa nada).
+    @get:Rule val keepTips = KeepTips()
     @get:Rule val translations = InMemoryTranslations()
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

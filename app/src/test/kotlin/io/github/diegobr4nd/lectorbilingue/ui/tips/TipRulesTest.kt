@@ -69,4 +69,14 @@ class TipRulesTest {
         assertFalse(TipRules.dismissedBy(TipId.DIRECTION, TipEvent.TAPPED))
         assertFalse(TipRules.dismissedBy(TipId.CHAPTER_EDGE, TipEvent.TAPPED))
     }
+
+    @Test fun `el del borde se ve aun con las barras ocultas y los demas se esconden con ellas`() {
+        assertTrue(TipRules.cardVisible(TipId.CHAPTER_EDGE, barsVisible = false))
+        assertTrue(TipRules.cardVisible(TipId.CHAPTER_EDGE, barsVisible = true))
+        for (tip in listOf(TipId.DIRECTION, TipId.TAP, TipId.HIDE_AND_MODES)) {
+            assertFalse(TipRules.cardVisible(tip, barsVisible = false), "$tip")
+            assertTrue(TipRules.cardVisible(tip, barsVisible = true), "$tip")
+        }
+        assertFalse(TipRules.cardVisible(null, barsVisible = true))
+    }
 }

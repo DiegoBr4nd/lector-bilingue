@@ -155,6 +155,7 @@ class ReaderViewModel(
 
     private val tipInputs = MutableStateFlow(TipInputs())
     private var shownTip: TipId? = null // el que está en pantalla: se queda hasta cerrarse (TipRules.next)
+    private var tipOnScreen = false // la pantalla de verdad dibuja la tarjeta (setTipOnScreen)
 
     /** El consejo que la pantalla muestra ahora, o null (spec 3c-3 §3). */
     val tip: StateFlow<TipId?> = combine(
@@ -183,14 +184,39 @@ class ReaderViewModel(
         tip.value?.let { settings.markTipSeen(it) }
     }
 
-    /** Algo que hizo la persona: si cierra el consejo en pantalla, queda visto (TipRules.dismissedBy). */
+    /**
+     * Algo que hizo la persona: si cierra el consejo que se VE, queda visto (TipRules.dismissedBy). Uno elegido pero
+     * escondido (p. ej. con las barras) no se marca: la persona no lo leyó (Ruling D).
+     */
     fun onTipEvent(event: TipEvent) {
         val current = tip.value ?: return
-        if (TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
+        if (tipOnScreen && TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
+    }
+
+    /**
+     * Se abre una hoja (Aa o dirección): primero se bloquea y luego se aplica [event] (Ruling E). Al revés, marcar el
+     * consejo dejaría asomar (y anunciar) el siguiente antes de que la pantalla bloquee.
+     */
+    fun onSheetOpened(event: TipEvent) {
+        val current = tip.value
+        setTipBlocked(true)
+        if (current != null && tipOnScreen && TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
+    }
+
+    /** La pantalla dice si la tarjeta del consejo está de verdad a la vista (ver [TipRules.cardVisible]). */
+    fun setTipOnScreen(onScreen: Boolean) {
+        tipOnScreen = onScreen
     }
 
     /** La lectura llegó al final de un capítulo que no es el último (lo mide la pantalla al asentarse). */
     fun onChapterEnd() = tipInputs.update { it.copy(chapterEnd = true) }
+
+    /**
+     * ¿Vale la pena medir el borde? Solo con los vistos ya leídos, el del borde sin ver y aún sin llegar al final de
+     * este capítulo (así la pantalla no corre el script en cada posición).
+     */
+    fun wantsChapterEdge(): Boolean =
+        settings.seenTipsLoaded.value && TipId.CHAPTER_EDGE !in settings.seenTipsFlow.value && !tipInputs.value.chapterEnd
 
     /** Hay una hoja, "Idiomas", "Cómo se usa" o la banda del aviso: el consejo espera (no se marca). */
     fun setTipBlocked(blocked: Boolean) = tipInputs.update { it.copy(blocked = blocked) }
@@ -443,7 +469,8 @@ class ReaderViewModel(
             showIfVisible(resource, index)
             val shown = ModeRules.display(mode, card.state, card.toggled)
             // Primera traducción mostrada por un toque: toca "Toca otra vez para ocultarla…".
-            if (announce && mode == ReadingMode.TAP && result is TranslateResult.Done) tipInputs.update { it.copy(tapTranslated = true) }
+            // Solo si se ve: llegada con otro capítulo a la vista, "Toca otra vez" hablaría de una tarjeta que no está.
+            if (announce && mode == ReadingMode.TAP && result is TranslateResult.Done && visible == resource) tipInputs.update { it.copy(tapTranslated = true) }
             if (announce && visible == resource && shown != null) _announcements.tryEmit(CardOp.Show(resource, index, shown, anchor))
             // Solo si tradujo: tras un fallo o sin modelo, cada pretraducción volvería a intentar cargar el motor.
             if (hit != null && result is TranslateResult.Done) prefetch(resource, pair, hit)

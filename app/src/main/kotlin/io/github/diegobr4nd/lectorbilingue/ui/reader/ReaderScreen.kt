@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -96,6 +97,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
+import io.github.diegobr4nd.lectorbilingue.ui.tips.TipRules
 import io.github.diegobr4nd.lectorbilingue.ui.tips.tipText
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -335,11 +337,16 @@ fun ReaderScreen(
     val readingOrder = remember(publication) { publication.readingOrder.map { it.url().toString() } }
     // Consejo del borde (3c-3): con la página quieta, ¿se llegó al final de un capítulo que no es el último? Solo
     // mientras ese consejo no se haya visto (cada vuelta lee los bordes con un script).
+    // La primera posición de cada capítulo no cuenta: al volver al final del anterior (gesto hacia atrás) o al abrir
+    // el libro ya en el final, "Sigue deslizando…" no tiene sentido.
     LaunchedEffect(navigator) {
+        var lastHref: String? = null
         navigator?.currentLocator?.collectLatest { locator ->
-            if (TipId.CHAPTER_EDGE in app.settings.seenTipsFlow.value) return@collectLatest
-            delay(VisibleSettleMs)
             val href = locator.href.toString()
+            val firstInChapter = href != lastHref
+            lastHref = href
+            if (firstInChapter || !vm.wantsChapterEdge()) return@collectLatest
+            delay(VisibleSettleMs)
             if (href != currentHref || !ReaderRules.chapterButtons(readingOrder, href).second) return@collectLatest
             if (bridge.edges()?.atBottom == true) vm.onChapterEnd()
         }
@@ -480,13 +487,14 @@ fun ReaderScreen(
                     title = title,
                     direction = direction,
                     onBack = onBack,
+                    // Primero se bloquea el consejo y luego se marca (Ruling E): así no asoma el siguiente.
                     onSettings = {
                         settingsOpen = true
-                        vm.onTipEvent(TipEvent.SETTINGS_OPENED)
+                        vm.onSheetOpened(TipEvent.SETTINGS_OPENED)
                     },
                     onDirection = {
                         directionOpen = true
-                        vm.onTipEvent(TipEvent.DIRECTION_OPENED)
+                        vm.onSheetOpened(TipEvent.DIRECTION_OPENED)
                     },
                     onToc = { tocOpen = true },
                 )
@@ -508,21 +516,28 @@ fun ReaderScreen(
                 )
             }
         }
-        // Abajo, en orden: el consejo (3c-3, spec §4) y la barra inferior. El consejo se esconde y vuelve con las barras.
+        // Abajo, en orden: el consejo (3c-3, spec §4) y la barra inferior. El consejo se esconde y vuelve con las barras,
+        // salvo el del borde (TipRules.cardVisible). El ViewModel sabe si se ve: solo se marca lo que se vio.
         val bottomBarShown = barsVisible && (positionText(label) != null || hasPrevious || hasNext)
+        val bottomBar = remember { MutableTransitionState(bottomBarShown) }
+        bottomBar.targetState = bottomBarShown
+        val cardVisible = TipRules.cardVisible(tip, barsVisible)
+        LaunchedEffect(cardVisible) { vm.setTipOnScreen(cardVisible) }
         // El último consejo mostrado: su texto no desaparece durante el fundido de salida.
         var lastTip by remember { mutableStateOf<TipId?>(null) }
         val cardTip = tip ?: lastTip
         SideEffect { if (tip != null) lastTip = tip }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             AnimatedVisibility(
-                visible = barsVisible && tip != null,
+                visible = cardVisible,
                 enter = if (reduceMotion) EnterTransition.None else fadeIn(),
                 exit = if (reduceMotion) ExitTransition.None else fadeOut(),
             ) {
-                // Sin barra inferior la tarjeta queda sobre la barra de navegación del teléfono. A los lados, fuera de
-                // los recortes de pantalla (como la banda del aviso).
-                val bottomInset = if (bottomBarShown) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                // Sin barra inferior la tarjeta queda sobre la barra de navegación del teléfono. Mientras la barra aún
+                // sale (o entra) cuenta como puesta: así la tarjeta no salta en su fundido. A los lados, fuera de los
+                // recortes de pantalla (como la banda del aviso).
+                val barPresent = bottomBar.currentState || bottomBar.targetState
+                val bottomInset = if (barPresent) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars)
                 cardTip?.let { t ->
                     TipCard(
                         text = tipText(t, directionLabel(direction), languageName(direction.target)),
@@ -532,7 +547,7 @@ fun ReaderScreen(
                 }
             }
             AnimatedVisibility(
-                visible = bottomBarShown,
+                visibleState = bottomBar,
                 enter = if (reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
                 exit = if (reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut(),
             ) {

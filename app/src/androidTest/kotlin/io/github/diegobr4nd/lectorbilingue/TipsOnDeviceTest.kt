@@ -92,17 +92,14 @@ class TipsOnDeviceTest {
     /** Los ajustes de lectura de Juan: se devuelven tal cual en [cleanUp]. */
     private val savedReading = app.settings.readingSettings
 
-    /** Los consejos que Juan ya vio: se devuelven en [cleanUp] (cada prueba empieza como un usuario nuevo). */
-    private var savedTips: Set<TipId>? = null
+    // Los consejos que Juan ya vio: la regla guarda el valor exacto y lo devuelve al terminar (Ruling C). Aquí no los
+    // marca todos: cada prueba empieza como un usuario nuevo (resetTips en [newUser]).
+    @get:Rule val keepTips = KeepTips(allSeen = false)
 
     // Servicio de traducción de la prueba: motor real, caché en memoria (lo pone y lo devuelve la regla).
     @get:Rule val translations = InMemoryTranslations()
 
-    @Before fun saveTips() = runBlocking {
-        app.settings.loadSeenTips()
-        savedTips = app.settings.seenTipsFlow.value
-        app.settings.resetTips()
-    }
+    @Before fun newUser() = app.settings.resetTips()
 
     @After fun cleanUp() = runBlocking<Unit> {
         try {
@@ -114,10 +111,6 @@ class TipsOnDeviceTest {
             if (!shots) shotsDir.deleteRecursively()
         } finally {
             app.settings.readingSettings = savedReading
-            savedTips?.let { tips ->
-                app.settings.resetTips()
-                tips.forEach(app.settings::markTipSeen)
-            }
         }
     }
 
@@ -175,7 +168,7 @@ class TipsOnDeviceTest {
 
             // 2. Toque real en un párrafo de la mitad: el consejo pasa a "Toca otra vez…" cuando llega la traducción.
             val p = JSONObject(js(s, MIDDLE_PARAGRAPH) ?: error("no hay párrafo a mitad de pantalla"))
-            val nth = p.getInt("i") - 1 // posición entre los <p> (el h1 es el 0)
+            val nth = p.getInt("p") // índice entre los <p> de la página
             val (sx, sy) = screenPoint(s, p.getDouble("x"), p.getDouble("y"))
             tap(s, sx, sy)
             waitFor("traducción", 60_000) { js(s, "${card(nth)}.dataset.lectorEstado") == "texto" }
@@ -206,14 +199,24 @@ class TipsOnDeviceTest {
             waitFor("consejo de ocultar visto") { TipId.HIDE_AND_MODES in app.settings.seenTipsFlow.value }
             waitFor("sin consejo") { !hasTip(tipHide) }
 
-            // 5. Al final del capítulo 1 (no es el último): "Sigue deslizando…". "Capítulo siguiente" lo cierra.
-            js(s, "window.scrollTo(0, (document.scrollingElement || document.documentElement).scrollHeight); 'ok'")
-            Thread.sleep(VISIBLE_SETTLE_MS + 1_000)
+            // 5. Leer hacia adelante hasta el final del capítulo 1 (no es el último) con gestos reales: las barras se
+            //    ocultan y aun así sale "Sigue deslizando…" (Ruling D). Seguir deslizando en el borde pasa al capítulo 2
+            //    y eso lo cierra y lo marca.
+            // Cerca del final (a una pantalla y media) por script; el último tramo, con el dedo.
+            js(s, "var e = document.scrollingElement || document.documentElement; window.scrollTo(0, e.scrollHeight - Math.round(window.innerHeight * 1.5)); 'ok'")
+            settle()
+            var swipes = 0
+            while (js(s, AT_BOTTOM) != "true") {
+                assertTrue(swipes++ < 10, "no se llegó al final del capítulo con $swipes gestos")
+                swipeUp(s)
+                settle()
+            }
+            assertEquals("/OEBPS/c1.xhtml", js(s, "location.pathname"), "un gesto pasó de capítulo antes de llegar al final")
             waitForTip(tipEdge)
-            screenshot("recorrido-borde")
             val next = app.getString(R.string.reader_chapter_next)
-            waitFor("botón del capítulo siguiente") { rule.onAllNodes(hasContentDescription(next)).fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithContentDescription(next).performClick()
+            assertFalse(rule.onAllNodes(hasContentDescription(next)).fetchSemanticsNodes().isNotEmpty(), "las barras siguen a la vista")
+            screenshot("recorrido-borde")
+            swipeUp(s)
             waitFor("en el capítulo 2") { js(s, "location.pathname") == "/OEBPS/c2.xhtml" }
             waitFor("consejo del borde visto") { TipId.CHAPTER_EDGE in app.settings.seenTipsFlow.value }
             waitFor("sin consejo del borde") { !hasTip(tipEdge) }
@@ -295,9 +298,7 @@ class TipsOnDeviceTest {
 
     /** Toque real (abajo y arriba) en px de pantalla, como lo haría un dedo. Solo con el Lector al frente. */
     private fun tap(s: ActivityScenario<ReaderActivity>, x: Float, y: Float) {
-        var focused = false
-        s.onActivity { focused = it.hasWindowFocus() }
-        assumeTrue("el Lector no está al frente", focused)
+        waitForFront(s)
         val down = SystemClock.uptimeMillis()
         for ((action, time) in listOf(MotionEvent.ACTION_DOWN to down, MotionEvent.ACTION_UP to down + 60)) {
             val e = MotionEvent.obtain(down, time, action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
@@ -305,6 +306,44 @@ class TipsOnDeviceTest {
             e.recycle()
         }
         instrumentation.waitForIdleSync()
+    }
+
+    /**
+     * Gesto real hacia arriba (leer hacia adelante): abajo, movimientos cada ~10 ms en línea recta y arriba, en el centro
+     * de la pantalla (como en ChapterSwipeOnDeviceTest).
+     */
+    private fun swipeUp(s: ActivityScenario<ReaderActivity>) {
+        waitForFront(s)
+        val m = app.resources.displayMetrics
+        val x = m.widthPixels / 2f
+        val y0 = m.heightPixels * 0.65f
+        val dy = -SWIPE_PX
+        val steps = (SWIPE_MS / 10).toInt()
+        val down = SystemClock.uptimeMillis()
+        inject(down, down, MotionEvent.ACTION_DOWN, x, y0)
+        for (i in 1..steps) {
+            val t = down + SWIPE_MS * i / steps
+            while (SystemClock.uptimeMillis() < t) Thread.sleep(1)
+            inject(down, t, MotionEvent.ACTION_MOVE, x, y0 + dy * i / steps)
+        }
+        inject(down, down + SWIPE_MS, MotionEvent.ACTION_UP, x, y0 + dy)
+        instrumentation.waitForIdleSync()
+    }
+
+    private fun inject(down: Long, time: Long, action: Int, x: Float, y: Float) {
+        val e = MotionEvent.obtain(down, time, action, x, y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+        instrumentation.uiAutomation.injectInputEvent(e, true)
+        e.recycle()
+    }
+
+    /** Si el Lector no está al frente (pantalla bloqueada, un diálogo), la prueba FALLA: no se salta en silencio. */
+    private fun waitForFront(s: ActivityScenario<ReaderActivity>) =
+        waitFor("el Lector al frente", 5_000) { var f = false; s.onActivity { f = it.hasWindowFocus() }; f }
+
+    /** Deja que el gesto y los efectos de Compose se asienten (la regla avanza los efectos). */
+    private fun settle() {
+        Thread.sleep(1_000)
+        rule.waitForIdle()
     }
 
     /** Punto CSS de la página → px de pantalla: la esquina del WebView visible + CSS × densidad. */
@@ -350,16 +389,20 @@ class TipsOnDeviceTest {
     private companion object {
         const val PAGE_READY = "document.readyState === 'complete' && !!window.readium && document.querySelectorAll('p').length"
 
-        /** El de ReaderScreen (VisibleSettleMs): la página quieta antes de medir el borde. */
-        const val VISIBLE_SETTLE_MS = 150L
+        /** ¿La página está abajo del todo? (como ParagraphScripts.edges). */
+        const val AT_BOTTOM = "var e = document.scrollingElement || document.documentElement; String(window.scrollY + window.innerHeight >= e.scrollHeight - 2)"
+
+        /** Gesto hacia arriba: recorrido (px) y duración (ms), sin fling largo. */
+        const val SWIPE_PX = 600f
+        const val SWIPE_MS = 300L
 
         /** Lo que hay entre el borde de arriba de TipCard y su texto o su botón (márgenes internos, con holgura). */
         const val TIP_INNER_TOP_DP = 8f
 
-        /** El primer <p> cuyo centro cae entre el 40 % y el 60 % del alto visible: índice (h1 = 0) y centro en px CSS. */
+        /** El primer <p> cuyo centro cae entre el 40 % y el 60 % del alto visible: su índice entre los <p> y su centro en px CSS. */
         const val MIDDLE_PARAGRAPH = "(function () { var ps = document.querySelectorAll('p'); var h = window.innerHeight;" +
             " for (var k = 0; k < ps.length; k++) { var r = ps[k].getBoundingClientRect(); var cy = r.top + r.height / 2;" +
-            " if (cy > h * 0.4 && cy < h * 0.6) return JSON.stringify({i: k + 1, x: r.left + r.width / 2, y: cy}); }" +
+            " if (cy > h * 0.4 && cy < h * 0.6) return JSON.stringify({p: k, x: r.left + r.width / 2, y: cy}); }" +
             " return null; })()"
     }
 }
