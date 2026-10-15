@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -61,8 +63,15 @@ fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier 
                 modifier = Modifier.semantics { heading() },
             )
         }
+        val scroll = rememberScrollState()
+        // Tras "Volver a ver los consejos" el aviso queda debajo del botón: se desplaza hasta el final para que se vea.
+        LaunchedEffect(resets) {
+            if (resets == 0) return@LaunchedEffect
+            withFrameNanos { } // el aviso ya está medido: maxValue lo incluye
+            scroll.animateScrollTo(scroll.maxValue)
+        }
         Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(Spacing.l),
         ) {
             // Los nombres de botones salen de los strings de esos botones (spec §3): así no se desalinean.
