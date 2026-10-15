@@ -1446,4 +1446,94 @@ class ReaderViewModelTest {
         settings.markTipSeen(TipId.CHAPTER_EDGE)
         assertFalse(vm.wantsChapterEdge())
     }
+
+    // ---------- Ola final de arreglos (3c-3) ----------
+
+    // m1: un consejo que sigue pendiente no se vuelve a decir cada vez que se cierra una hoja (spec §4).
+    @Test fun `un consejo se anuncia una sola vez aunque vuelva tras una hoja`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+        assertTrue(vm.shouldAnnounceTip(TipId.TAP))
+        vm.onTipAnnounced(TipId.TAP)
+        vm.setTipBlocked(true); runCurrent()
+        vm.setTipBlocked(false); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value) // vuelve el mismo…
+        assertFalse(vm.shouldAnnounceTip(TipId.TAP)) // …pero callado
+        assertTrue(vm.shouldAnnounceTip(TipId.HIDE_AND_MODES)) // otro consejo sí se dice
+    }
+
+    // m3: "Volver a ver los consejos" a mitad de sesión empieza por el principio (y se vuelven a decir).
+    @Test fun `volver a ver los consejos en el Lector empieza otra vez por tocar`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        vm.setTipOnScreen(true)
+        vm.onTipAnnounced(TipId.TAP)
+        vm.onTap("c1.xhtml", listOf(p(0, "Hello world.")))
+        advanceUntilIdle()
+        assertEquals(TipId.HIDE_AND_MODES, vm.tip.value)
+        vm.onChapterEnd(); runCurrent()
+        settings.resetTips(); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+        assertTrue(vm.shouldAnnounceTip(TipId.TAP))
+        assertTrue(vm.wantsChapterEdge()) // el final del capítulo se vuelve a medir
+    }
+
+    // m2: en un libro en español, tocar con "Este libro se traduce…" arriba y ocultar la tarjeta no deja después
+    // "Toca otra vez para ocultarla" sobre una tarjeta que ya no está.
+    @Test fun `tocar y ocultar con la direccion arriba no deja ocultar y modos`() = runTest(dispatcher) {
+        val vm = viewModel(languages = listOf("es"))
+        vm.onResourceShown("c1.xhtml"); advanceUntilIdle()
+        assertEquals(TipId.DIRECTION, vm.tip.value)
+        vm.setTipOnScreen(true)
+        vm.onTap("c1.xhtml", listOf(p(0, "Hola mundo.")))
+        advanceUntilIdle()
+        assertEquals(TipId.DIRECTION, vm.tip.value)
+        vm.onTap("c1.xhtml", listOf(p(0, "Hola mundo."))) // ocultar
+        runCurrent()
+        vm.dismissTip(); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+    }
+
+    // m2: si la tarjeta sigue abierta, "Toca otra vez para ocultarla" sí vale.
+    @Test fun `tocar con la direccion arriba y dejar la tarjeta trae ocultar y modos`() = runTest(dispatcher) {
+        val vm = viewModel(languages = listOf("es"))
+        vm.onResourceShown("c1.xhtml"); advanceUntilIdle()
+        vm.setTipOnScreen(true)
+        vm.onTap("c1.xhtml", listOf(p(0, "Hola mundo.")))
+        advanceUntilIdle()
+        vm.dismissTip(); runCurrent()
+        assertEquals(TipId.HIDE_AND_MODES, vm.tip.value)
+    }
+
+    // m2: cambiar la dirección cierra las tarjetas: ya no hay ninguna que ocultar.
+    @Test fun `cambiar la direccion cierra las tarjetas y no deja ocultar y modos`() = runTest(dispatcher) {
+        prefs.values["tips_seen"] = "tap,direction" // la dirección nueva es español → inglés: su consejo, ya visto
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        vm.onTap("c1.xhtml", listOf(p(0, "Hello world.")))
+        advanceUntilIdle()
+        assertEquals(TipId.HIDE_AND_MODES, vm.tip.value)
+        vm.setDirection(esEn); runCurrent()
+        assertNull(vm.tip.value)
+    }
+
+    // m6 (spec §8): salir del Lector sin cerrar el consejo no lo marca visto.
+    @Test fun `salir sin cerrar el consejo no lo marca`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onResourceShown("c1.xhtml"); runCurrent()
+        assertEquals(TipId.TAP, vm.tip.value)
+        vm.setTipOnScreen(true)
+        val store = ViewModelStore()
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = vm as T
+        }
+        ViewModelProvider(store, factory)[ReaderViewModel::class.java]
+        vm.flush()
+        store.clear()
+        advanceUntilIdle()
+        assertTrue(settings.seenTipsFlow.value.isEmpty())
+        assertEquals(null, prefs.values["tips_seen"])
+    }
 }

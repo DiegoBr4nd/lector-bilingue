@@ -154,6 +154,11 @@ class AppSettings(private val prefs: SharedPreferences) {
     /** Los consejos ya vistos (3c-3). Vacío hasta que [seenTipsLoaded] sea true. */
     val seenTipsFlow: StateFlow<Set<TipId>> = tipsState.asStateFlow()
 
+    private val tipsResetCount = MutableStateFlow(0)
+
+    /** Cuántas veces se tocó "Volver a ver los consejos" (el Lector abierto debajo vuelve a empezar al cambiar). */
+    val tipsResets: StateFlow<Int> = tipsResetCount.asStateFlow()
+
     /** true cuando [seenTipsFlow] ya tiene lo guardado: antes, ningún consejo se muestra (no parpadean). */
     val seenTipsLoaded: StateFlow<Boolean> = tipsLoaded.asStateFlow()
 
@@ -182,6 +187,7 @@ class AppSettings(private val prefs: SharedPreferences) {
             prefs.edit { remove(KEY_TIPS) }
             tipsState.value = emptySet()
             tipsLoaded.value = true
+            tipsResetCount.value++
         }
     }
 

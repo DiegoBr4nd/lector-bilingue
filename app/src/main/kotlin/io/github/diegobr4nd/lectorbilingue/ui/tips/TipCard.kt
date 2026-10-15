@@ -30,14 +30,28 @@ import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.TipId
+import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
+import io.github.diegobr4nd.lectorbilingue.ui.reader.directionDescription
+import io.github.diegobr4nd.lectorbilingue.ui.reader.directionLabel
+import io.github.diegobr4nd.lectorbilingue.ui.reader.languageName
 
 /**
  * Consejo del Lector (spec 3c-3 §4): bombilla + texto entero + "Entendido" (≥ 48 dp). Colores de la app (no de la
- * página), así se lee igual en los 4 temas. TalkBack: el texto es una región viva (se dice una vez al aparecer); el
- * botón va aparte. Con letra ≥ 150 % el botón baja debajo del texto. Sin estado: se previsualiza sola.
+ * página), así se lee igual en los 4 temas. Con letra ≥ 150 % el botón baja debajo del texto. Sin estado: se
+ * previsualiza sola.
+ *
+ * TalkBack oye [spoken] (por defecto, [text]): nombra los botones como TalkBack los dice ("Ajustes de lectura", no
+ * "Aa"). Con [announce] el texto es una región viva y se dice al aparecer; sin él, la tarjeta sale callada (un
+ * consejo que vuelve tras cerrar una hoja ya se dijo). "Entendido" va aparte.
  */
 @Composable
-fun TipCard(text: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun TipCard(
+    text: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    spoken: String = text,
+    announce: Boolean = true,
+) {
     val colors = MaterialTheme.colorScheme
     val largeText = LocalDensity.current.fontScale >= LargeTipFontScale
     Surface(
@@ -50,8 +64,8 @@ fun TipCard(text: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) 
         val message = @Composable { m: Modifier ->
             Row(
                 m.clearAndSetSemantics {
-                    contentDescription = text
-                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = spoken
+                    if (announce) liveRegion = LiveRegionMode.Polite
                 },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.m),
@@ -85,11 +99,26 @@ fun TipCard(text: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) 
 /** Desde esta escala de letra el botón de la tarjeta baja debajo del texto. */
 private const val LargeTipFontScale = 1.5f
 
-/** El texto de cada consejo. [directionLabel] es la etiqueta del botón de dirección ("ES → EN"); [targetLanguageName], "inglés". */
+/** Lo que se ve en la tarjeta ([shown]) y lo que dice TalkBack ([spoken]). */
+data class TipText(val shown: String, val spoken: String = shown)
+
+/**
+ * El texto de cada consejo. Los nombres de botones salen de los mismos strings que esos botones: a la vista, su
+ * etiqueta ("ES → EN", "Aa"); para TalkBack, la descripción con que TalkBack los dice (I1 de la revisión final).
+ */
 @Composable
-fun tipText(tip: TipId, directionLabel: String, targetLanguageName: String): String = when (tip) {
-    TipId.DIRECTION -> stringResource(R.string.tip_direction, targetLanguageName, directionLabel)
-    TipId.TAP -> stringResource(R.string.tip_tap)
-    TipId.HIDE_AND_MODES -> stringResource(R.string.tip_hide_modes)
-    TipId.CHAPTER_EDGE -> stringResource(R.string.tip_chapter_edge, stringResource(R.string.reader_toc))
+fun tipText(tip: TipId, direction: LanguagePair): TipText = when (tip) {
+    TipId.DIRECTION -> {
+        val target = languageName(direction.target)
+        TipText(
+            shown = stringResource(R.string.tip_direction, target, directionLabel(direction)),
+            spoken = stringResource(R.string.tip_direction_spoken, target, directionDescription(direction)),
+        )
+    }
+    TipId.TAP -> TipText(stringResource(R.string.tip_tap))
+    TipId.HIDE_AND_MODES -> TipText(
+        shown = stringResource(R.string.tip_hide_modes, stringResource(R.string.reading_aa)),
+        spoken = stringResource(R.string.tip_hide_modes_spoken, stringResource(R.string.reading_title)),
+    )
+    TipId.CHAPTER_EDGE -> TipText(stringResource(R.string.tip_chapter_edge, stringResource(R.string.reader_toc)))
 }

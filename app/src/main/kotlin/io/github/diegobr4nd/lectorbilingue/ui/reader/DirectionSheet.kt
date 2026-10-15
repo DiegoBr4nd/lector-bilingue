@@ -47,7 +47,7 @@ val ReaderDirections = listOf(LanguagePair("en", "es"), LanguagePair("es", "en")
 /** "EN → ES": abre la hoja "Traducir de". TalkBack dice "Idioma de traducción: inglés a español" y "cambiar el idioma". */
 @Composable
 internal fun DirectionButton(direction: LanguagePair, onClick: () -> Unit) {
-    val description = stringResource(R.string.reader_direction_desc, languageName(direction.source), languageName(direction.target))
+    val description = directionDescription(direction)
     val action = stringResource(R.string.reader_direction_action)
     TextButton(
         onClick = onClick,
@@ -69,6 +69,11 @@ internal fun DirectionButton(direction: LanguagePair, onClick: () -> Unit) {
 @Composable
 internal fun directionLabel(direction: LanguagePair): String =
     stringResource(R.string.reader_direction, direction.source.uppercase(), direction.target.uppercase())
+
+/** Lo que TalkBack dice del botón de dirección ("Idioma de traducción: español a inglés"); el consejo lo nombra igual. */
+@Composable
+internal fun directionDescription(direction: LanguagePair): String =
+    stringResource(R.string.reader_direction_desc, languageName(direction.source), languageName(direction.target))
 
 /** "Traducir de" en una hoja inferior. Elegir una dirección la guarda para el libro y cierra la hoja. */
 @OptIn(ExperimentalMaterial3Api::class)

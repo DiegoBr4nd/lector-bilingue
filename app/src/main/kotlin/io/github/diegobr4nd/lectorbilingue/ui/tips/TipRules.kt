@@ -57,3 +57,29 @@ object TipRules {
         TipId.CHAPTER_EDGE -> s.reachedChapterEnd
     }
 }
+
+/**
+ * Cuándo el final de un capítulo cuenta para "Sigue deslizando…" (m5). Solo si se llegó leyendo: en este capítulo hubo
+ * antes una posición medida lejos del final. Así no cuenta caer en el final del capítulo anterior con un paso hacia
+ * atrás (Readium puede dar varias posiciones ya en el final), ni abrir el libro ya en el final. La primera posición de
+ * cada capítulo ni se mide (ahorra un script).
+ */
+class ChapterEdgeWatch {
+    private var href: String? = null
+    private var awayFromEnd = false
+
+    /** Nueva posición en [href]: ¿hay que medir los bordes? */
+    fun onPosition(href: String): Boolean {
+        if (href == this.href) return true
+        this.href = href
+        awayFromEnd = false
+        return false
+    }
+
+    /** Lo medido en [href] con la página quieta: true → se llegó al final leyendo. */
+    fun onMeasured(href: String, atBottom: Boolean): Boolean {
+        if (href != this.href) return false
+        if (!atBottom) awayFromEnd = true
+        return atBottom && awayFromEnd
+    }
+}

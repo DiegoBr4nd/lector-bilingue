@@ -218,9 +218,13 @@
     <!-- 3c-3 guía de uso: consejos -->
     <string name="tip_got_it">Entendido</string>
     <string name="tip_tap">Toca un párrafo para ver su traducción.</string>
-    <string name="tip_hide_modes">Toca otra vez para ocultarla. En Aa puedes leer todo traducido o intercalado.</string>
+    <string name="tip_hide_modes">Toca otra vez para ocultarla. En %1$s puedes leer todo traducido o intercalado.</string>
+    <!-- Lo que dice TalkBack: el botón Aa se llama "Ajustes de lectura" para TalkBack. -->
+    <string name="tip_hide_modes_spoken">Toca otra vez para ocultarla. En el botón %1$s, arriba, puedes leer todo traducido o intercalado.</string>
     <string name="tip_chapter_edge">Sigue deslizando para pasar al capítulo siguiente. También puedes usar el %1$s o los botones de abajo.</string>
     <string name="tip_direction">Este libro se traduce al %1$s. Puedes cambiarlo en %2$s, arriba.</string>
+    <!-- Lo que dice TalkBack: el botón de dirección se llama "Idioma de traducción: español a inglés" (sin flecha). -->
+    <string name="tip_direction_spoken">Este libro se traduce al %1$s. Puedes cambiarlo en el botón %2$s, arriba.</string>
     <!-- 3c-3: Biblioteca vacía y libros gratis -->
     <string name="library_empty_how">Toca «Añadir libro» para elegir un archivo EPUB del teléfono.</string>
     <string name="free_books_intro">¿No tienes libros? Hay EPUB gratis y legales en:</string>

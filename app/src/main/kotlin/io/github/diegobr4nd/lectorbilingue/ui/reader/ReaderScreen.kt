@@ -96,6 +96,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.pairDirection
 import io.github.diegobr4nd.lectorbilingue.ui.withNoBreakArrow
 import io.github.diegobr4nd.lectorbilingue.ui.library.LibraryRules
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
+import io.github.diegobr4nd.lectorbilingue.ui.tips.ChapterEdgeWatch
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipEvent
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipRules
@@ -338,18 +339,17 @@ fun ReaderScreen(
     val readingOrder = remember(publication) { publication.readingOrder.map { it.url().toString() } }
     // Consejo del borde (3c-3): con la página quieta, ¿se llegó al final de un capítulo que no es el último? Solo
     // mientras ese consejo no se haya visto (cada vuelta lee los bordes con un script).
-    // La primera posición de cada capítulo no cuenta: al volver al final del anterior (gesto hacia atrás) o al abrir
-    // el libro ya en el final, "Sigue deslizando…" no tiene sentido.
+    // Solo cuenta llegar al final leyendo (ChapterEdgeWatch): al caer en el final del anterior con un paso hacia atrás
+    // o al abrir el libro ya en el final, "Sigue deslizando…" no tiene sentido.
     LaunchedEffect(navigator) {
-        var lastHref: String? = null
+        val edgeWatch = ChapterEdgeWatch()
         navigator?.currentLocator?.collectLatest { locator ->
             val href = locator.href.toString()
-            val firstInChapter = href != lastHref
-            lastHref = href
-            if (firstInChapter || !vm.wantsChapterEdge()) return@collectLatest
+            if (!edgeWatch.onPosition(href) || !vm.wantsChapterEdge()) return@collectLatest
             delay(VisibleSettleMs)
             if (href != currentHref || !ReaderRules.chapterButtons(readingOrder, href).second) return@collectLatest
-            if (bridge.edges()?.atBottom == true) vm.onChapterEnd()
+            val edges = bridge.edges() ?: return@collectLatest
+            if (edgeWatch.onMeasured(href, edges.atBottom)) vm.onChapterEnd()
         }
     }
     val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
@@ -540,8 +540,15 @@ fun ReaderScreen(
                 val barPresent = bottomBar.currentState || bottomBar.targetState
                 val bottomInset = if (barPresent) Modifier else Modifier.windowInsetsPadding(WindowInsets.navigationBars)
                 cardTip?.let { t ->
+                    // Se dice solo la primera vez que sale en esta sesión (spec §4): al volver tras una hoja, callada. Se
+                    // decide al entrar la tarjeta y no cambia mientras está (si no, el VM la apagaría al anunciarla).
+                    val announce = remember(t) { vm.shouldAnnounceTip(t) }
+                    LaunchedEffect(t) { vm.onTipAnnounced(t) }
+                    val texts = tipText(t, direction)
                     TipCard(
-                        text = tipText(t, directionLabel(direction), languageName(direction.target)),
+                        text = texts.shown,
+                        spoken = texts.spoken,
+                        announce = announce,
                         onDismiss = vm::dismissTip,
                         modifier = bottomInset.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                     )

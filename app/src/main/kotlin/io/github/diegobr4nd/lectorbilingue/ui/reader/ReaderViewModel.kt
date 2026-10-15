@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.filterNotNull
@@ -156,6 +157,7 @@ class ReaderViewModel(
     private val tipInputs = MutableStateFlow(TipInputs())
     private var shownTip: TipId? = null // el que está en pantalla: se queda hasta cerrarse (TipRules.next)
     private var tipOnScreen = false // la pantalla de verdad dibuja la tarjeta (setTipOnScreen)
+    private val announcedTips = mutableSetOf<TipId>() // los que TalkBack ya dijo en esta sesión
 
     /** El consejo que la pantalla muestra ahora, o null (spec 3c-3 §3). */
     val tip: StateFlow<TipId?> = combine(
@@ -203,6 +205,17 @@ class ReaderViewModel(
         if (current != null && tipOnScreen && TipRules.dismissedBy(current, event)) settings.markTipSeen(current)
     }
 
+    /**
+     * ¿TalkBack debe decir [tip] al aparecer su tarjeta? Solo la primera vez en esta sesión: un consejo que vuelve tras
+     * cerrarse una hoja (o con las barras) sale callado (spec §4: "Nada se anuncia dos veces").
+     */
+    fun shouldAnnounceTip(tip: TipId): Boolean = tip !in announcedTips
+
+    /** La pantalla ya dejó que TalkBack dijera [tip]. */
+    fun onTipAnnounced(tip: TipId) {
+        announcedTips += tip
+    }
+
     /** La pantalla dice si la tarjeta del consejo está de verdad a la vista (ver [TipRules.cardVisible]). */
     fun setTipOnScreen(onScreen: Boolean) {
         tipOnScreen = onScreen
@@ -224,6 +237,14 @@ class ReaderViewModel(
     init {
         // Los vistos se leen fuera del hilo principal antes de que nada los marque (así marcar no lee el disco aquí).
         viewModelScope.launch { settings.loadSeenTips(tipsIo) }
+        // "Volver a ver los consejos" con el libro abierto: lo de esta sesión también se olvida y se empieza por el
+        // principio (si no, tras haber traducido saldría "Toca otra vez…" antes que "Toca un párrafo…").
+        viewModelScope.launch {
+            settings.tipsResets.drop(1).collect {
+                announcedTips.clear()
+                tipInputs.update { it.copy(tapTranslated = false, chapterEnd = false) }
+            }
+        }
         viewModelScope.launch {
             position.filterNotNull().debounce(1_000).collect { save(it) }
         }
@@ -260,6 +281,9 @@ class ReaderViewModel(
                 open.remove(tapped.index)
                 _cardOps.trySend(CardOp.Hide(resource, tapped.index, anchor))
                 onTipEvent(TipEvent.CARD_HIDDEN)
+                // "Toca otra vez para ocultarla" habla de una tarjeta abierta: ocultada, ya no toca (vuelve con la
+                // próxima traducción por toque). Así no sale si se tradujo con otro consejo arriba y ya se ocultó.
+                tipInputs.update { it.copy(tapTranslated = false) }
                 return
             }
             TapAction.TOGGLE -> {
@@ -401,6 +425,7 @@ class ReaderViewModel(
             for (index in open.keys) _cardOps.trySend(CardOp.Hide(resource, index, anchor))
         }
         cards.clear()
+        tipInputs.update { it.copy(tapTranslated = false) } // sin tarjetas, nada que ocultar
         modeQueue.clear()
         guideRound++
         _chapterNotice.value = null // el aviso era de la otra dirección

@@ -79,4 +79,44 @@ class TipRulesTest {
         }
         assertFalse(TipRules.cardVisible(null, barsVisible = true))
     }
+
+    // ---------- Borde del capítulo (m5) ----------
+
+    @Test fun `leer hasta el final del capitulo cuenta`() {
+        val w = ChapterEdgeWatch()
+        assertFalse(w.onPosition("c1")) // la primera posición del capítulo no se mide
+        assertTrue(w.onPosition("c1"))
+        assertFalse(w.onMeasured("c1", atBottom = false))
+        assertTrue(w.onPosition("c1"))
+        assertTrue(w.onMeasured("c1", atBottom = true))
+    }
+
+    @Test fun `volver hacia atras al final del capitulo anterior no cuenta`() {
+        val w = ChapterEdgeWatch()
+        w.onPosition("c2"); w.onPosition("c2"); w.onMeasured("c2", atBottom = false)
+        // Paso atrás: Readium puede dar varias posiciones, todas ya en el final de c1.
+        assertFalse(w.onPosition("c1"))
+        assertTrue(w.onPosition("c1"))
+        assertFalse(w.onMeasured("c1", atBottom = true))
+        w.onPosition("c1")
+        assertFalse(w.onMeasured("c1", atBottom = true))
+        // Si después sube y vuelve a bajar leyendo, sí cuenta.
+        w.onPosition("c1"); w.onMeasured("c1", atBottom = false)
+        w.onPosition("c1")
+        assertTrue(w.onMeasured("c1", atBottom = true))
+    }
+
+    @Test fun `abrir el libro ya en el final no cuenta`() {
+        val w = ChapterEdgeWatch()
+        w.onPosition("c1")
+        w.onPosition("c1")
+        assertFalse(w.onMeasured("c1", atBottom = true))
+    }
+
+    @Test fun `lo medido de otro capitulo no cuenta`() {
+        val w = ChapterEdgeWatch()
+        w.onPosition("c1"); w.onPosition("c1"); w.onMeasured("c1", atBottom = false)
+        w.onPosition("c2")
+        assertFalse(w.onMeasured("c1", atBottom = true))
+    }
 }
