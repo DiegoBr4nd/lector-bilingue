@@ -307,6 +307,43 @@ class HtmlSanitizerTest {
         }
     }
 
+    // Seguridad 3c-2 (m5 en el Pixel): con modo y tema en <html>, ningún ATRIBUTO data-lector- queda. Un selector CSS
+    // del libro que nombra el atributo (texto de su <style>) sí se queda: es solo texto y no pone la marca.
+    @Test fun `m5 sin atributos data-lector en ningun elemento y el CSS del libro queda como texto`() {
+        val markup = """<?xml version="1.0" encoding="UTF-8"?><html data-lector-modo="solo" data-lector-tema="negro" xmlns="http://www.w3.org/1999/xhtml">""" +
+            """<head><title>C1</title><style>aside{display:none} html[data-lector-modo="solo"] #b{color:red}</style></head><body>""" +
+            """<p id="a">Real</p><aside class="lector-tarjeta" data-lector-i="0" data-lector-estado="solo" data-lector-original="">FALSA</aside>""" +
+            """<p id="b" class="lector-oculto LECTOR-OCULTO x">B</p></body></html>"""
+        val out = HtmlSanitizer.sanitize(markup.toByteArray(), HtmlSanitizer.Kind.XHTML).toString(Charsets.UTF_8)
+        val doc = Jsoup.parse(out, "", Parser.xmlParser())
+        assertTrue(doc.allElements.none { e -> e.attributes().any { it.key.lowercase().startsWith("data-lector-") } }, out)
+        assertEquals("x", doc.select("#b").attr("class"))
+        // Lo único que aún nombra data-lector- es el texto del <style> del libro.
+        val withoutStyles = doc.clone().apply { select("style").remove() }.outerHtml()
+        assertFalse(withoutStyles.contains("data-lector-", ignoreCase = true), withoutStyles)
+        assertTrue(doc.select("style").text().contains("data-lector-modo"))
+    }
+
+    // Review Focus 5 (3c-2): un libro hostil no puede imitar las marcas de los modos para esconder texto en Solo
+    // traducción (clase lector-oculto) ni fingir el modo (data-lector-modo en <html>) o el original mostrado.
+    @Test fun `quita del libro la clase lector-oculto y los atributos de los modos`() {
+        for (kind in listOf(HtmlSanitizer.Kind.XHTML, HtmlSanitizer.Kind.HTML)) {
+            val markup = """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" data-lector-modo="solo">""" +
+                """<head><title>t</title></head><body data-lector-modo="solo">""" +
+                """<p class="lector-oculto">a</p><li class="x LECTOR-OCULTO y">b</li><h2 class=" lector-oculto ">c</h2>""" +
+                """<blockquote class="lector-ocultos">d</blockquote><dd data-lector-original="">e</dd>""" +
+                """<aside data-lector-original="" data-lector-estado="solo">f</aside></body></html>"""
+            val doc = Jsoup.parse(HtmlSanitizer.sanitize(markup.toByteArray(), kind).toString(Charsets.UTF_8), "", if (kind == HtmlSanitizer.Kind.HTML) Parser.htmlParser() else Parser.xmlParser())
+            assertFalse(doc.select("p").single().hasAttr("class"), kind.name)
+            assertEquals("x y", doc.select("li").single().attr("class"), kind.name)
+            assertFalse(doc.select("h2").single().hasAttr("class"), kind.name)
+            assertEquals("lector-ocultos", doc.select("blockquote").single().attr("class"), kind.name) // otra clase
+            assertTrue(doc.select(".lector-oculto, [data-lector-modo], [data-lector-original]").isEmpty(), kind.name)
+            assertFalse(doc.select("html").single().hasAttr("data-lector-modo"), kind.name)
+            assertTrue(doc.select("p, li, h2, blockquote, dd, aside").all { it.hasText() }, kind.name) // el texto se queda
+        }
+    }
+
     @Test fun `con prefijo o dos pasadas tampoco quedan marcas de tarjeta`() {
         val out = HtmlSanitizer.sanitize(
             """<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>t</h:title></h:head><h:body>""" +

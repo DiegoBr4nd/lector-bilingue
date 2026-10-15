@@ -65,6 +65,7 @@ import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
 import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TextAlignChoice
 
@@ -163,6 +164,23 @@ fun ReadingSettingsContent(
                 style = MaterialTheme.typography.titleLarge.copy(fontFamily = ReadingFontFamily),
                 modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.s).semantics { heading() },
             )
+
+            // ----- Modo de lectura (3c-2): arriba de todo, cambia al instante sin recargar ni mover la lectura -----
+            val modeHeading = stringResource(R.string.reading_mode)
+            SectionHeading(modeHeading)
+            val modeHelp = modeHelp(settings.mode)
+            SingleChoice(
+                heading = modeHeading,
+                options = ReadingMode.entries.map { it to modeName(it) },
+                selected = settings.mode,
+                chosen = chosenM to notChosenM,
+                stacked = perFont < ModeSegmentedMin,
+                onSelect = { v -> onChange { it.copy(mode = v) } },
+                labelLines = 2, // "Solo traducción" puede partirse en dos líneas; nunca se corta con "…"
+            )
+            // La ayuda va por un solo canal, esta región viva (en la descripción de la opción TalkBack la oía dos veces):
+            // al cambiar de modo se oye "Modo de lectura Solo traducción, elegido" y luego la ayuda; no al abrir la hoja.
+            HelpText(modeHelp, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
 
             // ----- Tema -----
             SectionHeading(stringResource(R.string.reading_theme))
@@ -295,6 +313,12 @@ private val SwatchRowMin = 260.dp
 /** Debajo de esto los segmentos ("Estrechos", "Justificado") se cortarían: pasan a lista. */
 private val SegmentedRowMin = 300.dp
 
+/**
+ * Lo mismo para "Modo de lectura": con el ✓ del elegido, "traducción" necesita unos 85 dp dentro de un tercio de la
+ * fila. Por debajo (los teléfonos, incluso a letra normal) va en lista: el nombre nunca se parte ni se corta con "…".
+ */
+private val ModeSegmentedMin = 420.dp
+
 @Composable
 private fun SectionHeading(text: String) = Text(
     text,
@@ -306,11 +330,11 @@ private fun SectionHeading(text: String) = Text(
 )
 
 @Composable
-private fun HelpText(text: String) = Text(
+private fun HelpText(text: String, modifier: Modifier = Modifier) = Text(
     text,
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(horizontal = Spacing.l, vertical = Spacing.xs),
+    modifier = modifier.padding(horizontal = Spacing.l, vertical = Spacing.xs),
 )
 
 /** El ✓ delante de lo elegido; sin elegir queda el hueco para alinear. */
@@ -469,7 +493,8 @@ private fun SizeRow(scale: Double, onStepScale: (up: Boolean) -> Unit) {
 
 /**
  * Una elección entre pocas opciones: botones segmentados de M3, o filas con ✓ si no caben ([stacked]).
- * [chosen]: "Elegido"/"No elegido" (o en femenino) para TalkBack.
+ * [chosen]: "Elegido"/"No elegido" (o en femenino) para TalkBack. [labelLines]: líneas del nombre en el segmento
+ * (con 1, lo que no cabe se corta con "…").
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -480,6 +505,7 @@ private fun <T> SingleChoice(
     chosen: Pair<String, String>,
     stacked: Boolean,
     onSelect: (T) -> Unit,
+    labelLines: Int = 1,
 ) {
     if (stacked) {
         Column(Modifier.selectableGroup()) {
@@ -514,7 +540,8 @@ private fun <T> SingleChoice(
                         label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else null,
-                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        maxLines = labelLines,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
@@ -522,6 +549,25 @@ private fun <T> SingleChoice(
         }
     }
 }
+
+@Composable
+private fun modeName(mode: ReadingMode): String = stringResource(
+    when (mode) {
+        ReadingMode.TAP -> R.string.reading_mode_tap
+        ReadingMode.INTERLEAVED -> R.string.reading_mode_interleaved
+        ReadingMode.TRANSLATION_ONLY -> R.string.reading_mode_translation_only
+    },
+)
+
+/** La línea de ayuda bajo "Modo de lectura": qué pasa en el modo elegido. */
+@Composable
+private fun modeHelp(mode: ReadingMode): String = stringResource(
+    when (mode) {
+        ReadingMode.TAP -> R.string.reading_mode_tap_help
+        ReadingMode.INTERLEAVED -> R.string.reading_mode_interleaved_help
+        ReadingMode.TRANSLATION_ONLY -> R.string.reading_mode_translation_only_help
+    },
+)
 
 @Composable
 private fun themeName(theme: PageTheme): String = stringResource(

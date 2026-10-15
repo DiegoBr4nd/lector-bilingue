@@ -3,6 +3,7 @@ package io.github.diegobr4nd.lectorbilingue.ui.reader
 import io.github.diegobr4nd.lectorbilingue.data.LineHeightLevel
 import io.github.diegobr4nd.lectorbilingue.data.MarginLevel
 import io.github.diegobr4nd.lectorbilingue.data.PageTheme
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingFont
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TextAlignChoice
@@ -149,5 +150,14 @@ class ReadingRulesTest {
         assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c3.xhtml#p4", turningTo = "OEBPS/c3.xhtml", msSinceTurn = 100))
         // El paso nunca llegó y pasó el tope: ya no cuenta como en curso.
         assertTrue(ReadingRules.restoreAfterSubmit("OEBPS/c2.xhtml", turningTo = "OEBPS/c3.xhtml", msSinceTurn = 5_000))
+    }
+
+    @Test fun `cambiar solo el modo no cambia las preferencias del lector`() {
+        for (dark in listOf(false, true)) {
+            val base = ReadingRules.preferences(ReadingSettings(), dark)
+            for (m in ReadingMode.entries) {
+                assertEquals(base, ReadingRules.preferences(ReadingSettings(mode = m), dark))
+            }
+        }
     }
 }

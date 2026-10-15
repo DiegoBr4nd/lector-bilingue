@@ -24,12 +24,17 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
         return ParagraphScripts.parseIndex(run(ParagraphScripts.indexAt(x, y)))
     }
 
-    suspend fun show(index: Int, card: Card, labels: CardLabels) {
-        run(ParagraphScripts.insert(index, card, labels))
+    /**
+     * Pone (o cambia) la tarjeta del párrafo [index]. [anchor]: qué queda quieto en pantalla ([CardAnchor.SELF] en TAP,
+     * [CardAnchor.SCREEN] en Intercalado y Solo traducción).
+     */
+    suspend fun show(index: Int, card: Card, labels: CardLabels, anchor: CardAnchor) {
+        run(ParagraphScripts.insert(index, card, labels, anchor))
     }
 
-    suspend fun hide(index: Int) {
-        run(ParagraphScripts.remove(index))
+    /** Quita la tarjeta del párrafo [index] (y muestra el original si estaba oculto), con la política [anchor]. */
+    suspend fun hide(index: Int, anchor: CardAnchor) {
+        run(ParagraphScripts.remove(index, anchor))
     }
 
     /**
@@ -38,9 +43,41 @@ class ParagraphBridge(private val navigator: () -> EpubNavigatorFragment?) {
      */
     suspend fun hideAll(resource: String): Boolean = ParagraphScripts.parseReady(run(ParagraphScripts.removeAll(resource)))
 
+    /**
+     * Como [hideAll], y con [keepIfSame] (vuelta al frente) no toca la página si es la misma que se dejó (no se
+     * recargó): responde [PageReady.SAME] y sus tarjetas siguen ahí.
+     */
+    suspend fun prepare(resource: String, keepIfSame: Boolean): PageReady =
+        ParagraphScripts.parsePageReady(run(ParagraphScripts.removeAll(resource, keepIfSame)))
+
+    /** Quita de la página visible todas las tarjetas en espera y devuelve sus originales (aviso del capítulo). */
+    suspend fun hideWaiting() {
+        run(ParagraphScripts.removeWaiting())
+    }
+
     /** Pone el tema de la tarjeta ("claro", "sepia", "oscuro" o "negro") en la página visible. */
     suspend fun setTheme(theme: String) {
         run(ParagraphScripts.setTheme(theme))
+    }
+
+    /**
+     * Párrafos que se ven en la página y los [following] siguientes, de arriba abajo (modos Intercalado y Solo
+     * traducción). Vacío si aún no hay página o la respuesta no cuadra.
+     */
+    suspend fun visible(following: Int = 10): List<PageParagraph> =
+        ParagraphScripts.parseVisible(run(ParagraphScripts.visible(following)))
+
+    /** Pone el modo de la página ("tocar", "intercalado" o "solo"; ver [ParagraphScripts.MODES]). */
+    suspend fun setMode(mode: String) {
+        run(ParagraphScripts.setMode(mode))
+    }
+
+    /**
+     * Solo traducción: muestra ([on]) u oculta el original del párrafo [index] en lugar de su traducción. No hace nada
+     * fuera del modo "solo".
+     */
+    suspend fun showOriginal(index: Int, on: Boolean, anchor: CardAnchor) {
+        run(ParagraphScripts.showOriginal(index, on, anchor))
     }
 
     /** Bordes de la página visible (arriba / abajo del todo), o null si aún no hay página o no respondió. */

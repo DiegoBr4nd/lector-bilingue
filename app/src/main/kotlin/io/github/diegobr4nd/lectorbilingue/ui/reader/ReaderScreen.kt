@@ -14,23 +14,32 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -52,7 +61,11 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +84,7 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.ConfirmDialog
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
+import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.TranslationRules
 import io.github.diegobr4nd.lectorbilingue.engine.api.LanguagePair
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
@@ -83,7 +97,10 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.input.DragEvent
@@ -125,6 +142,9 @@ fun ReaderScreen(
     val direction by vm.direction.collectAsStateWithLifecycle()
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var currentHref by remember { mutableStateOf<String?>(null) }
+    // El recurso cuya página ya recibió el modo y su reposición (efecto de "página lista"). Hasta entonces la posición
+    // no pide lo visible: así ninguna tarjeta de la guía llega a la página antes que setMode.
+    var readyHref by remember { mutableStateOf<String?>(null) }
     var tocOpen by rememberSaveable { mutableStateOf(false) }
     var directionOpen by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -147,6 +167,7 @@ fun ReaderScreen(
         stringResource(R.string.reader_card_translation),
         stringResource(R.string.reader_card_skeleton),
         stringResource(R.string.reader_card_preparing),
+        stringResource(R.string.reader_card_original),
     )
     val currentLabels by rememberUpdatedState(labels)
     val announceTranslating by rememberUpdatedState(stringResource(R.string.reader_card_skeleton))
@@ -156,8 +177,35 @@ fun ReaderScreen(
     val readingSettings by vm.readingSettings.collectAsStateWithLifecycle()
     val systemDark = isSystemInDarkTheme()
     val cardTheme by rememberUpdatedState(ReadingRules.cardTheme(readingSettings, systemDark))
+    val currentSystemDark by rememberUpdatedState(systemDark)
+    val notice by vm.chapterNotice.collectAsStateWithLifecycle()
     // Las últimas preferencias mandadas a Readium: si no cambian, no se vuelven a mandar (ni se mueve la página).
     var appliedPreferences by remember { mutableStateOf(startPreferences) }
+    // Un envío de preferencias a la vez: quien llega segundo espera a que Readium aplique el primero.
+    val preferencesLock = remember { Mutex() }
+
+    /**
+     * Manda a Readium los ajustes de lectura de ahora si cambiaron, y espera a que la página los aplique. Lo llaman el
+     * efecto de los ajustes y, ANTES de cada tarjeta, la fila de tarjetas: en Solo traducción la tarjeta copia el
+     * estilo del original en px y el ViewModel la repone apenas cambia un ajuste (revisión de la Tarea 3); puesta
+     * antes de que Readium cambie la letra, copiaría el estilo viejo.
+     */
+    suspend fun syncPreferences() = preferencesLock.withLock {
+        val nav = navigator ?: return@withLock
+        val preferences = ReadingRules.preferences(vm.readingSettings.value, currentSystemDark)
+        if (preferences == appliedPreferences) return@withLock
+        appliedPreferences = preferences
+        val saved = nav.currentLocator.value
+        nav.submitPreferences(preferences)
+        // Si un paso de capítulo nuestro aún no llegó (la posición guardada es del de antes), no se vuelve atrás.
+        val sinceTurn = SystemClock.uptimeMillis() - chapterTurn.turnedAt
+        if (ReadingRules.restoreAfterSubmit(saved.href.toString(), chapterTurn.turningTo, sinceTurn)) {
+            nav.go(saved, animated = false)
+        }
+        // Readium pasa las preferencias a la página por sus propios flujos (en el hilo principal): se les da tiempo
+        // para que su script llegue al WebView antes que los nuestros.
+        delay(PreferencesApplyMs)
+    }
 
     LaunchedEffect(touchExploration) { vm.setTouchExploration(touchExploration) }
     // Por si se abrió el Lector antes de que la Biblioteca leyera los ajustes (fuera del hilo principal).
@@ -166,18 +214,8 @@ fun ReaderScreen(
     // texto se corre), así que se guarda la posición antes y se vuelve a ella enseguida (spec §11, C3). La tarjeta
     // cambia de paleta con el atributo del tema (también lo pone la página al quedar lista, más abajo).
     LaunchedEffect(readingSettings, systemDark, navigator) {
-        val nav = navigator ?: return@LaunchedEffect
-        val preferences = ReadingRules.preferences(readingSettings, systemDark)
-        if (preferences != appliedPreferences) {
-            val saved = nav.currentLocator.value
-            nav.submitPreferences(preferences)
-            // Si un paso de capítulo nuestro aún no llegó (la posición guardada es del de antes), no se vuelve atrás.
-            val sinceTurn = SystemClock.uptimeMillis() - chapterTurn.turnedAt
-            if (ReadingRules.restoreAfterSubmit(saved.href.toString(), chapterTurn.turningTo, sinceTurn)) {
-                nav.go(saved, animated = false)
-            }
-            appliedPreferences = preferences
-        }
+        if (navigator == null) return@LaunchedEffect
+        syncPreferences()
         bridge.setTheme(cardTheme)
     }
     // Al pausar (antes de onStop): si la persona vuelve y reabre enseguida, la Biblioteca ya lee la última posición.
@@ -188,11 +226,31 @@ fun ReaderScreen(
 
     // Tarjetas: se aplican durante toda la composición (no solo al frente: ninguna se pierde) y solo en el recurso
     // visible; las de otro recurso se reponen al volver a él (onResourceShown).
+    // El ancla viene en cada op (Ruling F): en Tocar el propio párrafo (la tarjeta sale justo debajo del tocado); en
+    // Intercalado y Solo traducción, lo que se lee en pantalla. El modo de la página llega en la misma fila, antes de
+    // las tarjetas ya adaptadas. Una tarjeta Solo puede pedir además mostrar u ocultar el original.
+    // Un solo receptor para toda la composición: la fila es un Channel y dos receptores se repartirían las ops.
     LaunchedEffect(vm) {
         vm.cardOps.collect { op ->
+            // Primero los ajustes nuevos en la página (si cambiaron) y luego la tarjeta: así copia el estilo de ahora.
+            syncPreferences()
             when (op) {
-                is CardOp.Show -> if (op.resource == currentHref) bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels)
-                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index)
+                is CardOp.Show -> if (op.resource == currentHref) {
+                    bridge.show(op.index, CardRules.card(op.card, cardTexts), currentLabels, op.anchor)
+                    CardRules.originalShown(op.card)?.let { bridge.showOriginal(op.index, it, op.anchor) }
+                }
+                is CardOp.Hide -> if (op.resource == currentHref) bridge.hide(op.index, op.anchor)
+                is CardOp.RemoveWaiting -> if (op.resource == currentHref) bridge.hideWaiting()
+                is CardOp.Mode -> {
+                    bridge.setMode(ModeRules.pageMode(op.mode))
+                    // Al entrar en un modo nuevo (sobre todo desde Tocar, donde el ViewModel olvidó lo visible), lo que
+                    // se ve ahora. El ViewModel ya está en ese modo: emitió esta op.
+                    // Página aún sin preparar: su efecto de "página lista" pedirá lo visible.
+                    val href = currentHref
+                    if (op.mode != ReadingMode.TAP && href != null && href == readyHref) {
+                        vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
+                    }
+                }
             }
         }
     }
@@ -205,16 +263,40 @@ fun ReaderScreen(
             view.announce(if (op.card is CardState.Text) announceTranslation.format(spoken) else spoken)
         }
     }
+    // Revisión final 3c-2 (m3): un toque que vuelve a dar el aviso ya puesto. La banda no cambia (su región viva calla):
+    // se dice otra vez aquí, solo por TalkBack.
+    LaunchedEffect(vm) {
+        vm.noticeAgain.collect { again ->
+            if (vm.readingSettings.value.mode == ReadingMode.TAP) return@collect
+            view.announce(noticeTexts(again, cardTexts).spoken)
+        }
+    }
     // Recurso nuevo (o vuelta al frente): cuando la página está lista y es ese recurso, primero se quitan todas las
     // tarjetas (las viejas de un capítulo vecino ya cargado) y luego el ViewModel repone las abiertas (spec §12).
+    // Revisión final 3c-2 (I1): al volver al frente con la MISMA página (no se recargó: conserva la marca de lista), no
+    // se quita ni se repone nada; así Intercalado y Solo traducción no se rehacen ni mueven lo que se lee.
     LaunchedEffect(currentHref, resumes) {
         val href = currentHref ?: return@LaunchedEffect
+        // Solo si este recurso ya había quedado listo del todo (si no, la pasada anterior se cortó a medias).
+        val resumed = readyHref == href
+        readyHref = null // recurso nuevo o vuelta al frente: la página pudo recargarse sin el modo
         var tries = 0
-        while (!bridge.hideAll(href) && tries++ < PageReadyTries) delay(PageReadyDelayMs)
+        var ready = bridge.prepare(href, keepIfSame = resumed)
+        while (ready == PageReady.NOT_READY && tries++ < PageReadyTries) {
+            delay(PageReadyDelayMs)
+            ready = bridge.prepare(href, keepIfSame = resumed)
+        }
         // El tema de la tarjeta va en cada página nueva, antes de reponer las tarjetas: así nunca salen con otro color.
         bridge.setTheme(cardTheme)
+        // Y el modo (Tarea 4): una página recargada no lo tiene y sin él una tarjeta Solo no se pone. El ViewModel no
+        // manda CardOp.Mode al reponer: va aquí, antes de onResourceShown.
+        val mode = vm.readingSettings.value.mode
+        bridge.setMode(ModeRules.pageMode(mode))
         // Aun si la página nunca respondió, el ViewModel debe saber cuál es el recurso visible.
-        vm.onResourceShown(href)
+        vm.onResourceShown(href, reloaded = ready != PageReady.SAME)
+        readyHref = href
+        // En Intercalado y Solo traducción se pide lo que se ve (y los siguientes) apenas la página está lista.
+        if (mode != ReadingMode.TAP) vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
     }
 
     // Posición (para la etiqueta y para guardar) y gesto (para las barras), solo mientras exista el navegador.
@@ -222,6 +304,18 @@ fun ReaderScreen(
         navigator?.currentLocator?.collect { locator ->
             currentHref = locator.href.toString()
             vm.onPosition(locator.toPosition())
+        }
+    }
+    // Intercalado y Solo traducción (spec §5.3): con cada posición nueva, ya quieta la página, lo que se ve y los
+    // siguientes. Si la posición cambia antes de asentarse, la vuelta anterior se descarta (collectLatest).
+    LaunchedEffect(navigator) {
+        navigator?.currentLocator?.collectLatest { locator ->
+            if (vm.readingSettings.value.mode == ReadingMode.TAP) return@collectLatest
+            delay(VisibleSettleMs)
+            val href = locator.href.toString()
+            // Un capítulo nuevo lo pide el efecto de "página lista", tras reponer sus tarjetas.
+            if (href != currentHref || href != readyHref || vm.readingSettings.value.mode == ReadingMode.TAP) return@collectLatest
+            vm.onVisible(href, bridge.visible(ModeRules.FOLLOWING))
         }
     }
     val chapterUntitled by rememberUpdatedState(stringResource(R.string.reader_toc_untitled))
@@ -306,9 +400,12 @@ fun ReaderScreen(
                     if (hit.isNotEmpty()) {
                         val had = vm.cardState(href, hit[0].index) != null
                         vm.onTap(href, hit)
-                        val has = vm.cardState(href, hit[0].index) != null
-                        // Solo si de verdad se abrió o cerró (un párrafo sin texto normalizado no abre nada).
-                        if (had && !has) view.announce(announceHidden) else if (!had && has) view.announce(announceTranslating)
+                        val now = vm.cardState(href, hit[0].index)
+                        // Solo si de verdad se abrió o cerró (un párrafo sin texto normalizado no abre nada). Lo que
+                        // vuelve a verse con su texto (Intercalado: mostrar la oculta; Solo: alternar el original) lo
+                        // anuncia el ViewModel ("Traducción: …", "Original"); aquí solo la espera.
+                        if (had && now == null) view.announce(announceHidden)
+                        else if (!had && now != null && now.isWaiting()) view.announce(announceTranslating)
                         return@launch
                     }
                     // ¿Sobre una tarjeta? (find no la cuenta como párrafo.)
@@ -321,8 +418,11 @@ fun ReaderScreen(
                         }
                         is CardState.MissingModel -> languagesOpen = true
                         else -> {
+                            // Tocar la tarjeta es tocar su párrafo (contrato del ViewModel: sin texto). En Tocar la
+                            // cierra, en Intercalado la oculta y en Solo traducción alterna el original (eso lo anuncia
+                            // el ViewModel).
                             vm.onTap(href, listOf(PageParagraph(index, "")))
-                            view.announce(announceHidden)
+                            if (vm.cardState(href, index) == null) view.announce(announceHidden)
                         }
                     }
                 }
@@ -345,20 +445,37 @@ fun ReaderScreen(
             }
         }
 
-        AnimatedVisibility(
-            visible = barsVisible,
-            enter = if (reduceMotion) EnterTransition.None else slideInVertically { -it } + fadeIn(),
-            exit = if (reduceMotion) ExitTransition.None else slideOutVertically { -it } + fadeOut(),
-            modifier = Modifier.align(Alignment.TopCenter),
-        ) {
-            ReaderTopBar(
-                title = title,
-                direction = direction,
-                onBack = onBack,
-                onSettings = { settingsOpen = true },
-                onDirection = { directionOpen = true },
-                onToc = { tocOpen = true },
-            )
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth()) {
+            AnimatedVisibility(
+                visible = barsVisible,
+                enter = if (reduceMotion) EnterTransition.None else slideInVertically { -it } + fadeIn(),
+                exit = if (reduceMotion) ExitTransition.None else slideOutVertically { -it } + fadeOut(),
+            ) {
+                ReaderTopBar(
+                    title = title,
+                    direction = direction,
+                    onBack = onBack,
+                    onSettings = { settingsOpen = true },
+                    onDirection = { directionOpen = true },
+                    onToc = { tocOpen = true },
+                )
+            }
+            // Aviso único del capítulo (boceto 5a §4): bajo la barra, o arriba del todo si la barra se ocultó. Solo en
+            // los modos nuevos (en Tocar cada párrafo lleva su propia tarjeta de la 3b).
+            val shown = notice.takeIf { readingSettings.mode != ReadingMode.TAP }
+            if (shown != null) {
+                ChapterNoticeBand(
+                    texts = noticeTexts(shown, cardTexts),
+                    onAction = {
+                        when (shown) {
+                            // Idiomas sobre el Lector (el de la 3b); al cerrarlo, vm.onLanguagesClosed() quita el aviso.
+                            is ChapterNotice.MissingModel -> languagesOpen = true
+                            ChapterNotice.EngineFailed -> currentHref?.let(vm::retryChapter)
+                        }
+                    },
+                    modifier = if (barsVisible) Modifier else Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                )
+            }
         }
         AnimatedVisibility(
             visible = barsVisible && (positionText(label) != null || hasPrevious || hasNext),
@@ -497,6 +614,91 @@ fun ReaderTopBar(
     )
 }
 
+/** Lo que dice el aviso del capítulo: el texto, lo que oye TalkBack, el botón (o ninguno) y si es un fallo. */
+data class NoticeTexts(val message: String, val spoken: String, val action: String?, val error: Boolean)
+
+/** Textos del aviso: los mismos de las tarjetas de la 3b ("Falta el idioma… (227 MB)", "No se pudo preparar…"). */
+internal fun noticeTexts(notice: ChapterNotice, texts: CardTexts): NoticeTexts = when (notice) {
+    is ChapterNotice.MissingModel ->
+        NoticeTexts(texts.missing(notice.engine), texts.missingSpoken(notice.engine), texts.download, error = false)
+    ChapterNotice.EngineFailed -> NoticeTexts(texts.prepareFailed, texts.prepareFailed, texts.retry, error = true)
+}
+
+/**
+ * Aviso único del capítulo en Intercalado y Solo traducción (boceto 5a §4): una banda bajo la barra superior.
+ * - Fallo del motor: `errorContainer` con "Reintentar"; falta el idioma: `secondaryContainer` con "Descargar" (no es
+ *   un fallo). Ícono + texto + botón: nunca solo el color.
+ * - Botón de 48 dp a la derecha; con letra grande (poco ancho por letra) baja debajo del texto. El texto no se corta.
+ * - TalkBack: el texto es una región viva (se anuncia al aparecer, con "a" y "megabytes"); el botón va aparte.
+ * Sin estado: se previsualiza sola.
+ */
+@Composable
+fun ChapterNoticeBand(texts: NoticeTexts, onAction: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val container = if (texts.error) colors.errorContainer else colors.secondaryContainer
+    val content = if (texts.error) colors.onErrorContainer else colors.onSecondaryContainer
+    Surface(color = container, contentColor = content, modifier = modifier.fillMaxWidth()) {
+        Column {
+            BoxWithConstraints(
+                Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs),
+            ) {
+                // Ancho "a letra normal": con letra al 200 % cada texto ocupa el doble (la misma idea que la hoja "Aa").
+                val stacked = maxWidth / LocalDensity.current.fontScale < NoticeRowMin
+                val message = @Composable { m: Modifier ->
+                    Row(
+                        m.clearAndSetSemantics {
+                            contentDescription = texts.spoken
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.m),
+                    ) {
+                        Icon(
+                            painterResource(if (texts.error) LectorIcons.Error else LectorIcons.Download),
+                            contentDescription = null, // decorativo: el texto lo dice
+                            modifier = Modifier.size(24.dp),
+                        )
+                        // Máximo 2 líneas (con letra al 200 % la banda no tapa media página): lo completo lo dice la descripción.
+                        Text(texts.message, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                val button = @Composable {
+                    if (texts.action != null) {
+                        TextButton(
+                            onClick = onAction,
+                            colors = ButtonDefaults.textButtonColors(contentColor = content),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text(texts.action, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                if (stacked) {
+                    Column {
+                        message(Modifier.fillMaxWidth().padding(vertical = Spacing.xs))
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { button() }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        message(Modifier.weight(1f).padding(vertical = Spacing.xs))
+                        button()
+                    }
+                }
+            }
+            // Borde inferior: en oscuro la banda no se funde con la barra ni con la página.
+            HorizontalDivider(thickness = 1.dp, color = colors.outlineVariant)
+        }
+    }
+}
+
+/** Debajo de esto (dp a letra normal) el aviso y su botón no caben en una fila ni con 2 líneas de texto: el botón baja. */
+private val NoticeRowMin = 140.dp
+
+/** Estados de espera de una tarjeta: "Traduciendo…", "Preparando…" o, en Solo traducción, el original en gris. */
+private fun CardState.isWaiting() = this == CardState.Skeleton || this == CardState.Preparing || this == CardState.Waiting
+
 /** Textos de las tarjetas; "Falta el idioma" lleva el tamaño del modelo según el catálogo (si ya se conoce). */
 @Composable
 private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardTexts {
@@ -514,9 +716,11 @@ private fun rememberCardTexts(app: LectorApp, direction: LanguagePair): CardText
     val retry = stringResource(R.string.reader_card_retry)
     val download = stringResource(R.string.reader_card_download)
     val tooLong = stringResource(R.string.reader_card_too_long)
-    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong) {
+    val waiting = stringResource(R.string.reader_card_skeleton)
+    val original = stringResource(R.string.reader_card_original)
+    return remember(pairs, wire, name, missing, missingNoSize, resources, spokenNoSize, failed, prepareFailed, retry, download, tooLong, waiting, original) {
         CardTexts(
-            failed, prepareFailed, retry, download, tooLong,
+            failed, prepareFailed, retry, download, tooLong, waiting, original,
             missing = { engine -> CardRules.modelMegabytes(pairs, wire, engine)?.let { mb -> missing.format(name, mb) } ?: missingNoSize },
             // Para TalkBack: "a" en vez de la flecha y "megabytes" en vez de "MB".
             missingSpoken = { engine ->
@@ -537,6 +741,12 @@ private class ChapterTurn {
     var turningTo: String? = null
     var turnedAt = 0L
 }
+
+/** Espera tras mandar preferencias a Readium, para que su script llegue a la página antes que los nuestros. */
+private const val PreferencesApplyMs = 120L
+
+/** Página "quieta": tanto sin posición nueva antes de pedir lo visible (Intercalado y Solo traducción). */
+private const val VisibleSettleMs = 150L
 
 /** Hasta ~5 s esperando a que la página del recurso nuevo esté lista. */
 private const val PageReadyTries = 50

@@ -8,8 +8,21 @@ import org.json.JSONTokener
 /**
  * Un párrafo de la página visible: [index] es su posición entre los párrafos del recurso (0, 1, 2…). [cut]: la página lo
  * recortó al tope ([TranslationRules.MAX_PARAGRAPH_CHARS]); es demasiado largo aunque [text] quede en el tope.
+ * [onScreen]: solo en la respuesta de `visible()`, toca la pantalla (si no, es de los siguientes).
  */
-data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false)
+data class PageParagraph(val index: Int, val text: String, val cut: Boolean = false, val onScreen: Boolean = false)
+
+/** Respuesta de [ParagraphScripts.removeAll]. */
+enum class PageReady {
+    /** Aún no cargó, o es otro recurso: se reintenta. */
+    NOT_READY,
+
+    /** Lista y ya sin tarjetas: hay que reponerlas. */
+    CLEARED,
+
+    /** La misma página de antes (no se recargó): conserva sus tarjetas y no se tocó. */
+    SAME,
+}
 
 /** Lo que muestra la tarjeta bajo un párrafo. */
 sealed interface Card {
@@ -32,10 +45,34 @@ sealed interface Card {
 
     /** "Este párrafo es demasiado largo…": estilo de error, sin enlace (reintentar daría lo mismo). */
     data class TooLong(val label: String) : Card
+
+    /**
+     * Solo traducción (3c-2): la traducción EN LUGAR del original, con la letra del libro. El original queda oculto
+     * (clase `lector-oculto`) y la tarjeta copia su estilo calculado ([ParagraphScripts.COPIED_STYLE]).
+     */
+    data class Solo(val translation: String) : Card
+
+    /** Solo traducción, aún sin traducir: el original se ve en gris y debajo [label] ("Traduciendo…"). */
+    data class Waiting(val label: String) : Card
 }
 
-/** Textos fijos de la tarjeta (vienen de strings.xml). [translationPrefix] es el nombre que oye TalkBack. */
-data class CardLabels(val translationPrefix: String, val skeleton: String, val preparing: String)
+/**
+ * Qué se mantiene quieto en pantalla al poner, quitar o cambiar una tarjeta (Ruling F de la 3c-2). [wire] es el valor
+ * que va al script, de esta lista fija.
+ */
+enum class CardAnchor(val wire: String) {
+    /** El propio párrafo cambiado: en TAP la tarjeta sale justo debajo del tocado (como en la 3b). */
+    SELF("self"),
+
+    /** Lo que se lee: el primer bloque que empieza en pantalla (Intercalado y Solo traducción). */
+    SCREEN("screen"),
+}
+
+/**
+ * Textos fijos de la tarjeta (vienen de strings.xml). [translationPrefix] es el nombre que oye TalkBack. [original] es
+ * la marca pequeña ("Original") que se ve bajo el original mostrado en Solo traducción.
+ */
+data class CardLabels(val translationPrefix: String, val skeleton: String, val preparing: String, val original: String)
 
 /**
  * Arma los scripts propios que se ejecutan en la página del libro (vía `evaluateJavascript`) y lee sus respuestas.
@@ -71,6 +108,75 @@ object ParagraphScripts {
     private val FIND_CARD =
         "var card = p.nextElementSibling; if (!(card && card.matches(${cardSelector("a.i")}))) card = null;"
 
+    /** Clase que esconde el original en Solo traducción (tarjeta.css: `display: none` solo con el modo "solo"). */
+    private const val HIDDEN_CLASS = "lector-oculto"
+
+    /**
+     * Estilo que la tarjeta Solo copia del original (Ruling D, spec §11 M4): una lista FIJA de propiedades, con valores
+     * que salen solo de `getComputedStyle` (nunca del libro como texto ni como marcado). Así un `h2` sigue grande, una
+     * cita con sangría y un `li` con viñeta. Fondo, borde y color los pone tarjeta.css.
+     */
+    val COPIED_STYLE = listOf(
+        "display", "font-family", "font-size", "font-weight", "font-style", "line-height", "text-indent", "text-align",
+        "letter-spacing", "word-spacing", "text-transform", "font-variant", "margin-top", "margin-right", "margin-bottom",
+        "margin-left", "padding-top", "padding-right", "padding-bottom", "padding-left", "list-style-type",
+        "list-style-position",
+    )
+
+    /** Rectángulo del párrafo `all[k]`: si está oculto (mide 0×0), el de su tarjeta (Ruling E). Solo lee posiciones. */
+    private val RECT =
+        "function rectOf(k) { var e = all[k]; if (e.classList.contains('$HIDDEN_CLASS')) { var c = e.nextElementSibling; " +
+            "if (c && c.matches(${cardSelector("k")})) return c.getBoundingClientRect(); } return e.getBoundingClientRect(); }"
+
+    /**
+     * Sin saltos (Ruling C, técnica b de la spec §11). `anchor()` busca lo que se está leyendo: el primer bloque hoja
+     * que EMPIEZA dentro de la pantalla (`0 ≤ top < alto de la ventana`, alto > 0); si no hay (un párrafo más alto que
+     * la pantalla), el que cruza el borde de arriba (`top < 0 < bottom`), fijado por su `top`; si tampoco, -1 (no se
+     * corrige). Nunca uno de más abajo: una tarjeta entre lo visible y ese bloque haría saltar el texto.
+     */
+    private val ANCHOR_FN = RECT +
+        " function anchor() { var h = window.innerHeight, cross = -1; for (var k = 0; k < all.length; k++) {" +
+        " var r = rectOf(k); if (r.height <= 0) continue;" +
+        " if (r.top >= 0 && r.top < h && r.height > 0) return k;" +
+        " if (cross < 0 && r.top < 0 && r.bottom > 0) cross = k;" +
+        " if (r.top >= h) break; } return cross; }"
+
+    /** Ancla de lo que se lee en pantalla (para [setMode], que cambia toda la página). */
+    private val ANCHOR = ANCHOR_FN + " var b = anchor(), top0 = b < 0 ? 0 : rectOf(b).top;"
+
+    /**
+     * Ancla según la política `a.anchor` ([CardAnchor], Ruling F): "self" fija el propio párrafo cambiado (TAP: la
+     * tarjeta sale justo debajo del tocado, como en la 3b); "screen", lo que se lee en pantalla (Intercalado y Solo).
+     */
+    private val ANCHOR_BY_POLICY = ANCHOR_FN + " var b = a.anchor === 'self' ? a.i : anchor(), top0 = b < 0 ? 0 : rectOf(b).top;"
+
+    /** Guardia de la tarjeta Solo y de [showOriginal]: fuera del modo "solo" no se oculta ningún original. */
+    private const val NOT_SOLO_MODE = "document.documentElement.getAttribute('data-lector-modo') !== 'solo'"
+    private const val KEEP_ANCHOR = "if (b >= 0) { var d = rectOf(b).top - top0; if (d) window.scrollBy(0, d); }"
+
+    /** Quita de `card` el estilo copiado (solo las propiedades de la lista fija) y muestra el original `p`. */
+    private const val UNSTYLE_AND_SHOW =
+        "function unstyleAndShow() { a.props.forEach(function (k) { card.style.removeProperty(k); }); " +
+            "p.classList.remove('$HIDDEN_CLASS'); }"
+
+    /**
+     * Copia a la tarjeta el estilo calculado del original `p` y luego lo oculta. El original se muestra antes de leerlo
+     * (oculto, su `display` sería `none`); todo pasa en el mismo script, sin pintar en medio.
+     */
+    private const val COPY_AND_HIDE =
+        "function copyAndHide() { p.classList.remove('$HIDDEN_CLASS'); var cs = getComputedStyle(p); " +
+            "a.props.forEach(function (k) { card.style.setProperty(k, cs.getPropertyValue(k), 'important'); }); " +
+            "p.classList.add('$HIDDEN_CLASS'); }"
+
+    /** Un párrafo como lo manda la página: espacios colapsados y, si pasa del tope, cortado ahí más "…" y `cut`. */
+    private val ITEM =
+        """
+        function item(i, t) {
+          t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();
+          return t.length > a.max ? { i: i, t: t.slice(0, a.max) + '…', cut: true } : { i: i, t: t };
+        }
+        """.trimIndent()
+
     /**
      * El párrafo bajo el punto (en px CSS) y los [following] siguientes con texto.
      * Responde `JSON.stringify([{i, t}, …])`, el tocado primero; `[]` si no hay párrafo con texto. Cada `t` va con los
@@ -89,10 +195,7 @@ object ParagraphScripts {
         var at = all.indexOf(el);
         var text = el.textContent || '';
         if (at < 0 || !text.trim()) return JSON.stringify([]);
-        function item(i, t) {
-          t = t.replace(/[ \t\n\x0B\f\r\u00A0]+/g, ' ').trim();
-          return t.length > a.max ? { i: i, t: t.slice(0, a.max) + '…', cut: true } : { i: i, t: t };
-        }
+        $ITEM
         var out = [item(at, text)];
         for (var k = at + 1; k < all.length && out.length <= a.n; k++) {
           var t = all[k].textContent || '';
@@ -107,30 +210,117 @@ object ParagraphScripts {
      * los datos no tienen la forma esperada (fallar cerrado). WebView entrega el valor como JSON: si llega como cadena
      * citada (lo que devuelve `JSON.stringify`), se desenvuelve una vez.
      */
-    fun parseFind(json: String?): List<PageParagraph> {
-        val array = when (val v = parse(json)) {
-            is JSONArray -> v
-            is String -> parse(v) as? JSONArray
-            else -> null
-        } ?: return emptyList()
-        val out = ArrayList<PageParagraph>(array.length())
-        for (k in 0 until array.length()) {
-            val o = array.opt(k) as? JSONObject ?: return emptyList()
-            val i = o.opt("i") as? Int ?: return emptyList()
-            val t = o.opt("t") as? String ?: return emptyList()
-            if (i < 0) return emptyList()
-            val text = t.trim().replace(WHITESPACE, " ")
-            if (text.isEmpty()) {
-                if (k == 0) return emptyList() else continue
+    fun parseFind(json: String?): List<PageParagraph> = parseItems(json, firstNeedsText = true)
+
+    /**
+     * Los párrafos hoja que se ven (tocan el viewport) y los [following] siguientes con texto, de arriba abajo
+     * (spec 3c-2 §5.2). Responde `JSON.stringify([{i, t, cut, v}, …])` con el mismo recorte y marca que [find]; `v: 1` en los que tocan
+     * la pantalla (revisión de la Tarea 4: la prioridad sale de aquí, no de cuántos llegan). Un original
+     * oculto en Solo traducción se mide con el rectángulo de su tarjeta. Las tarjetas no cuentan. Solo lee.
+     */
+    fun visible(following: Int = 10): String {
+        require(following in 0..MAX_FOLLOWING) { "Número de siguientes fuera de rango" }
+        return script(
+            JSONObject().put("sel", SELECTOR).put("n", following).put("max", TranslationRules.MAX_PARAGRAPH_CHARS),
+            """
+            $PARAGRAPHS
+            $ITEM
+            $RECT
+            var h = window.innerHeight, out = [], extra = 0, below = false;
+            for (var k = 0; k < all.length; k++) {
+              var r = rectOf(k);
+              // Arriba de la pantalla, o sin caja (un elemento oculto del libro mide 0×0).
+              if (r.bottom <= 0) continue;
+              var t = all[k].textContent || '';
+              if (!below && r.top < h) { if (t.trim()) { var it = item(k, t); it.v = 1; out.push(it); } continue; }
+              below = true;
+              if (extra >= a.n) break;
+              if (t.trim()) { out.push(item(k, t)); extra++; }
             }
-            out += PageParagraph(i, text, cut = o.opt("cut") == true)
-        }
-        return out
+            return JSON.stringify(out);
+            """,
+        )
     }
 
-    /** Crea (o reemplaza el contenido de) la tarjeta bajo el párrafo [index]. Responde true si el párrafo existe. */
-    fun insert(index: Int, card: Card, labels: CardLabels): String {
+    /**
+     * Lee la respuesta de [visible], como [parseFind] (normaliza, se salta los vacíos). Falla cerrado (lista vacía) si
+     * la forma no cuadra, si los índices no van de arriba abajo sin repetirse o si llegan más de [MAX_VISIBLE_ITEMS].
+     */
+    fun parseVisible(json: String?): List<PageParagraph> {
+        val items = parseItems(json, firstNeedsText = false, readOnScreen = true)
+        if (items.size > MAX_VISIBLE_ITEMS) return emptyList()
+        if (items.zipWithNext().any { (x, y) -> y.index <= x.index }) return emptyList()
+        return items
+    }
+
+    /** Modos de la página que entiende tarjeta.css (`data-lector-modo` en `<html>`). */
+    val MODES = setOf("tocar", "intercalado", "solo")
+
+    /**
+     * Pone `data-lector-modo` en el `<html>` de la página, como [setTheme]: solo un valor de [MODES] (cualquier otro
+     * lanza IllegalArgumentException) y como dato JSON. Al salir de "solo" quita el estilo copiado de todas las tarjetas
+     * y vuelve a mostrar los originales (Ruling D). Sin saltos (Ruling C). Responde true.
+     */
+    fun setMode(mode: String): String {
+        require(mode in MODES) { "Modo de página desconocido" }
+        return script(
+            JSONObject().put("sel", SELECTOR).put("modo", mode).put("props", JSONArray(COPIED_STYLE)),
+            """
+            $PARAGRAPHS
+            $ANCHOR
+            document.documentElement.setAttribute('data-lector-modo', a.modo);
+            if (a.modo !== 'solo') {
+              var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
+              for (var k = 0; k < cards.length; k++) {
+                var c = cards[k];
+                a.props.forEach(function (n) { c.style.removeProperty(n); });
+                c.removeAttribute('data-lector-original');
+              }
+              var hidden = document.querySelectorAll('.$HIDDEN_CLASS');
+              for (var k = 0; k < hidden.length; k++) hidden[k].classList.remove('$HIDDEN_CLASS');
+            }
+            $KEEP_ANCHOR
+            return true;
+            """,
+        )
+    }
+
+    /**
+     * Solo traducción: con [on] muestra el original del párrafo [index] (quita `lector-oculto`) y la tarjeta pasa a
+     * la marca "Original" (`data-lector-original`, sin el estilo copiado); sin [on], vuelve a la traducción. Solo actúa
+     * en el modo "solo" y si el párrafo tiene una tarjeta Solo; responde true si cambió algo. Sin saltos (Ruling C,
+     * con la política [anchor]).
+     */
+    fun showOriginal(index: Int, on: Boolean, anchor: CardAnchor): String {
+        require(index >= 0) { "Índice negativo" }
+        return script(
+            JSONObject().put("sel", SELECTOR).put("i", index).put("on", on).put("props", JSONArray(COPIED_STYLE))
+                .put("anchor", anchor.wire),
+            """
+            if ($NOT_SOLO_MODE) return false;
+            $PARAGRAPHS
+            var p = all[a.i];
+            if (!p) return false;
+            $FIND_CARD
+            if (!card || card.dataset.lectorEstado !== 'solo') return false;
+            $UNSTYLE_AND_SHOW
+            $COPY_AND_HIDE
+            $ANCHOR_BY_POLICY
+            if (a.on) { card.setAttribute('data-lector-original', ''); unstyleAndShow(); }
+            else { card.removeAttribute('data-lector-original'); copyAndHide(); }
+            $KEEP_ANCHOR
+            return true;
+            """,
+        )
+    }
+
+    /**
+     * Crea (o reemplaza el contenido de) la tarjeta bajo el párrafo [index]. Responde true si el párrafo existe (una
+     * tarjeta Solo, además, solo en el modo "solo"). Sin saltos con la política [anchor] (Ruling C y F).
+     */
+    fun insert(index: Int, card: Card, labels: CardLabels, anchor: CardAnchor): String {
         val data = JSONObject().put("sel", SELECTOR).put("i", index).put("prefix", labels.translationPrefix)
+            .put("props", JSONArray(COPIED_STYLE)).put("anchor", anchor.wire)
         when (card) {
             Card.Skeleton -> data.put("kind", "esqueleto").put("text", labels.skeleton)
             Card.Preparing -> data.put("kind", "preparando").put("text", labels.preparing)
@@ -138,14 +328,20 @@ object ParagraphScripts {
             is Card.MissingModel -> data.put("kind", "falta-modelo").put("text", card.label).put("retry", card.action).put("spoken", card.spoken)
             is Card.Failed -> data.put("kind", "error").put("text", card.label).put("retry", card.retry).put("spoken", card.spoken)
             is Card.TooLong -> data.put("kind", "error").put("text", card.label).put("spoken", card.label)
+            is Card.Solo -> data.put("kind", "solo").put("text", card.translation).put("mark", labels.original)
+            is Card.Waiting -> data.put("kind", "espera").put("text", card.label).put("spoken", card.label)
         }
         return script(
             data,
             """
+            if (a.kind === 'solo' && $NOT_SOLO_MODE) return false;
             $PARAGRAPHS
             var p = all[a.i];
             if (!p) return false;
             $FIND_CARD
+            $UNSTYLE_AND_SHOW
+            $COPY_AND_HIDE
+            $ANCHOR_BY_POLICY
             if (!card) {
               card = document.createElement('aside');
               card.classList.add('$CARD_CLASS');
@@ -154,65 +350,133 @@ object ParagraphScripts {
               p.after(card);
             }
             // Con texto, sin nombre propio: TalkBack, al deslizar, lee la traducción (un nombre la taparía).
-            if (a.kind === 'texto') card.removeAttribute('aria-label');
+            if (a.kind === 'texto' || a.kind === 'solo') card.removeAttribute('aria-label');
             else card.setAttribute('aria-label', typeof a.spoken === 'string' ? a.spoken : a.prefix);
             card.dataset.lectorEstado = a.kind;
             card.textContent = '';
-            if (a.kind === 'esqueleto' || a.kind === 'preparando') {
-              var s = document.createElement('span');
-              s.classList.add('lector-esqueleto');
-              s.textContent = a.text;
-              card.appendChild(s);
+            if (a.kind === 'solo') {
+              // La traducción en lugar del original y, escondida, la marca "Original" (se ve con data-lector-original).
+              var tr = document.createElement('span');
+              tr.classList.add('lector-traduccion');
+              tr.textContent = a.text;
+              card.appendChild(tr);
+              var m = document.createElement('span');
+              m.classList.add('lector-marca');
+              m.textContent = a.mark;
+              card.appendChild(m);
+              // Si la persona está viendo el original, se queda así; si no, la tarjeta toma su estilo y lo oculta.
+              if (card.hasAttribute('data-lector-original')) unstyleAndShow(); else copyAndHide();
             } else {
-              card.textContent = a.text;
+              // Cualquier otra tarjeta va bajo el original visible y con el estilo de tarjeta.
+              card.removeAttribute('data-lector-original');
+              unstyleAndShow();
+              if (a.kind === 'esqueleto' || a.kind === 'preparando') {
+                var s = document.createElement('span');
+                s.classList.add('lector-esqueleto');
+                s.textContent = a.text;
+                card.appendChild(s);
+              } else {
+                card.textContent = a.text;
+              }
+              if (typeof a.retry === 'string') {
+                var r = document.createElement('span');
+                r.classList.add('lector-reintentar');
+                r.textContent = a.retry;
+                card.appendChild(document.createTextNode(' '));
+                card.appendChild(r);
+              }
             }
-            if (typeof a.retry === 'string') {
-              var r = document.createElement('span');
-              r.classList.add('lector-reintentar');
-              r.textContent = a.retry;
-              card.appendChild(document.createTextNode(' '));
-              card.appendChild(r);
-            }
+            $KEEP_ANCHOR
             return true;
             """,
         )
     }
 
-    /** Quita la tarjeta del párrafo [index] si existe. Responde true si había una. */
-    fun remove(index: Int): String = script(
-        JSONObject().put("sel", SELECTOR).put("i", index),
+    /**
+     * Quita la tarjeta del párrafo [index] si existe y vuelve a mostrar el original si estaba oculto. Responde true si
+     * había tarjeta. Sin saltos con la política [anchor] (Ruling C y F).
+     */
+    fun remove(index: Int, anchor: CardAnchor): String = script(
+        JSONObject().put("sel", SELECTOR).put("i", index).put("anchor", anchor.wire),
         """
         $PARAGRAPHS
         var p = all[a.i];
         if (!p) return false;
         $FIND_CARD
-        if (!card) return false;
-        card.remove();
-        return true;
+        if (!card && !p.classList.contains('$HIDDEN_CLASS')) return false;
+        $ANCHOR_BY_POLICY
+        if (card) card.remove();
+        p.classList.remove('$HIDDEN_CLASS');
+        $KEEP_ANCHOR
+        return !!card;
+        """,
+    )
+
+    /**
+     * Quita de la página TODAS las tarjetas en espera (esqueleto, preparando y la espera de Solo) y vuelve a mostrar los
+     * originales que quedaron ocultos sin tarjeta; las tarjetas ya traducidas (texto, solo, error, falta el modelo) no se
+     * tocan. Es lo que se hace cuando sale el aviso del capítulo. Sin saltos (Ruling C, ancla de pantalla). Responde cuántas
+     * quitó. Solo quita: sin marcado ni texto del libro.
+     */
+    fun removeWaiting(): String = script(
+        JSONObject().put("sel", SELECTOR),
+        """
+        $PARAGRAPHS
+        $ANCHOR
+        var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
+        var n = 0;
+        for (var k = 0; k < cards.length; k++) {
+          var c = cards[k], st = c.dataset.lectorEstado;
+          if (st === 'esqueleto' || st === 'preparando' || st === 'espera') { c.remove(); n++; }
+        }
+        var hidden = document.querySelectorAll('.$HIDDEN_CLASS');
+        for (var k = 0; k < hidden.length; k++) {
+          var s = hidden[k].nextElementSibling;
+          if (!(s && s.matches('aside.$CARD_CLASS[data-lector-i]'))) hidden[k].classList.remove('$HIDDEN_CLASS');
+        }
+        $KEEP_ANCHOR
+        return n;
         """,
     )
 
     /**
      * Si la página ya cargó del todo y es el recurso [path] (el `href` del localizador, sin `#`), quita TODAS nuestras
-     * tarjetas y responde true; si no, false (la pantalla reintenta poco después). Así una tarjeta vieja (de un capítulo
-     * vecino que el ViewPager tenía cargado) no queda antes de reponer las abiertas (spec §12, Ruling K). Solo quita.
+     * tarjetas, marca la página como lista (`window.__lectorLista`) y responde true; si no, false (la pantalla reintenta
+     * poco después). Así una tarjeta vieja (de un capítulo vecino que el ViewPager tenía cargado) no queda antes de reponer
+     * las abiertas (spec §12, Ruling K). Solo quita.
+     *
+     * [keepIfSame] (al volver al frente, revisión final 3c-2 I1): si la página aún tiene la marca, es la misma que se dejó
+     * (no se recargó) y conserva sus tarjetas; no se toca nada y responde "misma". La marca es una propiedad de `window`,
+     * no un atributo: el marcado del libro no puede ponerla.
      */
-    fun removeAll(path: String): String = script(
-        JSONObject().put("path", path.substringBefore('#').substringBefore('?')),
+    fun removeAll(path: String, keepIfSame: Boolean = false): String = script(
+        JSONObject().put("path", path.substringBefore('#').substringBefore('?')).put("keep", keepIfSame),
         """
         if (document.readyState !== 'complete') return false;
         var here, want;
         try { here = decodeURIComponent(location.pathname); want = decodeURIComponent(a.path); } catch (e) { return false; }
         want = '/' + want.replace(/^\/+/, '');
         if (here.slice(-want.length) !== want) return false;
+        if (a.keep && window.__lectorLista === true) return 'misma';
         var cards = document.querySelectorAll('aside.$CARD_CLASS[data-lector-i]');
         for (var k = 0; k < cards.length; k++) cards[k].remove();
+        // Sin tarjetas, ningún original puede quedar oculto (Solo traducción).
+        var hidden = document.querySelectorAll('.$HIDDEN_CLASS');
+        for (var k = 0; k < hidden.length; k++) hidden[k].classList.remove('$HIDDEN_CLASS');
+        window.__lectorLista = true;
         return true;
         """,
     )
 
-    /** Lee la respuesta de [removeAll]: true solo si la página estaba lista (y ya sin tarjetas). */
-    fun parseReady(json: String?): Boolean = parse(json) == true
+    /** Lee la respuesta de [removeAll]: true solo si la página estaba lista (y ya sin tarjetas o, con keepIfSame, la misma). */
+    fun parseReady(json: String?): Boolean = parsePageReady(json) != PageReady.NOT_READY
+
+    /** Lee la respuesta de [removeAll]: lista y sin tarjetas, la misma de antes (sin tocar) o aún no lista. */
+    fun parsePageReady(json: String?): PageReady = when (parse(json)) {
+        true -> PageReady.CLEARED
+        "misma" -> PageReady.SAME
+        else -> PageReady.NOT_READY
+    }
 
     /** Índice del párrafo o de la tarjeta bajo el punto (px CSS); -1 si no hay ninguno. Para cerrar tocando la tarjeta. */
     fun indexAt(xCss: Double, yCss: Double): String = script(
@@ -285,6 +549,39 @@ object ParagraphScripts {
     fun parseIndex(json: String?): Int? = (parse(json) as? Int)?.takeIf { it >= 0 }
 
     private val WHITESPACE = Regex("\\s+")
+
+    /** Tope de "siguientes" que se piden a [visible]. */
+    private const val MAX_FOLLOWING = 50
+
+    /** Más de esto no es una pantalla de párrafos más los siguientes: respuesta rara, se descarta. */
+    private const val MAX_VISIBLE_ITEMS = 500
+
+    /**
+     * Lee `[{i, t, cut}, …]` (o la misma lista como cadena citada, que se desenvuelve una vez). Normaliza el texto
+     * (espacios colapsados) y se salta los vacíos; con [firstNeedsText], si el primero está vacío no hay nada. Si algo no
+     * tiene la forma esperada, lista vacía (fallar cerrado).
+     */
+    private fun parseItems(json: String?, firstNeedsText: Boolean, readOnScreen: Boolean = false): List<PageParagraph> {
+        val array = when (val v = parse(json)) {
+            is JSONArray -> v
+            is String -> parse(v) as? JSONArray
+            else -> null
+        } ?: return emptyList()
+        val out = ArrayList<PageParagraph>(array.length())
+        for (k in 0 until array.length()) {
+            val o = array.opt(k) as? JSONObject ?: return emptyList()
+            val i = o.opt("i") as? Int ?: return emptyList()
+            val t = o.opt("t") as? String ?: return emptyList()
+            if (i < 0) return emptyList()
+            val text = t.trim().replace(WHITESPACE, " ")
+            if (text.isEmpty()) {
+                if (k == 0 && firstNeedsText) return emptyList() else continue
+            }
+            // Marca "en pantalla" solo en visible() ([readOnScreen]) y solo con el número 1; si no, es de los siguientes.
+            out += PageParagraph(i, text, cut = o.opt("cut") == true, onScreen = readOnScreen && o.opt("v") == 1)
+        }
+        return out
+    }
 
     private fun parse(json: String?): Any? =
         if (json == null) null else runCatching { JSONTokener(json).nextValue() }.getOrNull()

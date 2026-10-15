@@ -106,6 +106,7 @@ class AppSettings(private val prefs: SharedPreferences) {
                 putString(KEY_READING_LINE_HEIGHT, clean.lineHeight.wire)
                 putString(KEY_READING_MARGINS, clean.margins.wire)
                 putString(KEY_READING_ALIGN, clean.align.wire)
+                putString(KEY_READING_MODE, clean.mode.wire)
             }
             readingState.value = clean
             readingLoaded.value = true
@@ -127,6 +128,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         lineHeight = LineHeightLevel.fromWire(safeString(KEY_READING_LINE_HEIGHT)),
         margins = MarginLevel.fromWire(safeString(KEY_READING_MARGINS)),
         align = TextAlignChoice.fromWire(safeString(KEY_READING_ALIGN)),
+        mode = ReadingMode.fromWire(safeString(KEY_READING_MODE)),
     )
 
     private fun safeString(key: String): String? = try {
@@ -153,6 +155,7 @@ class AppSettings(private val prefs: SharedPreferences) {
         private const val KEY_READING_LINE_HEIGHT = "reading_line_height"
         private const val KEY_READING_MARGINS = "reading_margins"
         private const val KEY_READING_ALIGN = "reading_align"
+        private const val KEY_READING_MODE = "reading_mode"
         private const val FILE = "app_settings"
         private const val KEY_WELCOME = "welcome_done"
         private const val KEY_ENGINE = "engine_choice"
