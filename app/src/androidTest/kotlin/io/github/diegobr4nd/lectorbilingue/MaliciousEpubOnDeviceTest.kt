@@ -883,7 +883,9 @@ class MaliciousEpubOnDeviceTest {
         val raw = xhtml(body, head).replace("<html xmlns=\"http://www.w3.org/1999/xhtml\"", "<html data-lector-modo=\"solo\" data-lector-tema=\"negro\" xmlns=\"http://www.w3.org/1999/xhtml\"")
         val id = importOk(write("m5.epub", basic(null, c1Raw = raw)))
         // (a) El HTML servido no trae nuestras marcas (sin importar mayúsculas).
-        val html = served(open(id), "OEBPS/c1.xhtml")!!
+        // El <style> del libro nombra `data-lector-modo` en un selector: es texto CSS (no pone la marca) y se queda; se
+        // mira el resto del HTML (HtmlSanitizerTest lo comprueba en la JVM con este mismo marcado).
+        val html = served(open(id), "OEBPS/c1.xhtml")!!.replace(Regex("(?is)<style[^>]*>.*?</style>"), "<style/>")
         for (mark in listOf("lector-tarjeta", "lector-oculto", "data-lector-")) assertFalse(html.contains(mark, ignoreCase = true), "$mark en el libro")
         val final = expectedModeFinal(mode)
         inMode(mode)

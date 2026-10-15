@@ -307,6 +307,23 @@ class HtmlSanitizerTest {
         }
     }
 
+    // Seguridad 3c-2 (m5 en el Pixel): con modo y tema en <html>, ningún ATRIBUTO data-lector- queda. Un selector CSS
+    // del libro que nombra el atributo (texto de su <style>) sí se queda: es solo texto y no pone la marca.
+    @Test fun `m5 sin atributos data-lector en ningun elemento y el CSS del libro queda como texto`() {
+        val markup = """<?xml version="1.0" encoding="UTF-8"?><html data-lector-modo="solo" data-lector-tema="negro" xmlns="http://www.w3.org/1999/xhtml">""" +
+            """<head><title>C1</title><style>aside{display:none} html[data-lector-modo="solo"] #b{color:red}</style></head><body>""" +
+            """<p id="a">Real</p><aside class="lector-tarjeta" data-lector-i="0" data-lector-estado="solo" data-lector-original="">FALSA</aside>""" +
+            """<p id="b" class="lector-oculto LECTOR-OCULTO x">B</p></body></html>"""
+        val out = HtmlSanitizer.sanitize(markup.toByteArray(), HtmlSanitizer.Kind.XHTML).toString(Charsets.UTF_8)
+        val doc = Jsoup.parse(out, "", Parser.xmlParser())
+        assertTrue(doc.allElements.none { e -> e.attributes().any { it.key.lowercase().startsWith("data-lector-") } }, out)
+        assertEquals("x", doc.select("#b").attr("class"))
+        // Lo único que aún nombra data-lector- es el texto del <style> del libro.
+        val withoutStyles = doc.clone().apply { select("style").remove() }.outerHtml()
+        assertFalse(withoutStyles.contains("data-lector-", ignoreCase = true), withoutStyles)
+        assertTrue(doc.select("style").text().contains("data-lector-modo"))
+    }
+
     // Review Focus 5 (3c-2): un libro hostil no puede imitar las marcas de los modos para esconder texto en Solo
     // traducción (clase lector-oculto) ni fingir el modo (data-lector-modo en <html>) o el original mostrado.
     @Test fun `quita del libro la clase lector-oculto y los atributos de los modos`() {
