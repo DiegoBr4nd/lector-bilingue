@@ -298,8 +298,8 @@ class ModesOnDeviceTest {
     // ---------- Aviso único del capítulo ----------
 
     /**
-     * La banda del aviso: texto + ícono + botón de 48 dp; región viva con lo que oye TalkBack; con letra al 200 % el
-     * botón baja debajo del texto. Con `-e shots true`, capturas en claro y oscuro, letra 1 y 2.
+     * La banda del aviso: texto + ícono + botón de 48 dp; región viva con lo que oye TalkBack; a letra normal en una
+     * fila compacta; con letra al 200 % el texto entero y el botón debajo. Con `-e shots true`, capturas en claro y oscuro, letra 1 y 2.
      */
     @Test fun avisoDelCapituloSeOyeYSuBotonMide48() {
         var config by mutableStateOf(BandShot(dark = false, fontScale = 1f, texts = MISSING))
@@ -327,11 +327,16 @@ class ModesOnDeviceTest {
                 val button = rule.onNode(hasText(texts.action!!) and hasClickAction())
                 button.assertHeightIsAtLeast(48.dp)
                 val b = button.fetchSemanticsNode().boundsInRoot
-                // Diseño T6: compacta (texto en 2 líneas como máximo, botón en la misma fila), también con letra al 200 %.
-                assertTrue(b.top < message.boundsInRoot.bottom, "$where: el botón no está al lado")
                 val bandDp = rule.onNodeWithTag("shot").fetchSemanticsNode().size.height / (px / 360f)
                 Log.i(TAG, "banda $where: ${bandDp.toInt()} dp")
-                assertTrue(bandDp <= 97f, "$where: la banda mide $bandDp dp")
+                if (f == 1f) {
+                    // A letra normal: compacta (texto en 2 líneas como máximo, botón en la misma fila).
+                    assertTrue(b.top < message.boundsInRoot.bottom, "$where: el botón no está al lado")
+                    assertTrue(bandDp <= 97f, "$where: la banda mide $bandDp dp")
+                } else {
+                    // Puerta 3c-2: con letra al 200 % el botón baja debajo y el texto va entero (sin maxLines; ver captura).
+                    assertTrue(b.top >= message.boundsInRoot.bottom, "$where: el botón no está debajo del texto")
+                }
                 if (shots) {
                     val bmp = rule.onNodeWithTag("shot").captureToImage().asAndroidBitmap()
                     shotsDir.mkdirs()

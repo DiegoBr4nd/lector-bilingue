@@ -216,7 +216,7 @@ html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-or
 
 html[data-lector-modo="solo"] aside.lector-tarjeta.lector-tarjeta[data-lector-original] .lector-marca {
   display: inline-block !important;
-  font-size: 0.8em;
+  font-size: 0.9em;
   letter-spacing: 0.02em;
   color: var(--lector-espera) !important;
   background-color: transparent !important;
