@@ -1,7 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue.ui.howto
 
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +19,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,11 +43,12 @@ import io.github.diegobr4nd.lectorbilingue.ui.tips.FreeBooks
 
 /**
  * "Cómo se usa" (spec 3c-3 §5): secciones cortas con título (heading para TalkBack) y un ícono decorativo; libros
- * gratis; al final "Volver a ver los consejos". Sin estado propio salvo el aviso de "volverán a aparecer".
+ * gratis; al final "Volver a ver los consejos". Sin estado propio salvo el aviso de "volverán a aparecer" (se vuelve a decir en cada toque).
  */
 @Composable
 fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier = Modifier) {
-    var resetDone by rememberSaveable { mutableStateOf(false) }
+    // Veces que se tocó "Volver a ver los consejos": cada toque vuelve a decir el aviso (nodo nuevo con key).
+    var resets by rememberSaveable { mutableIntStateOf(0) }
     ScreenFrame(modifier) {
         Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -64,12 +65,20 @@ fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier 
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.l),
         ) {
-            Section(LectorIcons.Add, R.string.howto_add_title, R.string.howto_add_body)
-            Section(LectorIcons.Translate, R.string.howto_tap_title, R.string.howto_tap_body)
-            Section(LectorIcons.Tune, R.string.howto_modes_title, R.string.howto_modes_body)
-            Section(LectorIcons.Toc, R.string.howto_chapters_title, R.string.howto_chapters_body)
-            Section(LectorIcons.Download, R.string.howto_languages_title, R.string.howto_languages_body)
-            Section(LectorIcons.Lock, R.string.howto_privacy_title, R.string.howto_privacy_body)
+            // Los nombres de botones salen de los strings de esos botones (spec §3): así no se desalinean.
+            val add = stringResource(R.string.library_add)
+            val aa = stringResource(R.string.reading_aa)
+            val languages = stringResource(R.string.library_menu_languages)
+            Section(LectorIcons.Add, stringResource(R.string.howto_add_title), stringResource(R.string.howto_add_body, add))
+            Section(LectorIcons.Translate, stringResource(R.string.howto_tap_title), stringResource(R.string.howto_tap_body))
+            Section(LectorIcons.Tune, stringResource(R.string.howto_modes_title, aa), stringResource(R.string.howto_modes_body, aa))
+            Section(LectorIcons.Toc, stringResource(R.string.howto_chapters_title), stringResource(R.string.howto_chapters_body))
+            Section(
+                LectorIcons.Download,
+                stringResource(R.string.howto_languages_title),
+                stringResource(R.string.howto_languages_body, languages),
+            )
+            Section(LectorIcons.Lock, stringResource(R.string.howto_privacy_title), stringResource(R.string.howto_privacy_body))
             Text(
                 stringResource(R.string.howto_free_books_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -77,16 +86,18 @@ fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier 
             )
             FreeBooks(Modifier.fillMaxWidth())
             OutlinedButton(
-                onClick = { onResetTips(); resetDone = true },
+                onClick = { onResetTips(); resets++ },
                 shape = ButtonShape,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.howto_reset)) }
-            if (resetDone) {
-                Text(
-                    stringResource(R.string.howto_reset_done),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
+            if (resets > 0) {
+                key(resets) {
+                    Text(
+                        stringResource(R.string.howto_reset_done),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
             }
             BottomInsetSpacer()
         }
@@ -94,12 +105,12 @@ fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier 
 }
 
 @Composable
-private fun Section(@DrawableRes icon: Int, @StringRes title: Int, @StringRes body: Int) {
+private fun Section(@DrawableRes icon: Int, title: String, body: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
         Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Text(stringResource(title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            Text(stringResource(body), style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+            Text(body, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

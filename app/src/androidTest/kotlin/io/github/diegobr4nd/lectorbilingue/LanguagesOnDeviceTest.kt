@@ -194,7 +194,7 @@ class LanguagesOnDeviceTest {
                         LibraryContent(
                             state = LibraryUiState(loaded = true, notice = notice),
                             onAdd = {}, onOpen = {}, onDelete = {},
-                            onLanguages = onLanguages, onDeveloper = null,
+                            onLanguages = onLanguages, onHowTo = {}, onDeveloper = null,
                             snackbar = remember { SnackbarHostState() },
                         )
                     },

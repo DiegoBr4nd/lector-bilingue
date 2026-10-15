@@ -74,7 +74,7 @@ class LibraryOnDeviceTest {
         LectorTheme {
             LibraryContent(
                 state = state, onAdd = onAdd, onOpen = onOpen, onDelete = onDelete,
-                onLanguages = onLanguages, onDeveloper = null, snackbar = SnackbarHostState(),
+                onLanguages = onLanguages, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
             )
         }
     }
@@ -150,7 +150,7 @@ class LibraryOnDeviceTest {
                 background = MaterialTheme.colorScheme.background
                 LibraryContent(
                     state = sample, onAdd = {}, onOpen = {}, onDelete = {},
-                    onLanguages = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                    onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
                 )
             }
         }
@@ -181,7 +181,7 @@ class LibraryOnDeviceTest {
                     Box(Modifier.size(360.dp, 640.dp)) {
                         LibraryContent(
                             state = LibraryUiState(loaded = true, notice = LanguageNotice.NoLanguages), onAdd = {}, onOpen = {},
-                            onDelete = {}, onLanguages = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                            onDelete = {}, onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
                         )
                     }
                 }

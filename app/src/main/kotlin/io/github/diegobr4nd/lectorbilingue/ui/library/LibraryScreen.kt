@@ -206,10 +206,10 @@ fun LibraryContent(
     onOpen: (String) -> Unit,
     onDelete: (String) -> Unit,
     onLanguages: () -> Unit,
+    onHowTo: () -> Unit,
     onDeveloper: (() -> Unit)?,
     snackbar: SnackbarHostState,
     modifier: Modifier = Modifier,
-    onHowTo: () -> Unit = {},
 ) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
@@ -416,9 +416,10 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
 }
 
 /**
- * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande.
- * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, antes de la explicación:
- * así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba.
+ * Biblioteca vacía: qué hacer y por qué es seguro, con un botón grande y dónde conseguir libros gratis.
+ * Con la letra grande (desde 150 %) no hay dibujo y el botón va justo debajo del título, seguido de "Toca «Añadir
+ * libro»…" (TalkBack oye el botón y enseguida qué hace) y de los libros gratis; la explicación larga queda al final.
+ * Así "Añadir libro" se ve sin desplazar también en un teléfono pequeño con el aviso de idiomas arriba.
  */
 @Composable
 private fun EmptyLibrary(onAdd: () -> Unit) {
@@ -442,8 +443,17 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() },
         )
+        val how = @Composable {
+            Text(
+                stringResource(R.string.library_empty_how, stringResource(R.string.library_add)),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (largeText) {
             AddBookButton(onAdd)
+            how()
             FreeBooks(Modifier.fillMaxWidth())
         }
         Text(
@@ -452,13 +462,8 @@ private fun EmptyLibrary(onAdd: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Text(
-            stringResource(R.string.library_empty_how),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
         if (!largeText) {
+            how()
             Spacer(Modifier.height(Spacing.s))
             AddBookButton(onAdd)
             FreeBooks(Modifier.fillMaxWidth())

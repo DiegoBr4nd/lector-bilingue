@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.InputDevice
@@ -54,7 +55,10 @@ import io.github.diegobr4nd.lectorbilingue.data.ReadingMode
 import io.github.diegobr4nd.lectorbilingue.data.ReadingSettings
 import io.github.diegobr4nd.lectorbilingue.data.TipId
 import io.github.diegobr4nd.lectorbilingue.ui.reader.ReaderActivity
+import io.github.diegobr4nd.lectorbilingue.ui.tips.GUTENBERG_URL
+import io.github.diegobr4nd.lectorbilingue.ui.tips.STANDARD_EBOOKS_URL
 import io.github.diegobr4nd.lectorbilingue.ui.tips.TipCard
+import io.github.diegobr4nd.lectorbilingue.ui.tips.browserIntent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -127,9 +131,14 @@ class TipsOnDeviceTest {
         File(shotsDir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    /** La tarjeta: región viva con el texto, "Entendido" ≥ 48 dp; a letra normal en una fila; al 200 % botón debajo. */
+    /**
+     * La tarjeta: región viva con el texto DICHO (aparte del que se ve), "Entendido" ≥ 48 dp; a letra normal en una
+     * fila; al 200 % botón debajo. Sin anunciar (consejo que vuelve tras una hoja): el mismo texto, sin región viva.
+     */
     @Test fun tarjetaSeOyeYSuBotonMide48() {
         var config by mutableStateOf(Triple(false, 1f, text)) // oscuro, letra, texto
+        var announce by mutableStateOf(true)
+        val spoken = "$text (dicho)"
         var dismissed = 0
         ActivityScenario.launch(ComponentActivity::class.java).use { s ->
             var px = 0
@@ -140,7 +149,9 @@ class TipsOnDeviceTest {
                     CompositionLocalProvider(LocalDensity provides Density(px / 360f, fontScale = f)) {
                         LectorTheme(darkTheme = dark) {
                             Box(Modifier.size(360.dp, 500.dp), contentAlignment = Alignment.BottomCenter) {
-                                Column(Modifier.wrapContentHeight().testTag("shot")) { TipCard(shown, onDismiss = { dismissed++ }) }
+                                Column(Modifier.wrapContentHeight().testTag("shot")) {
+                                    TipCard(shown, onDismiss = { dismissed++ }, spoken = spoken, announce = announce)
+                                }
                             }
                         }
                     }
@@ -150,7 +161,7 @@ class TipsOnDeviceTest {
                 config = Triple(dark, f, text)
                 rule.waitForIdle()
                 val where = "${if (dark) "oscuro" else "claro"} letra ${(f * 100).toInt()}"
-                val message = rule.onNode(hasContentDescription(text)).fetchSemanticsNode()
+                val message = rule.onNode(hasContentDescription(spoken)).fetchSemanticsNode()
                 assertEquals(LiveRegionMode.Polite, message.config[SemanticsProperties.LiveRegion], "$where: región viva")
                 val button = rule.onNode(hasText(gotIt) and hasClickAction())
                 button.assertHeightIsAtLeast(48.dp)
@@ -159,6 +170,10 @@ class TipsOnDeviceTest {
                 else assertTrue(b.top >= message.boundsInRoot.bottom, "$where: el botón no está debajo")
                 if (shots) saveShot("tarjeta-${if (dark) "oscuro" else "claro"}${if (f == 2f) "-letra200" else ""}.png")
             }
+            announce = false
+            rule.waitForIdle()
+            val quiet = rule.onNode(hasContentDescription(spoken)).fetchSemanticsNode()
+            assertFalse(SemanticsProperties.LiveRegion in quiet.config, "sin anunciar no debe ser región viva")
             rule.onNode(hasText(gotIt) and hasClickAction()).performClick()
             assertEquals(1, dismissed)
         }
@@ -234,17 +249,15 @@ class TipsOnDeviceTest {
     @Test fun libroEnEspanolMuestraDireccion() = runBlocking<Unit> {
         // Sin traducir nada: no hace falta el modelo.
         openReader(ReaderTestBook.importAndOpen(app, dir).also { created += it }) { _ ->
-            val tipDirection = app.getString(
-                R.string.tip_direction,
-                app.getString(R.string.language_en),
-                app.getString(R.string.reader_direction, "ES", "EN"),
-            )
+            // Lo que dice TalkBack: el botón con el nombre que TalkBack le da (I1), no "ES → EN".
+            val buttonName = app.getString(R.string.reader_direction_desc, app.getString(R.string.language_es), app.getString(R.string.language_en))
+            val tipDirection = app.getString(R.string.tip_direction_spoken, app.getString(R.string.language_en), buttonName)
+            assertFalse("→" in tipDirection, "el consejo dicho lleva la flecha")
             waitForTip(tipDirection)
             assertFalse(hasTip(tipTap), "dos consejos a la vez")
             screenshot("direccion")
 
-            val button = app.getString(R.string.reader_direction_desc, app.getString(R.string.language_es), app.getString(R.string.language_en))
-            rule.onNodeWithContentDescription(button).performClick()
+            rule.onNodeWithContentDescription(buttonName).performClick()
             waitFor("consejo de dirección visto") { TipId.DIRECTION in app.settings.seenTipsFlow.value }
             // Con la hoja abierta no hay consejo; al cerrarla sale el siguiente.
             waitFor("hoja de dirección abierta") { rule.onAllNodes(hasText("Español → inglés")).fetchSemanticsNodes().isNotEmpty() }
@@ -268,7 +281,8 @@ class TipsOnDeviceTest {
             rule.waitForIdle()
             assertFalse(hasTip(tipTap), "el consejo se ve con la hoja Aa abierta")
             Espresso.pressBack()
-            waitForTip(tipTap)
+            // Vuelve el mismo, sin región viva: ya se dijo una vez (spec §4, m1).
+            waitForTip(tipTap, announced = false)
             assertFalse(TipId.TAP in app.settings.seenTipsFlow.value, "esconderlo no lo marca visto")
         }
     }
@@ -277,6 +291,7 @@ class TipsOnDeviceTest {
 
     /** Biblioteca vacía: "Toca «Añadir libro»…", los dos botones de libros gratis (≥ 48 dp); "Cómo se usa" desde ⋮. */
     @Test fun bibliotecaVaciaYComoSeUsa() {
+        val emptyHow = app.getString(R.string.library_empty_how, app.getString(R.string.library_add))
         var howTo by mutableStateOf(false)
         ActivityScenario.launch(ComponentActivity::class.java).use { s ->
             s.onActivity { a ->
@@ -289,9 +304,9 @@ class TipsOnDeviceTest {
                                 // Base vacía de prueba: nada de la biblioteca de Juan.
                                 LibraryContent(
                                     state = LibraryUiState(loaded = true),
-                                    onAdd = {}, onOpen = {}, onDelete = {}, onLanguages = {}, onDeveloper = null,
+                                    onAdd = {}, onOpen = {}, onDelete = {}, onLanguages = {},
+                                    onHowTo = { howTo = true }, onDeveloper = null,
                                     snackbar = SnackbarHostState(),
-                                    onHowTo = { howTo = true },
                                 )
                             }
                         }
@@ -299,7 +314,7 @@ class TipsOnDeviceTest {
                 }
             }
             rule.waitForIdle()
-            rule.onNodeWithText(app.getString(R.string.library_empty_how)).assertIsDisplayed()
+            rule.onNodeWithText(emptyHow).assertIsDisplayed()
             if (shots) saveShot("biblioteca-vacia.png")
             val gutenberg = app.getString(R.string.free_books_open_desc, app.getString(R.string.free_books_gutenberg))
             val standard = app.getString(R.string.free_books_open_desc, app.getString(R.string.free_books_standard))
@@ -314,11 +329,13 @@ class TipsOnDeviceTest {
             val heading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
             rule.onNode(hasText(app.getString(R.string.howto_title)) and heading).assertIsDisplayed()
             val sections = listOf(
-                R.string.howto_add_title, R.string.howto_tap_title, R.string.howto_modes_title,
-                R.string.howto_chapters_title, R.string.howto_languages_title, R.string.howto_privacy_title,
+                app.getString(R.string.howto_add_title), app.getString(R.string.howto_tap_title),
+                app.getString(R.string.howto_modes_title, app.getString(R.string.reading_aa)),
+                app.getString(R.string.howto_chapters_title), app.getString(R.string.howto_languages_title),
+                app.getString(R.string.howto_privacy_title),
             )
             for (title in sections) {
-                rule.onNode(hasText(app.getString(title)) and heading).assertExists("falta el título ${app.getString(title)}")
+                rule.onNode(hasText(title) and heading).assertExists("falta el título $title")
             }
             if (shots) saveShot("como-se-usa-arriba.png")
 
@@ -338,7 +355,7 @@ class TipsOnDeviceTest {
             // Atrás vuelve a la Biblioteca.
             rule.onNodeWithContentDescription(app.getString(R.string.languages_back)).performClick()
             rule.waitForIdle()
-            rule.onNodeWithText(app.getString(R.string.library_empty_how)).assertIsDisplayed()
+            rule.onNodeWithText(emptyHow).assertIsDisplayed()
         }
     }
 
@@ -375,21 +392,42 @@ class TipsOnDeviceTest {
         }
     }
 
+    /** Los enlaces de libros gratis: ver la dirección fija con una app de enlaces; desde una Activity, sin tarea nueva. */
+    @Test fun intencionDelNavegador() {
+        ActivityScenario.launch(ComponentActivity::class.java).use { s ->
+            s.onActivity { a ->
+                val intent = browserIntent(a, GUTENBERG_URL)
+                assertEquals(Intent.ACTION_VIEW, intent.action)
+                assertEquals(GUTENBERG_URL, intent.dataString)
+                assertTrue(intent.hasCategory(Intent.CATEGORY_BROWSABLE), "falta CATEGORY_BROWSABLE")
+                assertEquals(0, intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK, "desde una Activity no hace falta tarea nueva")
+            }
+        }
+        val fromApp = browserIntent(app, STANDARD_EBOOKS_URL)
+        assertEquals(STANDARD_EBOOKS_URL, fromApp.dataString)
+        assertTrue(fromApp.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0, "fuera de una Activity Android exige tarea nueva")
+    }
+
     // ---------- Ayudas del Lector ----------
 
     private val tipTap get() = app.getString(R.string.tip_tap)
-    private val tipHide get() = app.getString(R.string.tip_hide_modes)
+    private val tipHide get() = app.getString(R.string.tip_hide_modes_spoken, app.getString(R.string.reading_title))
     private val tipEdge get() = app.getString(R.string.tip_chapter_edge, app.getString(R.string.reader_toc))
 
-    /** El texto del consejo [text]: región viva Polite, como lo dibuja TipCard. */
-    private fun tipMatcher(text: String) =
-        hasContentDescription(text) and SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+    /**
+     * El consejo que TalkBack dice [text]. [announced]: región viva Polite (primera vez que sale en la sesión) o sin
+     * región viva (vuelve tras una hoja: ya se dijo).
+     */
+    private fun tipMatcher(text: String, announced: Boolean) = hasContentDescription(text) and
+        if (announced) SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite)
+        else SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion)
 
-    private fun tipNode(text: String): SemanticsNodeInteraction = rule.onNode(tipMatcher(text))
+    private fun tipNode(text: String): SemanticsNodeInteraction = rule.onNode(hasContentDescription(text))
 
-    private fun hasTip(text: String): Boolean = rule.onAllNodes(tipMatcher(text)).fetchSemanticsNodes().isNotEmpty()
+    private fun hasTip(text: String): Boolean = rule.onAllNodes(hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun waitForTip(text: String) = waitFor("consejo a la vista", 15_000) { hasTip(text) }
+    private fun waitForTip(text: String, announced: Boolean = true) =
+        waitFor("consejo a la vista", 15_000) { rule.onAllNodes(tipMatcher(text, announced)).fetchSemanticsNodes().isNotEmpty() }
 
     private suspend fun enEsInstalled(): Boolean {
         withTimeout(10_000) { app.hub.loaded.first { it } }

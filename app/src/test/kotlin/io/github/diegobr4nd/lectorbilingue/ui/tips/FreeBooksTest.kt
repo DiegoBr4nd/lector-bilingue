@@ -19,12 +19,14 @@ class FreeBooksTest {
     }
 
     @Test fun `sin navegador no se cierra la app`() {
-        assertFalse(openExternal(FakeContext(throws = true) as Context, GUTENBERG_URL))
+        assertFalse(startSafely(FakeContext(throws = true) as Context, Intent()))
     }
 
-    @Test fun `con navegador abre la direccion fija`() {
+    // En la JVM la Intent es de mentira (sin acción ni dirección): la Intent de verdad (acción, dirección fija,
+    // BROWSABLE, tarea nueva solo fuera de una Activity) la comprueba TipsOnDeviceTest.intencionDelNavegador.
+    @Test fun `con navegador pide abrir una sola vez`() {
         val c = FakeContext(throws = false)
-        assertTrue(openExternal(c, STANDARD_EBOOKS_URL))
+        assertTrue(startSafely(c, Intent()))
         assertEquals(1, c.started.size)
     }
 
