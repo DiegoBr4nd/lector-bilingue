@@ -40,11 +40,27 @@ class LicensesTest {
         }
     }
 
-    @Test fun `las librerias MIT o BSD llevan su aviso de copyright propio`() {
-        val needsNotice = Regex("MIT|BSD", RegexOption.IGNORE_CASE)
-        for (e in entries.filter { it.group == LicenseGroup.LIBRARIES && needsNotice.containsMatchIn(it.license) }) {
-            assertTrue(e.texts.first().startsWith("licencias/avisos/"), "${e.id} (${e.license}) sin aviso de copyright")
+    // Una línea de copyright de verdad: «Copyright», quizá «(c)» o «©», y un año. Las plantillas genéricas de SPDX
+    // («Copyright (c) <year> <copyright holders>») no cuentan: no nombran a nadie.
+    private val realCopyright = Regex("""copyright\s*(\(c\)|©)?\s*\d{4}""", RegexOption.IGNORE_CASE)
+
+    @Test fun `cada libreria trae su aviso de copyright salvo las que son solo Apache`() {
+        // Regla positiva (no por el nombre de la licencia): Apache-2.0 no exige aviso aparte; todo lo demás (MIT, BSD,
+        // licencias propias...) debe mostrar al menos un texto con una línea de copyright real.
+        val apacheOnly = Licenses.textPath("Apache-2.0")
+        for (e in entries.filter { it.group == LicenseGroup.LIBRARIES }) {
+            if (e.texts.all { it == apacheOnly }) continue
+            assertTrue(e.texts.any { realCopyright.containsMatchIn(read(it)) }, "${e.id} (${e.license}) sin aviso de copyright")
         }
+    }
+
+    @Test fun `la plantilla generica de MIT no cuenta como aviso`() {
+        assertFalse(realCopyright.containsMatchIn(read(Licenses.textPath("MIT"))))
+        assertFalse(realCopyright.containsMatchIn(read(Licenses.textPath("BSD-3-Clause"))))
+    }
+
+    @Test fun `los ids no se repiten`() {
+        assertEquals(entries.size, entries.map { it.id }.toSet().size, entries.groupBy { it.id }.filterValues { it.size > 1 }.keys.joinToString())
     }
 
     @Test fun `estan los componentes nativos fuentes e iconos conocidos`() {
@@ -55,6 +71,8 @@ class LicensesTest {
             "literata", "inter", "atkinson-hyperlegible", "material-symbols",
             // Fuentes que trae el navegador de Readium dentro de su AAR (van en el APK).
             "ia-writer-duospace", "accessible-dfa", "opendyslexic",
+            // JavaScript que trae el navegador de Readium dentro de su AAR (MIT/ISC, con sus avisos).
+            "readium-js", "readium-divina",
         )
         assertTrue(ids.containsAll(expected), "faltan: ${expected - ids}")
     }
@@ -82,6 +100,16 @@ class LicensesTest {
         assertFalse(JSONObject(g).has("metadata"), "trae metadata (fecha de generación)")
         assertFalse(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:""").containsMatchIn(g), "trae una fecha")
         assertFalse(Regex("""[A-Za-z]:\\\\|/home/|/Users/|\\\\Users\\\\""").containsMatchIn(g), "trae una ruta local")
+    }
+
+    @Test fun `unir las lineas de los textos reales es idempotente y no pierde palabras`() {
+        for (path in entries.flatMap { it.texts }.distinct()) {
+            val text = read(path)
+            val once = reflowLicense(text)
+            assertEquals(once, reflowLicense(once), path)
+            val words = { s: String -> s.split(Regex("""\s+""")).filter { it.isNotEmpty() } }
+            assertEquals(words(text), words(once), path)
+        }
     }
 
     @Test fun `ordenado por grupos`() {

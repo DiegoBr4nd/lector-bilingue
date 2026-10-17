@@ -2,6 +2,8 @@
   "version": 1,
   "entries": [
     { "id": "lector-bilingue", "group": "app", "name": "Lector bilingüe", "license": "GPL-3.0-or-later", "texts": ["licencias/textos/GPL-3.0-or-later.txt"], "url": "https://github.com/DiegoBr4nd/lector-bilingue" },
+    { "id": "readium-js", "group": "libraries", "name": "Scripts de Readium (approx-string-match, css-selector-generator, hash.js, string.prototype.matchall y dependencias)", "license": "MIT / ISC", "texts": ["licencias/avisos/readium-js.txt"], "url": "https://github.com/readium/kotlin-toolkit/tree/3.4.0/readium/navigator/src/main/assets/_scripts" },
+    { "id": "readium-divina", "group": "libraries", "name": "Lector Divina de Readium (PixiJS, Hammer.js y dependencias)", "license": "BSD-3-Clause / MIT / ISC", "texts": ["licencias/avisos/readium-divina.txt"], "url": "https://github.com/edrlab/divina-player-js" },
     { "id": "desugar-jdk-libs", "group": "libraries", "name": "desugar_jdk_libs (Google)", "license": "GPL-2.0-with-classpath-exception", "texts": ["licencias/textos/GPL-2.0-with-classpath-exception.txt"], "url": "https://github.com/google/desugar_jdk_libs" },
     { "id": "ctranslate2", "group": "native", "name": "CTranslate2", "license": "MIT", "texts": ["licencias/avisos/ctranslate2.txt"], "url": "https://github.com/OpenNMT/CTranslate2" },
     { "id": "ruy", "group": "native", "name": "ruy (Google)", "license": "Apache-2.0", "texts": ["licencias/avisos/ruy.txt"], "url": "https://github.com/google/ruy" },
@@ -16,7 +18,7 @@
     { "id": "slimt", "group": "native", "name": "slimt", "license": "GPL-2.0-or-later", "texts": ["licencias/avisos/slimt.txt"], "url": "https://github.com/jerinphilip/slimt" },
     { "id": "ssplit", "group": "native", "name": "ssplit-cpp (en slimt)", "license": "Apache-2.0", "texts": ["licencias/textos/Apache-2.0.txt"], "url": "https://github.com/browsermt/ssplit-cpp" },
     { "id": "bergamot-marian", "group": "native", "name": "bergamot-translator y marian-dev (en slimt)", "license": "MPL-2.0", "texts": ["licencias/textos/MPL-2.0.txt"], "url": "https://github.com/browsermt/bergamot-translator" },
-    { "id": "xhscanner", "group": "native", "name": "XH Scanner (en slimt)", "license": "BSD", "texts": ["licencias/avisos/xhscanner.txt"], "url": "https://www.codeproject.com/Articles/14076/Fast-and-Compact-HTML-XML-Scanner-Tokenizer" },
+    { "id": "xhscanner", "group": "native", "name": "XH Scanner (Andrew Fedoniouk, en slimt)", "license": "BSD-3-Clause", "texts": ["licencias/avisos/xhscanner.txt"], "url": "https://www.codeproject.com/Articles/14076/Fast-and-Compact-HTML-XML-Scanner-Tokenizer" },
     { "id": "literata", "group": "fonts_icons", "name": "Literata (The Literata Project Authors)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-Literata.txt"], "url": "https://github.com/googlefonts/literata" },
     { "id": "inter", "group": "fonts_icons", "name": "Inter (The Inter Project Authors)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-Inter.txt"], "url": "https://github.com/rsms/inter" },
     { "id": "atkinson-hyperlegible", "group": "fonts_icons", "name": "Atkinson Hyperlegible (Braille Institute of America)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-AtkinsonHyperlegible.txt"], "url": "https://www.brailleinstitute.org/freefont" },

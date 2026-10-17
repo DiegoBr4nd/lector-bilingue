@@ -1,0 +1,97 @@
+Scripts de Readium: readium-reflowable.js y readium-fixed.js (dentro de readium-navigator 3.4.0)
+
+Estos dos scripts los arma Readium con webpack a partir de los paquetes de npm de esta lista, en las versiones que fija el archivo pnpm-lock.yaml de readium/kotlin-toolkit en la etiqueta 3.4.0 (carpeta readium/navigator/src/main/assets/_scripts). Todos tienen licencia MIT salvo minimalistic-assert (ISC, su texto completo va al final).
+
+- approx-string-match 1.1.0 (MIT): Copyright (c) 2020 Robert Knight (la versión 1.1.0 no trae archivo de licencia; su package.json dice MIT y autor Robert Knight; la línea es la del LICENSE que el autor añadió después)
+- array-buffer-byte-length 1.0.0 (MIT): Copyright (c) 2023 Inspect JS
+- arraybuffer.prototype.slice 1.0.2 (MIT): Copyright (c) 2023 ECMAScript Shims
+- available-typed-arrays 1.0.5 (MIT): Copyright (c) 2020 Inspect JS
+- call-bind 1.0.2 (MIT): Copyright (c) 2020 Jordan Harband
+- css-selector-generator 3.6.6 (MIT): Copyright (c) 2018 Riki Fridrich <riki@fczbkk.com> (https://github.com/fczbkk)
+- define-data-property 1.1.0 (MIT): Copyright (c) 2023 Jordan Harband
+- define-properties 1.2.1 (MIT): Copyright (C) 2015 Jordan Harband
+- es-abstract 1.22.2 (MIT): Copyright (C) 2015 Jordan Harband
+- es-set-tostringtag 2.0.1 (MIT): Copyright (c) 2022 ECMAScript Shims
+- es-to-primitive 1.2.1 (MIT): Copyright (c) 2015 Jordan Harband
+- for-each 0.3.3 (MIT): Copyright (c) 2012 Raynos.
+- function-bind 1.1.1 (MIT): Copyright (c) 2013 Raynos.
+- function.prototype.name 1.1.6 (MIT): Copyright (c) 2016 Jordan Harband
+- functions-have-names 1.2.3 (MIT): Copyright (c) 2019 Jordan Harband
+- get-intrinsic 1.2.1 (MIT): Copyright (c) 2020 Jordan Harband
+- get-symbol-description 1.0.0 (MIT): Copyright (c) 2021 Inspect JS
+- globalthis 1.0.3 (MIT): Copyright (c) 2016 Jordan Harband
+- gopd 1.0.1 (MIT): Copyright (c) 2022 Jordan Harband
+- has-bigints 1.0.2 (MIT): Copyright (c) 2019 Jordan Harband
+- has-property-descriptors 1.0.0 (MIT): Copyright (c) 2022 Inspect JS
+- has-proto 1.0.1 (MIT): Copyright (c) 2022 Inspect JS
+- has-symbols 1.0.3 (MIT): Copyright (c) 2016 Jordan Harband
+- has-tostringtag 1.0.0 (MIT): Copyright (c) 2021 Inspect JS
+- hash.js 1.1.7 (MIT): Copyright Fedor Indutny, 2014. (sección «LICENSE» de su README; el paquete no trae archivo aparte)
+- internal-slot 1.0.5 (MIT): Copyright (c) 2019 Jordan Harband
+- is-array-buffer 3.0.2 (MIT): Copyright (c) 2015 Chen Gengyuan, Inspect JS
+- is-bigint 1.0.4 (MIT): Copyright (c) 2018 Jordan Harband
+- is-boolean-object 1.1.2 (MIT): Copyright (c) 2015 Jordan Harband
+- is-callable 1.2.7 (MIT): Copyright (c) 2015 Jordan Harband
+- is-date-object 1.0.5 (MIT): Copyright (c) 2015 Jordan Harband
+- is-negative-zero 2.0.2 (MIT): Copyright (c) 2014 Jordan Harband
+- is-number-object 1.0.7 (MIT): Copyright (c) 2015 Jordan Harband
+- is-regex 1.1.4 (MIT): Copyright (c) 2014 Jordan Harband
+- is-shared-array-buffer 1.0.2 (MIT): Copyright (c) 2021 Inspect JS
+- is-string 1.0.7 (MIT): Copyright (c) 2015 Jordan Harband
+- is-symbol 1.0.4 (MIT): Copyright (c) 2015 Jordan Harband
+- is-typed-array 1.1.12 (MIT): Copyright (c) 2015 Jordan Harband
+- is-weakref 1.0.2 (MIT): Copyright (c) 2020 Inspect JS
+- isarray 2.0.5 (MIT): Copyright (c) 2013 Julian Gruber <julian@juliangruber.com>
+- minimalistic-assert 1.0.1 (ISC): Copyright 2015 Calvin Metcalf
+- object-inspect 1.12.3 (MIT): Copyright (c) 2013 James Halliday
+- object-keys 1.1.1 (MIT): Copyright (C) 2013 Jordan Harband
+- object.assign 4.1.4 (MIT): Copyright (c) 2014 Jordan Harband
+- regexp.prototype.flags 1.5.1 (MIT): Copyright (C) 2014 Jordan Harband
+- safe-array-concat 1.0.1 (MIT): Copyright (c) 2023 Jordan Harband
+- safe-regex-test 1.0.0 (MIT): Copyright (c) 2022 Jordan Harband
+- set-function-name 2.0.1 (MIT): Copyright (c) Jordan Harband and contributors
+- side-channel 1.0.4 (MIT): Copyright (c) 2019 Jordan Harband
+- string.prototype.matchall 4.0.10 (MIT): Copyright (c) 2015 Jordan Harband
+- string.prototype.trim 1.2.8 (MIT): Copyright (c) 2015 Jordan Harband
+- string.prototype.trimend 1.0.7 (MIT): Copyright (c) 2017 Khaled Al-Ansari
+- string.prototype.trimstart 1.0.7 (MIT): Copyright (c) 2017 Khaled Al-Ansari
+- typed-array-buffer 1.0.0 (MIT): Copyright (c) 2023 Jordan Harband
+- typed-array-byte-length 1.0.0 (MIT): Copyright (c) 2020 Inspect JS
+- typed-array-byte-offset 1.0.0 (MIT): Copyright (c) 2020 Inspect JS
+- typed-array-length 1.0.4 (MIT): Copyright (c) 2020 Inspect JS
+- unbox-primitive 1.0.2 (MIT): Copyright (c) 2019 Jordan Harband
+- which-boxed-primitive 1.0.2 (MIT): Copyright (c) 2019 Jordan Harband
+- which-typed-array 1.1.11 (MIT): Copyright (c) 2015 Jordan Harband
+
+Texto de la licencia MIT (el mismo en todos los paquetes MIT de la lista; cada uno con su línea de copyright de arriba):
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+minimalistic-assert 1.0.1, licencia ISC:
+
+Copyright 2015 Calvin Metcalf
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
