@@ -1,8 +1,7 @@
 # Fuentes que lleva la app
 
-Todas con licencia **SIL Open Font License 1.1** (OFL). Cada familia lleva su texto de licencia al lado:
-`app/src/main/assets/lector/fuentes/OFL-*.txt` (las que sirve Readium al libro) y `core/ui/licencias/OFL-*.txt` (las de
-la interfaz, en `core/ui/src/main/res/font/`). Los archivos de los dos sitios son idénticos (mismas sumas).
+Todas con licencia **SIL Open Font License 1.1** (OFL). Hay **una sola copia** de cada archivo, en
+`core/ui/src/main/assets/lector/fuentes/` (la usan la interfaz y Readium), con su `OFL-*.txt` al lado.
 
 Sumas SHA-256 de los archivos tal como están en el repositorio.
 
@@ -10,7 +9,7 @@ Sumas SHA-256 de los archivos tal como están en el repositorio.
 Origen: https://github.com/googlefonts/literata/releases/download/3.103/3.103.zip (zip SHA-256
 `f7fb973cafb26cf785cbebaeaf51c18f87c15a3bcf4d82a7d4857564db5b056d`), carpeta `fonts/ttf/`.
 
-| En el repo (assets/lector/fuentes y res/font) | Archivo original | SHA-256 |
+| En el repo (core/ui/src/main/assets/lector/fuentes) | Archivo original | SHA-256 |
 |---|---|---|
 | `literata_regular.ttf` | `Literata-Regular.ttf` | `0390890de9bb9d5862a6ba4125b82c61792ccc3d66b63e73eee75c1a16fcd208` |
 | `literata_italic.ttf` | `Literata-Italic.ttf` | `198f70cc9a17bab578553fa274b81984d58c440efe26bc06f1d841c194b6691a` |
@@ -31,11 +30,11 @@ Origen: repositorio de Google Fonts `google/fonts`, carpeta `ofl/atkinsonhyperle
 `95f4904fc8bcf26d3420fe315560c96417c6dec7` (2026-03-03). Descarga directa:
 `https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/<archivo>` (2026-10-10).
 
-| En assets/lector/fuentes | En res/font | Archivo original | SHA-256 |
-|---|---|---|---|
-| `atkinson_hyperlegible_regular.ttf` | `atkinson_regular.ttf` | `AtkinsonHyperlegible-Regular.ttf` | `7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669` |
-| `atkinson_hyperlegible_italic.ttf` | `atkinson_italic.ttf` | `AtkinsonHyperlegible-Italic.ttf` | `021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514` |
-| `atkinson_hyperlegible_bold.ttf` | `atkinson_bold.ttf` | `AtkinsonHyperlegible-Bold.ttf` | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
-| `OFL-AtkinsonHyperlegible.txt` | (`core/ui/licencias/`) | `OFL.txt` | `f32d22b3908fcad2c86a74000614ec22e6a7f66ea7e867e616026a27aebdc143` |
+| En el repo | Archivo original | SHA-256 |
+|---|---|---|
+| `atkinson_hyperlegible_regular.ttf` | `AtkinsonHyperlegible-Regular.ttf` | `7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669` |
+| `atkinson_hyperlegible_italic.ttf` | `AtkinsonHyperlegible-Italic.ttf` | `021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514` |
+| `atkinson_hyperlegible_bold.ttf` | `AtkinsonHyperlegible-Bold.ttf` | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
+| `OFL-AtkinsonHyperlegible.txt` | `OFL.txt` (licencia OFL del proyecto) | `f32d22b3908fcad2c86a74000614ec22e6a7f66ea7e867e616026a27aebdc143` |
 
-Readium trae además sus propias fuentes (AccessibleDfA, iA Writer Duospace, OpenDyslexic) dentro de su biblioteca.
+Readium trae además sus propias fuentes (AccessibleDfA, iA Writer Duospace, OpenDyslexic) dentro de su biblioteca; sus avisos están en la pantalla «Licencias» (ver `docs/licencias/textos.md`).

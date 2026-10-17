@@ -2,12 +2,14 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.app.Application
 import android.graphics.Bitmap
+import androidx.core.graphics.scale
 import io.github.diegobr4nd.lectorbilingue.books.BookFiles
 import io.github.diegobr4nd.lectorbilingue.books.BookImporter
 import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.books.readium.ReadiumBooks
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorFonts
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.BookOpener
@@ -73,6 +75,7 @@ class LectorApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        LectorFonts.install(assets) // fuentes de la interfaz desde assets (una sola copia, compartida con el lector)
         // Restos de una importación cortada: fuera del hilo principal. Si falla, se reintenta en el próximo
         // arranque; no se registra nada (ni rutas ni nombres).
         Thread({ runCatching { bookFiles.cleanTmp() } }, "limpiar-tmp-libros").start()
@@ -81,7 +84,7 @@ class LectorApp : Application() {
     /** Portada reducida a 480 px de alto como máximo: suficiente para la lista y liviana. */
     private fun saveCover(bitmap: Bitmap, target: File) {
         val scale = minOf(1f, 480f / bitmap.height.coerceAtLeast(1))
-        val small = if (scale < 1f) Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1), 480, true) else bitmap
+        val small = if (scale < 1f) bitmap.scale((bitmap.width * scale).toInt().coerceAtLeast(1), 480) else bitmap
         target.outputStream().use { small.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

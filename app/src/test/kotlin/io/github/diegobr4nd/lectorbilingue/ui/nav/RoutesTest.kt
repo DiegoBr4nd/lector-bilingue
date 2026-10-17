@@ -6,7 +6,21 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class RoutesTest {
-    private val routes = listOf(Route.Welcome(1), Route.Welcome(2), Route.Welcome(3), Route.Library, Route.Languages, Route.HowTo)
+    private val routes = listOf(
+        Route.Welcome(1), Route.Welcome(2), Route.Welcome(3), Route.Library, Route.Languages, Route.HowTo,
+        Route.About, Route.Licenses, Route.License("org.readium.kotlin-toolkit:readium-navigator"),
+    )
+
+    @Test fun `acerca de y licencias se guardan con nombres fijos`() {
+        assertEquals("about", Route.About.encode())
+        assertEquals("licenses", Route.Licenses.encode())
+        assertEquals("license:slimt", Route.License("slimt").encode())
+    }
+
+    @Test fun `una licencia sin id no se recupera`() {
+        assertNull(decodeRoute("license:"))
+        assertEquals(Route.License("a:b:c"), decodeRoute("license:a:b:c"))
+    }
 
     @Test fun `cada ruta se guarda y se recupera igual`() {
         for (r in routes) assertEquals(r, decodeRoute(r.encode()))

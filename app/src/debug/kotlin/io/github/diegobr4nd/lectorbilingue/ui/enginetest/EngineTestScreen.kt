@@ -105,13 +105,13 @@ fun EngineTestContent(
     onInputChange: (String) -> Unit,
     onTranslate: () -> Unit,
     onBenchmark: () -> Unit,
+    modifier: Modifier = Modifier,
     onDownload: (String) -> Unit = {},
     onSelectEngine: (EngineSwitch) -> Unit = {},
     onSelectPair: (PairChoice) -> Unit = {},
     onDeleteModel: (String) -> Unit = {},
     onImport: () -> Unit = {},
     onCancelDownload: () -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Column(

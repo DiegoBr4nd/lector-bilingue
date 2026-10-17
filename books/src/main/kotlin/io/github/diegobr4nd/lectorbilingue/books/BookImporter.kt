@@ -1,5 +1,6 @@
 package io.github.diegobr4nd.lectorbilingue.books
 
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import io.github.diegobr4nd.lectorbilingue.books.db.BookDao
 import io.github.diegobr4nd.lectorbilingue.books.db.BookEntity
@@ -23,6 +24,9 @@ class BookImporter(
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
+    // usableSpace solo clasifica un fallo que ya ocurrió (¿fue por falta de espacio?): no reserva espacio.
+    // getAllocatableBytes contaría cachés que Android podría liberar y diría "hay espacio" justo cuando la copia falló por falta de él.
+    @SuppressLint("UsableSpace")
     suspend fun import(open: () -> InputStream?, fileName: String?): ImportResult = withContext(Dispatchers.IO) {
         val tmp = files.newTmp()
         val id = newId()

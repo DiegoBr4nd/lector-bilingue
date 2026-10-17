@@ -141,7 +141,8 @@
     <string name="languages_engine_auto">Automático</string>
     <string name="languages_engine_auto_line">Automático elige %1$s en tu teléfono (%2$s GB).</string>
     <string name="languages_import">Importar desde archivo (.zip)</string>
-    <string name="languages_working">Un momento…</string>
+    <!-- «momento» está bien escrito en español; el corrector de lint lo confunde con el inglés "memento". -->
+    <string name="languages_working" tools:ignore="Typos">Un momento…</string>
     <string name="languages_retry">Intentar de nuevo</string>
     <string name="languages_delete_title">¿Borrar %1$s?</string>
     <string name="languages_delete_body">Modelo %2$s. Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>
@@ -254,4 +255,29 @@
     <string name="howto_free_books_title">Libros gratis</string>
     <string name="howto_reset">Volver a ver los consejos</string>
     <string name="howto_reset_done">Los consejos volverán a aparecer</string>
+    <!-- 6a · Acerca de y comentarios -->
+    <string name="feedback_subject">%1$s · comentarios (%2$s)</string>
+    <string name="feedback_body">Escribe aquí tu comentario:\n\n\n---\nVersión de la app: %1$s (%2$s)\nAndroid: %3$s\nTeléfono: %4$s %5$s</string>
+    <string name="library_menu_about">Acerca de</string>
+    <string name="about_title">Acerca de</string>
+    <string name="about_version">Versión %1$s</string>
+    <string name="about_privacy">Traduce dentro del teléfono. Tus libros y lo que lees nunca salen de él.</string>
+    <string name="about_feedback">Enviar comentarios</string>
+    <string name="about_feedback_no_app">No hay una app de correo en este teléfono. Escríbenos a:</string>
+    <string name="about_models_title">Modelos de traducción</string>
+    <string name="about_model_opus">OPUS-MT, del Language Technology Research Group de la Universidad de Helsinki. Licencia CC-BY-4.0. Adaptados para funcionar dentro del teléfono.</string>
+    <string name="about_model_opus_en_es">Modelo inglés → español</string>
+    <string name="about_model_opus_es_en">Modelo español → inglés</string>
+    <string name="about_model_opus_license">Licencia CC-BY-4.0</string>
+    <string name="about_model_firefox">Firefox Translations, de Mozilla. Licencia MPL-2.0.</string>
+    <string name="about_model_firefox_open">Firefox Translations</string>
+    <string name="about_licenses">Licencias de código abierto</string>
+    <string name="licenses_title">Licencias</string>
+    <string name="licenses_group_libraries">Librerías</string>
+    <string name="licenses_group_native">Motores de traducción (código nativo)</string>
+    <string name="licenses_group_fonts">Fuentes e íconos</string>
+    <string name="licenses_open">Ver licencia</string>
+    <string name="licenses_source_code">Código fuente</string>
+    <string name="licenses_error">No se pudo cargar la lista de licencias.</string>
+    <string name="licenses_text_error">No se pudo abrir esta licencia.</string>
 </resources>

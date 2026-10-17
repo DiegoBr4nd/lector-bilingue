@@ -70,11 +70,13 @@ class LibraryOnDeviceTest {
         onOpen: (String) -> Unit = {},
         onDelete: (String) -> Unit = {},
         onLanguages: () -> Unit = {},
+        onAbout: () -> Unit = {},
     ) = rule.setContent {
         LectorTheme {
             LibraryContent(
                 state = state, onAdd = onAdd, onOpen = onOpen, onDelete = onDelete,
                 onLanguages = onLanguages, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                onAbout = onAbout,
             )
         }
     }
@@ -93,6 +95,15 @@ class LibraryOnDeviceTest {
         assertNull(deleted) // Nada se borra sin confirmar.
         rule.onNode(hasText("Borrar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         rule.runOnIdle { assertEquals(id, deleted) }
+    }
+
+    @Test
+    fun elMenuTieneAcercaDeYLoAbre() {
+        var clicked = false
+        show(sample, onAbout = { clicked = true })
+        rule.onNodeWithContentDescription("Más opciones").performClick()
+        rule.onNodeWithText("Acerca de").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertTrue(clicked) }
     }
 
     @Test

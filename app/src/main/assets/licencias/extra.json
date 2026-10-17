@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "entries": [
+    { "id": "lector-bilingue", "group": "app", "name": "Lector bilingüe", "license": "GPL-3.0-or-later", "texts": ["licencias/textos/GPL-3.0-or-later.txt"], "url": "https://github.com/DiegoBr4nd/lector-bilingue" },
+    { "id": "readium-js", "group": "libraries", "name": "Scripts de Readium (approx-string-match, css-selector-generator, hash.js, string.prototype.matchall y dependencias)", "license": "MIT / ISC", "texts": ["licencias/avisos/readium-js.txt"], "url": "https://github.com/readium/kotlin-toolkit/tree/3.4.0/readium/navigator/src/main/assets/_scripts" },
+    { "id": "readium-divina", "group": "libraries", "name": "Lector Divina de Readium (PixiJS, Hammer.js y dependencias)", "license": "BSD-3-Clause / MIT / ISC", "texts": ["licencias/avisos/readium-divina.txt"], "url": "https://github.com/edrlab/divina-player-js" },
+    { "id": "desugar-jdk-libs", "group": "libraries", "name": "desugar_jdk_libs (Google)", "license": "GPL-2.0-with-classpath-exception", "texts": ["licencias/textos/GPL-2.0-with-classpath-exception.txt"], "url": "https://github.com/google/desugar_jdk_libs" },
+    { "id": "ctranslate2", "group": "native", "name": "CTranslate2", "license": "MIT", "texts": ["licencias/avisos/ctranslate2.txt"], "url": "https://github.com/OpenNMT/CTranslate2" },
+    { "id": "ruy", "group": "native", "name": "ruy (Google)", "license": "Apache-2.0", "texts": ["licencias/avisos/ruy.txt"], "url": "https://github.com/google/ruy" },
+    { "id": "cpuinfo", "group": "native", "name": "cpuinfo", "license": "BSD-2-Clause", "texts": ["licencias/avisos/cpuinfo.txt"], "url": "https://github.com/pytorch/cpuinfo" },
+    { "id": "spdlog", "group": "native", "name": "spdlog", "license": "MIT", "texts": ["licencias/avisos/spdlog.txt"], "url": "https://github.com/gabime/spdlog" },
+    { "id": "bs-thread-pool", "group": "native", "name": "BS::thread_pool (en CTranslate2)", "license": "MIT", "texts": ["licencias/avisos/bs-thread-pool.txt"], "url": "https://github.com/bshoshany/thread-pool" },
+    { "id": "neon-mathfun", "group": "native", "name": "neon_mathfun (Julien Pommier, en CTranslate2)", "license": "Zlib", "texts": ["licencias/avisos/neon-mathfun.txt"], "url": "http://gruntthepeon.free.fr/ssemath/neon_mathfun.html" },
+    { "id": "abseil", "group": "native", "name": "Abseil", "license": "Apache-2.0", "texts": ["licencias/avisos/abseil.txt"], "url": "https://github.com/abseil/abseil-cpp" },
+    { "id": "sentencepiece", "group": "native", "name": "SentencePiece", "license": "Apache-2.0", "texts": ["licencias/avisos/sentencepiece.txt"], "url": "https://github.com/google/sentencepiece" },
+    { "id": "protobuf-lite", "group": "native", "name": "Protocol Buffers lite (en SentencePiece)", "license": "BSD-3-Clause", "texts": ["licencias/avisos/protobuf-lite.txt"], "url": "https://github.com/protocolbuffers/protobuf" },
+    { "id": "darts-clone", "group": "native", "name": "darts-clone (en SentencePiece)", "license": "BSD-2-Clause", "texts": ["licencias/avisos/darts-clone.txt"], "url": "https://github.com/s-yata/darts-clone" },
+    { "id": "slimt", "group": "native", "name": "slimt", "license": "GPL-2.0-or-later", "texts": ["licencias/avisos/slimt.txt"], "url": "https://github.com/jerinphilip/slimt" },
+    { "id": "ssplit", "group": "native", "name": "ssplit-cpp (en slimt)", "license": "Apache-2.0", "texts": ["licencias/textos/Apache-2.0.txt"], "url": "https://github.com/browsermt/ssplit-cpp" },
+    { "id": "bergamot-marian", "group": "native", "name": "bergamot-translator y marian-dev (en slimt)", "license": "MPL-2.0", "texts": ["licencias/textos/MPL-2.0.txt"], "url": "https://github.com/browsermt/bergamot-translator" },
+    { "id": "xhscanner", "group": "native", "name": "XH Scanner (Andrew Fedoniouk, en slimt)", "license": "BSD-3-Clause", "texts": ["licencias/avisos/xhscanner.txt"], "url": "https://www.codeproject.com/Articles/14076/Fast-and-Compact-HTML-XML-Scanner-Tokenizer" },
+    { "id": "literata", "group": "fonts_icons", "name": "Literata (The Literata Project Authors)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-Literata.txt"], "url": "https://github.com/googlefonts/literata" },
+    { "id": "inter", "group": "fonts_icons", "name": "Inter (The Inter Project Authors)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-Inter.txt"], "url": "https://github.com/rsms/inter" },
+    { "id": "atkinson-hyperlegible", "group": "fonts_icons", "name": "Atkinson Hyperlegible (Braille Institute of America)", "license": "OFL-1.1", "texts": ["lector/fuentes/OFL-AtkinsonHyperlegible.txt"], "url": "https://www.brailleinstitute.org/freefont" },
+    { "id": "material-symbols", "group": "fonts_icons", "name": "Material Symbols (Google)", "license": "Apache-2.0", "texts": ["licencias/avisos/material-symbols.txt"], "url": "https://github.com/google/material-design-icons" },
+    { "id": "ia-writer-duospace", "group": "fonts_icons", "name": "iA Writer Duospace (en Readium CSS)", "license": "OFL-1.1", "texts": ["licencias/avisos/ia-writer-duospace.txt"], "url": "https://github.com/iaolo/iA-Fonts" },
+    { "id": "accessible-dfa", "group": "fonts_icons", "name": "Accessible DfA (Orange, en Readium CSS)", "license": "OFL-1.1", "texts": ["licencias/avisos/accessible-dfa.txt"], "url": "https://github.com/Orange-OpenSource/font-accessible-dfa" },
+    { "id": "opendyslexic", "group": "fonts_icons", "name": "OpenDyslexic (Abelardo Gonzalez, en Readium)", "license": "Bitstream-Vera AND CC-BY-3.0", "texts": ["licencias/avisos/opendyslexic.txt", "licencias/textos/Bitstream-Vera.txt", "licencias/textos/CC-BY-3.0.txt"], "url": "https://opendyslexic.org" }
+  ]
+}

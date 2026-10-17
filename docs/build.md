@@ -165,6 +165,32 @@ Al agregar o actualizar una dependencia:
    Ojo: este comando también recompila el código nativo (CTranslate2), así que tarda bastante más.
 4. Revisar el diff de `verification-metadata.xml` en el PR. Solo deben aparecer los artefactos nuevos.
 5. Pedir revisión del agente de seguridad (regla 8 de CLAUDE.md).
+6. Regenerar la lista de licencias con su propio comando (sección siguiente).
+
+## Licencias de las librerías
+La pantalla «Licencias» lee dos archivos de `app/src/main/assets/licencias/`:
+- `librerias.json`: las librerías de Gradle que van en el APK de Play (variante `playRelease`). Lo escribe el
+  plugin **AboutLibraries** (un *plugin* de Gradle es una pieza que agrega tareas a la compilación). Solo corre
+  cuando se le pide: no se engancha a `assemble` y no mete código en el APK. Trabaja sin red (`offlineMode`).
+- `extra.json`: lo escribimos a mano. La app, el código nativo (CTranslate2, SentencePiece, slimt y lo que
+  traen dentro), las fuentes y los íconos.
+
+Cuándo regenerar `librerias.json`: al agregar, quitar o actualizar una dependencia.
+```bash
+./gradlew :app:exportLibraryDefinitions -PaboutLibraries.exportVariant=playRelease
+```
+El CI corre lo mismo y falla si el archivo del repo quedó viejo (paso «La lista de licencias está al día»).
+Siempre **solo**, en su propio comando: escribe dentro de `src/main/assets`, que lint y el empaquetado leen, y
+Gradle se niega a correrlo junto con esas tareas («implicit dependency»).
+
+Después de regenerar:
+1. Una clave de licencia nueva en `librerias.json` (mapa `licenses`) necesita su texto en
+   `licencias/textos/<clave>.txt` (texto oficial de SPDX; si la clave es un hash, el texto de su `url`).
+2. Una librería MIT o BSD necesita además su aviso de copyright en `licencias/avisos/<grupo>_<nombre>.txt`
+   (el `uniqueId` con `:` cambiado por `_`), copiado del `LICENSE` del proyecto.
+3. Código nativo o fuentes nuevas: agregar su fila en `extra.json` y su aviso en `licencias/avisos/`.
+4. Anotar el origen en `docs/licencias/textos.md`.
+5. `./gradlew :app:testFdroidDebugUnitTest --tests "*LicensesTest"` vigila que no falte nada.
 
 ## Reproducibilidad
 - Sin bloque de dependencias de Google en el APK (`dependenciesInfo`).
