@@ -122,4 +122,17 @@ class LicensesTest {
         assertNull(Licenses.parse(read(Licenses.GENERATED), "no es json") { true })
         assertNull(Licenses.parse("""{"libraries":[],"licenses":{}}""", """{"entries":[{"id":"x","group":"rara","name":"x","license":"x","texts":["a"]}]}""") { true })
     }
+
+    @Test fun `el enlace al codigo apunta al tag de la version`() {
+        assertEquals("https://github.com/DiegoBr4nd/lector-bilingue/tree/v0.9.0", Licenses.sourceCodeUrl("0.9.0"))
+        // La fila de la app sigue guardando la raíz del repositorio; la pantalla añade el tag.
+        assertTrue(Licenses.sourceCodeUrl("1.0.0").startsWith(entries.first().url!! + "/tree/"))
+    }
+
+    @Test fun `la version de la app es la de la prueba cerrada`() {
+        val gradle = File("build.gradle.kts").readText()
+        assertTrue(Regex("""versionName = "0\.9\.0"""").containsMatchIn(gradle), "versionName")
+        assertTrue(Regex("""versionCode = 1\b""").containsMatchIn(gradle), "versionCode")
+        assertFalse("versionNameSuffix" in gradle, "un sufijo rompería el enlace al tag")
+    }
 }

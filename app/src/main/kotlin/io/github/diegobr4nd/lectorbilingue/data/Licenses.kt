@@ -28,6 +28,9 @@ object Licenses {
     const val GENERATED = "licencias/librerias.json"
     const val EXTRA = "licencias/extra.json"
 
+    /** Código fuente de ESTA versión (GPL-3.0 §6): el tag `v<versionName>` que Juan crea al publicar. */
+    fun sourceCodeUrl(versionName: String): String = "https://github.com/DiegoBr4nd/lector-bilingue/tree/v$versionName"
+
     /** Aviso de copyright propio de una librería de Gradle (opcional; obligatorio para MIT/BSD, lo vigila la prueba). */
     fun noticePath(uniqueId: String): String = "licencias/avisos/" + uniqueId.replace(':', '_') + ".txt"
 

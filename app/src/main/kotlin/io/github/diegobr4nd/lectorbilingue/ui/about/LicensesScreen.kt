@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import io.github.diegobr4nd.lectorbilingue.BuildConfig
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.LicenseEntry
@@ -139,10 +140,16 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
                     verticalArrangement = Arrangement.spacedBy(Spacing.m),
                 ) {
                     Text(s.entry.license, style = MaterialTheme.typography.titleSmall)
-                    val url = s.entry.url
-                    if (s.entry.group == LicenseGroup.APP && url != null) {
+                    if (s.entry.group == LicenseGroup.APP) {
+                        val url = Licenses.sourceCodeUrl(BuildConfig.VERSION_NAME)
                         LinkButton(stringResource(R.string.licenses_source_code)) { openExternal(context, url) }
                         Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        val url = s.entry.url
+                        if (url != null) {
+                            LinkButton(stringResource(R.string.licenses_source_code)) { openExternal(context, url) }
+                            Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     SelectionContainer { Text(s.text, style = MaterialTheme.typography.bodySmall) }
                     BottomInsetSpacer()

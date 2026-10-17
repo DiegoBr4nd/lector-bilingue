@@ -99,7 +99,7 @@ class AboutOnDeviceTest {
 
     @Test fun laLicenciaDeLaAppTraeElCodigoFuente() {
         compose.setContent { LectorTheme { LicenseTextScreen(id = "lector-bilingue", onBack = {}) } }
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("https://github.com/DiegoBr4nd/lector-bilingue")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("https://github.com/DiegoBr4nd/lector-bilingue/tree/v0.9.0")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("GNU GENERAL PUBLIC LICENSE", substring = true)).assertExists()
     }
 

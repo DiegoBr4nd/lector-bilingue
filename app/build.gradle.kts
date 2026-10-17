@@ -69,7 +69,7 @@ android {
     defaultConfig {
         applicationId = "io.github.diegobr4nd.lectorbilingue"
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.9.0"
     }
     // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
     sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }
