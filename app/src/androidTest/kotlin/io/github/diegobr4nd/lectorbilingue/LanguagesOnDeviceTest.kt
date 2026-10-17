@@ -2,7 +2,11 @@ package io.github.diegobr4nd.lectorbilingue
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -13,6 +17,9 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -210,7 +217,7 @@ class LanguagesOnDeviceTest {
         rule.onNode(radio and hasText("Rápido")).performClick()
         androidx.test.espresso.Espresso.pressBack()
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Falta Rápido", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("Falta Rápido", substring = true).assertHeightIsAtLeast(48.dp)
+        rule.onNode(hasText("Descargar") and hasClickAction()).assertHeightIsAtLeast(48.dp)
     }
 
     /** Caché falso: [fail] hace fallar el borrado; [measureFails], la medida. Nunca toca la base real. */
@@ -266,5 +273,39 @@ class LanguagesOnDeviceTest {
         rule.onNodeWithText("Traducciones guardadas: tamaño desconocido").performScrollTo().assertExists()
         rule.onNodeWithText("Traducciones guardadas: ninguna").assertDoesNotExist()
         rule.onNodeWithContentDescription("Borrar las traducciones guardadas").assertIsEnabled()
+    }
+
+    /** Cuántos puntos de [image] son casi del color [target] (los bordes suavizados no cuentan). */
+    private fun pixelsLike(image: ImageBitmap, target: Color): Int {
+        val map = image.toPixelMap()
+        var n = 0
+        for (x in 0 until map.width) for (y in 0 until map.height) {
+            val c = map[x, y]
+            val d = kotlin.math.abs(c.red - target.red) + kotlin.math.abs(c.green - target.green) +
+                kotlin.math.abs(c.blue - target.blue)
+            if (d < 0.08f) n++
+        }
+        return n
+    }
+
+    /**
+     * Auditoría M3 (I1 y menor 2): sin traducciones guardadas, «Borrar» está apagado y se ve apagado (no en rojo);
+     * el «Borrar» del modelo, que sí está activo, va en el color de error como toda acción que borra.
+     */
+    @Test
+    fun borrar_apagado_no_se_ve_rojo_y_el_borrar_del_modelo_si() {
+        var error = Color.Unspecified
+        rule.setContent {
+            LectorTheme {
+                error = MaterialTheme.colorScheme.error
+                LanguagesScreen(hub = LangFakeHub(installedOpus()), settings = settings, onBack = {}, cache = LangFakeCache(0))
+            }
+        }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Motor").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Traducciones guardadas: ninguna").performScrollTo()
+        val apagado = rule.onNode(hasText("Borrar") and hasClickAction() and isNotEnabled()).assertIsNotEnabled()
+        assertEquals(0, pixelsLike(apagado.captureToImage(), error), "«Borrar» apagado se ve rojo, como si estuviera activo")
+        val modelo = rule.onNodeWithContentDescription("Borrar modelo Calidad, Inglés → español").performScrollTo()
+        assertTrue(pixelsLike(modelo.captureToImage(), error) > 0, "el «Borrar» del modelo no va en el color de error")
     }
 }

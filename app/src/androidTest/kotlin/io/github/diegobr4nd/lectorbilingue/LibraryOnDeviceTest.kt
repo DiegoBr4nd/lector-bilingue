@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
@@ -125,13 +126,45 @@ class LibraryOnDeviceTest {
         rule.runOnIdle { assertEquals(id, opened) }
     }
 
+    /** Auditoría M3 (I2): el aviso trae un botón de 48 dp («Descargar») que lleva a Idiomas; el texto ya no dice «· Descargar». */
     @Test
     fun elAvisoDeIdiomasLlevaAIdiomas() {
         var languages = 0
         show(sample.copy(notice = LanguageNotice.NoLanguages), onLanguages = { languages++ })
-        rule.onNodeWithText("Aún no tienes idiomas · Descargar").assertHeightIsAtLeast(48.dp).performClick()
+        rule.onNodeWithText("Aún no tienes idiomas").assertIsDisplayed()
+        rule.onNodeWithText("· Descargar", substring = true).assertDoesNotExist()
+        rule.onNode(hasText("Descargar") and hasClickAction()).assertHeightIsAtLeast(48.dp).performClick()
         rule.onNodeWithContentDescription("Más opciones").assertHeightIsAtLeast(48.dp)
         rule.runOnIdle { assertEquals(1, languages) }
+    }
+
+    @Test
+    fun siLaDescargaFalloElBotonDiceVerIdiomas() {
+        var languages = 0
+        show(sample.copy(notice = LanguageNotice.Failed("en-es")), onLanguages = { languages++ })
+        rule.onNodeWithText("Falló la descarga de", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Reintentar en Idiomas", substring = true).assertDoesNotExist()
+        rule.onNode(hasText("Ver idiomas") and hasClickAction()).assertHeightIsAtLeast(48.dp).performClick()
+        rule.runOnIdle { assertEquals(1, languages) }
+    }
+
+    /** Con letra al 200 % el texto se ve entero y el botón baja debajo (como la banda del Lector). */
+    @Test
+    fun conLetraGrandeElBotonDelAvisoVaDebajoDelTexto() {
+        rule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                LectorTheme {
+                    LibraryContent(
+                        state = sample.copy(notice = LanguageNotice.NoLanguages), onAdd = {}, onOpen = {}, onDelete = {},
+                        onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                    )
+                }
+            }
+        }
+        val text = rule.onNodeWithText("Aún no tienes idiomas").fetchSemanticsNode().boundsInRoot
+        val button = rule.onNode(hasText("Descargar") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue(button.top >= text.bottom - 1f, "el botón no bajó: texto ${text.bottom}, botón ${button.top}")
     }
 
     @Test
@@ -146,11 +179,14 @@ class LibraryOnDeviceTest {
         assertEquals(listOf("Libro sin título", "0 % leído"), untitled[SemanticsProperties.Text].map { it.text })
     }
 
+    /** TalkBack: una sola acción (el botón, «abrir Idiomas»); el texto se lee pero no es un segundo botón. */
     @Test
     fun elAvisoDiceQueAbreIdiomas() {
         show(sample.copy(notice = LanguageNotice.NoLanguages))
-        val notice = rule.onNodeWithText("Aún no tienes idiomas · Descargar").fetchSemanticsNode().config
-        assertEquals("abrir Idiomas", notice[SemanticsActions.OnClick].label)
+        rule.onNodeWithText("Aún no tienes idiomas").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        val button = rule.onNode(hasText("Descargar") and hasClickAction()).fetchSemanticsNode().config
+        assertEquals("abrir Idiomas", button[SemanticsActions.OnClick].label)
+        rule.onAllNodes(hasClickAction() and hasText("Descargar", substring = true)).assertCountEquals(1)
     }
 
     @Test

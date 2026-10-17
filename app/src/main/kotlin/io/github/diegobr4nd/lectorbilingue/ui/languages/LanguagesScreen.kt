@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -271,12 +272,14 @@ private fun CacheRow(bytes: Long?, enabled: Boolean, onClear: () -> Unit) {
             size == null -> null
             else -> stringResource(R.string.languages_cache_delete_description, size)
         }
+        // El rojo va en el botón, no en el texto: así, apagado, se atenúa como cualquier botón apagado.
         TextButton(
             onClick = onClear,
             enabled = enabled && LanguagesRules.canClearCache(bytes),
             shape = ButtonShape,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.heightIn(min = 48.dp).semantics { description?.let { contentDescription = it } },
-        ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }
+        ) { Text(stringResource(R.string.languages_cache_delete)) }
     }
 }
 

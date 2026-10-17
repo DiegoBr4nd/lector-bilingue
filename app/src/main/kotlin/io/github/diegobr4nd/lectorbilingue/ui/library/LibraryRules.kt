@@ -13,6 +13,9 @@ sealed interface LanguageNotice {
     data object NoLanguages : LanguageNotice
 }
 
+/** Botón del aviso de idiomas: «Descargar» si falta algo; «Ver idiomas» si ya se está bajando o falló. */
+enum class NoticeAction { DOWNLOAD, VIEW }
+
 /** Mensaje de error de importación. UNSAFE_ARCHIVE no tiene propio: no se dan pistas del ataque. */
 enum class LibraryMessage { NOT_EPUB, TOO_BIG, DRM, DAMAGED, NO_SPACE }
 
@@ -27,6 +30,11 @@ object LibraryRules {
             ?.let { return LanguageNotice.Failed(it.pair) }
         home.pairCards.firstOrNull { it.missing != null }?.let { return LanguageNotice.Missing(it.pair, it.missing!!) }
         return if (home.showNoLanguages) LanguageNotice.NoLanguages else null
+    }
+
+    fun noticeAction(notice: LanguageNotice): NoticeAction = when (notice) {
+        LanguageNotice.NoLanguages, is LanguageNotice.Missing -> NoticeAction.DOWNLOAD
+        is LanguageNotice.Downloading, is LanguageNotice.Failed -> NoticeAction.VIEW
     }
 
     fun message(reason: ImportError): LibraryMessage = when (reason) {

@@ -9,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -78,6 +78,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -420,7 +421,12 @@ internal fun noticeText(notice: LanguageNotice): String = when (notice) {
     LanguageNotice.NoLanguages -> stringResource(R.string.library_notice_none)
 }
 
-/** Aviso de idiomas: una tarjeta que lleva a Idiomas. Ícono y texto, nunca solo color. */
+/**
+ * Aviso de idiomas (auditoría M3, I2): el mismo esquema que la banda del Lector (`ChapterNoticeBand`).
+ * - Ícono + texto + un botón de 48 dp («Descargar» o «Ver idiomas»): nunca solo el color.
+ * - El botón va a la derecha; con letra grande (≥ 150 %) baja debajo del texto, que se ve entero.
+ * - TalkBack: el texto se lee y el botón es la única acción («Descargar, botón, … para abrir Idiomas»).
+ */
 @Composable
 private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier: Modifier = Modifier) {
     val failed = notice is LanguageNotice.Failed
@@ -430,34 +436,48 @@ private fun NoticeCard(notice: LanguageNotice, onLanguages: () -> Unit, modifier
         LanguageNotice.NoLanguages -> LectorIcons.Translate
     }
     val openLabel = stringResource(R.string.library_notice_action)
-    // Card sin onClick: el clic va en el modificador para poder decirle a TalkBack qué hace ("abrir Idiomas").
+    val actionText = stringResource(
+        if (LibraryRules.noticeAction(notice) == NoticeAction.DOWNLOAD) UiR.string.action_download else R.string.library_notice_view,
+    )
+    val colors = MaterialTheme.colorScheme
+    val content = if (failed) colors.onErrorContainer else colors.onSecondaryContainer
     Card(
-        colors = if (failed) {
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            )
-        } else {
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        },
+        colors = CardDefaults.cardColors(
+            containerColor = if (failed) colors.errorContainer else colors.secondaryContainer,
+            contentColor = content,
+        ),
         shape = MaterialTheme.shapes.medium,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.l, vertical = Spacing.s)
-            .heightIn(min = 48.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClickLabel = openLabel, onClick = onLanguages),
+        modifier = modifier.fillMaxWidth().padding(horizontal = Spacing.l, vertical = Spacing.s),
     ) {
-        Row(
-            Modifier.padding(horizontal = Spacing.l, vertical = Spacing.m),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.m),
-        ) {
-            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(24.dp))
-            Text(noticeText(notice), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        val message = @Composable { m: Modifier ->
+            Row(m, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
+                Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(24.dp))
+                Text(noticeText(notice), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        val button = @Composable {
+            TextButton(
+                onClick = onLanguages,
+                shape = ButtonShape,
+                colors = ButtonDefaults.textButtonColors(contentColor = content),
+                // Solo cambia lo que dice TalkBack tras «doble toque para…»; la acción es la del botón.
+                modifier = Modifier.heightIn(min = 48.dp).semantics { onClick(label = openLabel, action = null) },
+            ) { Text(actionText, style = MaterialTheme.typography.labelLarge) }
+        }
+        if (LocalDensity.current.fontScale >= LargeFontScale) {
+            Column(Modifier.padding(start = Spacing.l, end = Spacing.s, top = Spacing.m, bottom = Spacing.xs)) {
+                message(Modifier.fillMaxWidth())
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { button() }
+            }
+        } else {
+            Row(
+                Modifier.padding(start = Spacing.l, end = Spacing.s, top = Spacing.xs, bottom = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                message(Modifier.weight(1f).padding(vertical = Spacing.s))
+                Spacer(Modifier.size(Spacing.s))
+                button()
+            }
         }
     }
 }

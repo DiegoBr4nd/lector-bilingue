@@ -78,4 +78,12 @@ class LibraryRulesTest {
         assertEquals("Mi libro", LibraryRules.title("Mi libro"))
         assertNull(LibraryRules.title("")); assertNull(LibraryRules.title("   ")); assertNull(LibraryRules.title(null))
     }
+
+    // Auditoría M3 (I2): el aviso trae un botón. Si falta algo, «Descargar»; si ya baja o falló, «Ver idiomas».
+    @Test fun `el boton del aviso dice Descargar si falta algo y Ver idiomas si ya baja o fallo`() {
+        assertEquals(NoticeAction.DOWNLOAD, LibraryRules.noticeAction(LanguageNotice.NoLanguages))
+        assertEquals(NoticeAction.DOWNLOAD, LibraryRules.noticeAction(LanguageNotice.Missing("en-es", EngineKind.FAST)))
+        assertEquals(NoticeAction.VIEW, LibraryRules.noticeAction(LanguageNotice.Downloading("en-es", 10)))
+        assertEquals(NoticeAction.VIEW, LibraryRules.noticeAction(LanguageNotice.Failed("en-es")))
+    }
 }
