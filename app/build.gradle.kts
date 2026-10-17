@@ -73,6 +73,7 @@ tasks.withType<Test>().configureEach {
 // llega por ~/.gradle/gradle.properties (lector.firma=…) o la variable LECTOR_FIRMA: nunca desde el repositorio.
 // Sin ella, release sale sin firmar y la compilación sigue (CI, Claude, F-Droid).
 val firmaArchivo = providers.gradleProperty("lector.firma").orElse(providers.environmentVariable("LECTOR_FIRMA"))
+    .filter { it.isNotBlank() } // vacío = ausente (p. ej. LECTOR_FIRMA= en un entorno)
 
 android {
     namespace = "io.github.diegobr4nd.lectorbilingue"
@@ -80,6 +81,8 @@ android {
         applicationId = "io.github.diegobr4nd.lectorbilingue"
         versionCode = 1
         versionName = "0.9.0"
+        // Solo arm64: los motores son arm64 y Androidx (graphics-path) traía además x86 y armeabi-v7a al AAB.
+        ndk { abiFilters += "arm64-v8a" }
     }
     // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
     sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }

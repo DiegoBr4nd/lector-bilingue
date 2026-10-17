@@ -51,7 +51,7 @@ jobs:
           (cd tools/catalog && python -m unittest -v)
 
       - name: Lint, pruebas y APKs
-        run: ./gradlew --no-daemon lint test assembleFdroidRelease assemblePlayRelease
+        run: ./gradlew --no-daemon lint test assembleFdroidRelease assemblePlayRelease bundlePlayRelease assemblePlayPrueba
 
       # La lista de licencias de las librerías está en el repo (assets/licencias/librerias.json). Si alguien cambia
       # dependencias sin regenerarla, este paso falla: regenerar con el comando de docs/build.md.
@@ -64,7 +64,7 @@ jobs:
       # DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION es interno de AndroidX (firma, sin capacidades).
       - name: El manifest fusionado solo pide los permisos permitidos
         run: |
-          files=$(find app/build/intermediates -path '*Release*' -name AndroidManifest.xml)
+          files=$(find app/build/intermediates \( -path '*Release*' -o -path '*Prueba*' \) -name AndroidManifest.xml)
           test -n "$files"
           permitidos="android.permission.INTERNET
           android.permission.FOREGROUND_SERVICE
@@ -72,7 +72,8 @@ jobs:
           android.permission.POST_NOTIFICATIONS
           android.permission.WAKE_LOCK
           android.permission.ACCESS_NETWORK_STATE
-          io.github.diegobr4nd.lectorbilingue.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          io.github.diegobr4nd.lectorbilingue.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+          io.github.diegobr4nd.lectorbilingue.prueba.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
           encontrados=$(for f in $files; do tr -d '\n' < "$f" | grep -oE '<uses-permission[^>]*>' | grep -oE 'android:name="[^"]*"' | sed -e 's/^android:name="//' -e 's/"$//'; done | sort -u)
           echo "Permisos encontrados:"
           echo "$encontrados"
@@ -82,6 +83,41 @@ jobs:
             echo "$sobrantes"
             exit 1
           fi
+
+      # Reglas de Play para el AAB (spec 6b §3). Cada grep tiene control positivo: sin AAB, el paso falla.
+      - name: El AAB cumple las reglas de Play
+        run: |
+          aab=app/build/outputs/bundle/playRelease/app-play-release.aab
+          test -f "$aab" || { echo "::error::No existe el AAB"; exit 1; }
+          unzip -l "$aab" > "$RUNNER_TEMP/aab.txt"
+          grep -q "base/lib/arm64-v8a/libct2bridge.so" "$RUNNER_TEMP/aab.txt"
+          grep -q "base/lib/arm64-v8a/libslimtbridge.so" "$RUNNER_TEMP/aab.txt"
+          if grep -E "base/lib/" "$RUNNER_TEMP/aab.txt" | grep -v "arm64-v8a" | grep -q .; then echo "::error::ABI distinta de arm64"; exit 1; fi
+          if grep -q "readium/divina" "$RUNNER_TEMP/aab.txt"; then echo "::error::Divina en el AAB"; exit 1; fi
+          unzip -p "$aab" 'base/dex/*.dex' > "$RUNNER_TEMP/aabdex.bin"
+          unzip -p "$aab" base/resources.pb > "$RUNNER_TEMP/aabres.bin"
+          test -s "$RUNNER_TEMP/aabdex.bin" && test -s "$RUNNER_TEMP/aabres.bin"
+          if grep -a -q -e 'ui/enginetest' -e 'EngineTestScreen' "$RUNNER_TEMP/aabdex.bin"; then echo "::error::Desarrollador en el AAB"; exit 1; fi
+          if grep -a -q -e 'Prueba del motor' -e 'Mostrar Bienvenida otra vez' "$RUNNER_TEMP/aabres.bin"; then echo "::error::Textos de desarrollador en el AAB"; exit 1; fi
+
+      # 16 KB: Play exige que las .so carguen en teléfonos con páginas de 16 KB.
+      - name: Las librerías nativas están alineadas a 16 KB
+        run: |
+          readelf="$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          bt=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          apk=app/build/outputs/apk/play/release/app-play-release-unsigned.apk
+          test -f "$apk" || { echo "::error::No existe el APK play release"; exit 1; }
+          "$ANDROID_HOME/build-tools/$bt/zipalign" -c -P 16 -v 4 "$apk" > /dev/null
+          mkdir -p "$RUNNER_TEMP/so" && unzip -o -q "$apk" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/so"
+          n=0
+          for so in "$RUNNER_TEMP"/so/lib/arm64-v8a/*.so; do
+            n=$((n+1))
+            # Alineación del LOAD (última columna, hex): se compara con printf, portable (mawk no trae strtonum).
+            for al in $("$readelf" -l -W "$so" | awk '$1=="LOAD" { print $NF }'); do
+              [ $((al)) -ge 16384 ] || { echo "::error::$so no está alineada a 16 KB"; exit 1; }
+            done
+          done
+          test "$n" -ge 2
 
       - name: El APK release trae los motores arm64
         run: |
