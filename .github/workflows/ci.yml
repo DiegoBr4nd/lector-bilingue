@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  NDK_VERSION: "30.0.16248370"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -38,7 +41,7 @@ jobs:
       - name: NDK y CMake fijados
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370" "cmake;4.1.2"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" "cmake;4.1.2"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -66,6 +69,7 @@ jobs:
         run: |
           files=$(find app/build/intermediates \( -path '*Release*' -o -path '*Prueba*' \) -name AndroidManifest.xml)
           test -n "$files"
+          grep -q Prueba <<< "$files" || { echo "::error::no se encontró el manifest de prueba"; exit 1; }
           permitidos="android.permission.INTERNET
           android.permission.FOREGROUND_SERVICE
           android.permission.FOREGROUND_SERVICE_DATA_SYNC
@@ -92,7 +96,7 @@ jobs:
           unzip -l "$aab" > "$RUNNER_TEMP/aab.txt"
           grep -q "base/lib/arm64-v8a/libct2bridge.so" "$RUNNER_TEMP/aab.txt"
           grep -q "base/lib/arm64-v8a/libslimtbridge.so" "$RUNNER_TEMP/aab.txt"
-          if grep -E "base/lib/" "$RUNNER_TEMP/aab.txt" | grep -v "arm64-v8a" | grep -q .; then echo "::error::ABI distinta de arm64"; exit 1; fi
+          awk '/base\/lib\// && !/arm64-v8a/ {f=1} END{exit f}' "$RUNNER_TEMP/aab.txt" || { echo "::error::ABI distinta de arm64"; exit 1; }
           if grep -q "readium/divina" "$RUNNER_TEMP/aab.txt"; then echo "::error::Divina en el AAB"; exit 1; fi
           unzip -p "$aab" 'base/dex/*.dex' > "$RUNNER_TEMP/aabdex.bin"
           unzip -p "$aab" base/resources.pb > "$RUNNER_TEMP/aabres.bin"
@@ -103,7 +107,7 @@ jobs:
       # 16 KB: Play exige que las .so carguen en teléfonos con páginas de 16 KB.
       - name: Las librerías nativas están alineadas a 16 KB
         run: |
-          readelf="$ANDROID_HOME/ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          readelf="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           bt=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
           apk=app/build/outputs/apk/play/release/app-play-release-unsigned.apk
           test -f "$apk" || { echo "::error::No existe el APK play release"; exit 1; }
@@ -113,7 +117,9 @@ jobs:
           for so in "$RUNNER_TEMP"/so/lib/arm64-v8a/*.so; do
             n=$((n+1))
             # Alineación del LOAD (última columna, hex): se compara con printf, portable (mawk no trae strtonum).
-            for al in $("$readelf" -l -W "$so" | awk '$1=="LOAD" { print $NF }'); do
+            loads=$("$readelf" -l -W "$so" | awk '$1=="LOAD" { print $NF }')
+            [ -n "$loads" ] || { echo "::error::sin segmentos LOAD en $so"; exit 1; }
+            for al in $loads; do
               [ $((al)) -ge 16384 ] || { echo "::error::$so no está alineada a 16 KB"; exit 1; }
             done
           done
