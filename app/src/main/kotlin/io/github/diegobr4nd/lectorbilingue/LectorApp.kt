@@ -9,6 +9,7 @@ import io.github.diegobr4nd.lectorbilingue.books.BookRepository
 import io.github.diegobr4nd.lectorbilingue.books.MetadataRead
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.books.readium.ReadiumBooks
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorFonts
 import io.github.diegobr4nd.lectorbilingue.data.AndroidEngineProvider
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.BookOpener
@@ -74,6 +75,7 @@ class LectorApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        LectorFonts.install(assets) // fuentes de la interfaz desde assets (una sola copia, compartida con el lector)
         // Restos de una importación cortada: fuera del hilo principal. Si falla, se reintenta en el próximo
         // arranque; no se registra nada (ni rutas ni nombres).
         Thread({ runCatching { bookFiles.cleanTmp() } }, "limpiar-tmp-libros").start()

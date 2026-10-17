@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
 import io.github.diegobr4nd.lectorbilingue.LectorApp
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.FONTS_DIR
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.LectorTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
@@ -132,4 +133,4 @@ private fun EpubNavigatorFragment.Configuration.declareReadingFonts() {
 }
 
 /** Relativa a assets/: Readium la resuelve contra https://readium_assets/. */
-private const val FONTS = "lector/fuentes/"
+private const val FONTS = FONTS_DIR
