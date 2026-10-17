@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("lectorbilingue.android.application")
     id("lectorbilingue.android.compose")
@@ -67,6 +69,11 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("versionBuild").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
+// Firma de release con la llave de SUBIDA de Juan (docs/publicar-en-play.md). La ruta a su archivo de propiedades
+// llega por ~/.gradle/gradle.properties (lector.firma=…) o la variable LECTOR_FIRMA: nunca desde el repositorio.
+// Sin ella, release sale sin firmar y la compilación sigue (CI, Claude, F-Droid).
+val firmaArchivo = providers.gradleProperty("lector.firma").orElse(providers.environmentVariable("LECTOR_FIRMA"))
+
 android {
     namespace = "io.github.diegobr4nd.lectorbilingue"
     defaultConfig {
@@ -83,6 +90,38 @@ android {
     buildFeatures { buildConfig = true }
     // Readium trae su reproductor de cómics (Divina) en assets/readium/divina/; la app solo lee EPUB, así que no viaja.
     androidResources { ignoreAssetsPatterns += "<dir>divina" }
+    signingConfigs {
+        if (firmaArchivo.isPresent) {
+            val ruta = file(firmaArchivo.get())
+            check(ruta.isFile) { "No existe el archivo de firma indicado en lector.firma / LECTOR_FIRMA" }
+            val props = Properties().apply { ruta.reader().use { load(it) } }
+            fun valor(clave: String): String = props.getProperty(clave)?.takeIf { it.isNotBlank() }
+                ?: error("Falta «$clave» en el archivo de firma") // nunca se muestra el valor
+            create("subida") {
+                storeFile = file(valor("storeFile"))
+                storePassword = valor("storePassword")
+                keyAlias = valor("keyAlias")
+                keyPassword = valor("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            if (firmaArchivo.isPresent) signingConfig = signingConfigs.getByName("subida")
+            // Símbolos de las .so dentro del AAB (Play los usa para leer cierres nativos); el APK no cambia.
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
+        }
+        // Copia release para probar en el Pixel JUNTO a la app de Juan (spec 6b §3): R8 como release, firma de debug,
+        // otro applicationId (datos propios). Nunca se instala encima de io.github.diegobr4nd.lectorbilingue.
+        create("prueba") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".prueba"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+    }
+    // La copia de prueba usa el mismo «sin pantalla de desarrollador» que release.
+    sourceSets.getByName("prueba").kotlin.directories.add("src/release/kotlin")
 }
 
 dependencies {

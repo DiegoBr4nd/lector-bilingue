@@ -22,3 +22,6 @@ __pycache__/
 
 # Bocetos y bitácoras locales de las herramientas de Claude (nunca al repo)
 .superpowers/
+
+# Archivo de firma de la llave de subida (vive fuera del repo; por si se copia aquí por error)
+lector-subida.properties

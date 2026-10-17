@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Copia release de prueba (spec 6b §3): se distingue de la app de Juan bajo el ícono. -->
+    <string name="app_name">Lector (prueba)</string>
+</resources>
