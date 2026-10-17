@@ -53,8 +53,9 @@ aboutLibraries {
     }
 }
 
-// LicensesTest lee el catálogo real (assets y LICENSE): se declaran como entradas para que la prueba vuelva a
-// correr cuando cambian (si no, Gradle la daría por "al día" con archivos nuevos).
+// LicensesTest lee el catálogo real (assets y LICENSE) y la versión del build (versionCode, versionName):
+// se declaran como entradas para que la prueba vuelva a correr cuando cambian (si no, Gradle la daría por
+// "al día" con archivos nuevos).
 tasks.withType<Test>().configureEach {
     inputs.dir(layout.projectDirectory.dir("src/main/assets/licencias"))
         .withPropertyName("catalogoLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
@@ -62,6 +63,8 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("fuentesLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.layout.projectDirectory.file("LICENSE"))
         .withPropertyName("licenciaApp").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+        .withPropertyName("versionBuild").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 android {

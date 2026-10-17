@@ -144,12 +144,6 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
                         val url = Licenses.sourceCodeUrl(BuildConfig.VERSION_NAME)
                         LinkButton(stringResource(R.string.licenses_source_code)) { openExternal(context, url) }
                         Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        val url = s.entry.url
-                        if (url != null) {
-                            LinkButton(stringResource(R.string.licenses_source_code)) { openExternal(context, url) }
-                            Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
                     SelectionContainer { Text(s.text, style = MaterialTheme.typography.bodySmall) }
                     BottomInsetSpacer()
