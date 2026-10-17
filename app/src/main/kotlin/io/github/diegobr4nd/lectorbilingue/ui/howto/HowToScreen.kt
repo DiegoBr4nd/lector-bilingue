@@ -4,16 +4,12 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -25,7 +21,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -37,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ButtonShape
-import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.ui.BottomInsetSpacer
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
@@ -51,18 +45,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.tips.FreeBooks
 fun HowToScreen(onBack: () -> Unit, onResetTips: () -> Unit, modifier: Modifier = Modifier) {
     // Veces que se tocó "Volver a ver los consejos": cada toque vuelve a decir el aviso (nodo nuevo con key).
     var resets by rememberSaveable { mutableIntStateOf(0) }
-    ScreenFrame(modifier) {
-        Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                Icon(painterResource(LectorIcons.ArrowBack), contentDescription = stringResource(R.string.languages_back))
-            }
-            Spacer(Modifier.width(Spacing.s))
-            Text(
-                stringResource(R.string.howto_title),
-                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = ReadingFontFamily),
-                modifier = Modifier.semantics { heading() },
-            )
-        }
+    ScreenFrame(stringResource(R.string.howto_title), onBack, modifier) {
         val scroll = rememberScrollState()
         // Tras "Volver a ver los consejos" el aviso queda debajo del botón: se desplaza hasta el final para que se vea.
         LaunchedEffect(resets) {

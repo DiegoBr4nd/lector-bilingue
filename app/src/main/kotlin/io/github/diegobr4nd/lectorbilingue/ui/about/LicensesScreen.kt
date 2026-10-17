@@ -56,8 +56,7 @@ fun LicensesScreen(onBack: () -> Unit, onOpen: (String) -> Unit, modifier: Modif
 fun LicensesContent(state: LicensesState, onBack: () -> Unit, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
     val appName = stringResource(R.string.app_name)
     val openLabel = stringResource(R.string.licenses_open)
-    ScreenFrame(modifier) {
-        TitleRow(stringResource(R.string.licenses_title), onBack)
+    ScreenFrame(stringResource(R.string.licenses_title), onBack, modifier) {
         when (state) {
             LicensesState.Loading -> Unit
             LicensesState.Broken -> Text(stringResource(R.string.licenses_error), style = MaterialTheme.typography.bodyLarge)
@@ -126,15 +125,14 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
         }
     }
     val appName = stringResource(R.string.app_name)
-    ScreenFrame(modifier) {
+    // Mientras carga o si falla, el título es «Licencias»; listo, el nombre de la librería (o de la app).
+    val title = (state as? LicenseTextState.Ready)?.entry?.let { if (it.group == LicenseGroup.APP) appName else it.name }
+        ?: stringResource(R.string.licenses_title)
+    ScreenFrame(title, onBack, modifier) {
         when (val s = state) {
-            LicenseTextState.Loading -> TitleRow(stringResource(R.string.licenses_title), onBack)
-            LicenseTextState.Broken -> {
-                TitleRow(stringResource(R.string.licenses_title), onBack)
-                Text(stringResource(R.string.licenses_text_error), style = MaterialTheme.typography.bodyLarge)
-            }
+            LicenseTextState.Loading -> Unit
+            LicenseTextState.Broken -> Text(stringResource(R.string.licenses_text_error), style = MaterialTheme.typography.bodyLarge)
             is LicenseTextState.Ready -> {
-                TitleRow(if (s.entry.group == LicenseGroup.APP) appName else s.entry.name, onBack)
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(Spacing.m),

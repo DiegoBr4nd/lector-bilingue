@@ -10,20 +10,15 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -49,7 +44,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.diegobr4nd.lectorbilingue.R
-import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ButtonShape
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
@@ -83,8 +77,7 @@ fun AboutScreen(
     val appName = stringResource(R.string.app_name)
     val subject = stringResource(R.string.feedback_subject)
     val body = stringResource(R.string.feedback_body)
-    ScreenFrame(modifier) {
-        TitleRow(stringResource(R.string.about_title), onBack)
+    ScreenFrame(stringResource(R.string.about_title), onBack, modifier) {
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.l),
@@ -163,20 +156,4 @@ internal fun LinkButton(label: String, onClick: () -> Unit) {
         contentPadding = PaddingValues(horizontal = 0.dp),
         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = desc },
     ) { Text(label) }
-}
-
-/** Fila de arriba con atrás y título (igual que «Cómo se usa»). */
-@Composable
-internal fun TitleRow(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(painterResource(LectorIcons.ArrowBack), contentDescription = stringResource(R.string.languages_back))
-        }
-        Spacer(Modifier.width(Spacing.s))
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontFamily = ReadingFontFamily),
-            modifier = Modifier.semantics { heading() },
-        )
-    }
 }

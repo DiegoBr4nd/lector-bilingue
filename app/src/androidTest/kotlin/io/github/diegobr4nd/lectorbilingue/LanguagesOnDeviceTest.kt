@@ -308,4 +308,10 @@ class LanguagesOnDeviceTest {
         val modelo = rule.onNodeWithContentDescription("Borrar modelo Calidad, Inglés → español").performScrollTo()
         assertTrue(pixelsLike(modelo.captureToImage(), error) > 0, "el «Borrar» del modelo no va en el color de error")
     }
+
+    /** Auditoría M3 (I3): Idiomas con la barra superior común (también sin catálogo, con la fila de traducciones). */
+    @Test
+    fun idiomas_tiene_la_barra_comun() = rule.assertSharedTopBar("Idiomas") {
+        LanguagesScreen(hub = LangFakeHub(installedOpus()), settings = settings, onBack = {}, cache = LangFakeCache(0))
+    }
 }
