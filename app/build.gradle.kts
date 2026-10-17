@@ -76,6 +76,8 @@ android {
     // Readium (Theme) llama a android.graphics.Color.parseColor al cargarse; en la JVM devuelve 0 en vez de fallar.
     // Las pruebas nuevas no deben depender del fallo "Method ... not mocked": con esto ya no ocurre.
     testOptions { unitTests.isReturnDefaultValues = true }
+    // BuildConfig.VERSION_NAME y FLAVOR para «Acerca de» y el correo de comentarios.
+    buildFeatures { buildConfig = true }
 }
 
 dependencies {

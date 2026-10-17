@@ -255,4 +255,7 @@
     <string name="howto_free_books_title">Libros gratis</string>
     <string name="howto_reset">Volver a ver los consejos</string>
     <string name="howto_reset_done">Los consejos volverán a aparecer</string>
+    <!-- 6a · Acerca de y comentarios -->
+    <string name="feedback_subject" tools:keep="@string/feedback_subject">%1$s · comentarios (%2$s)</string>
+    <string name="feedback_body" tools:keep="@string/feedback_body">Escribe aquí tu comentario:\n\n\n---\nVersión de la app: %1$s (%2$s)\nAndroid: %3$s\nTeléfono: %4$s %5$s</string>
 </resources>
