@@ -1,0 +1,1226 @@
+{
+    "libraries": [
+        {
+            "uniqueId": "androidx.activity:activity",
+            "artifactVersion": "1.13.0",
+            "name": "Activity",
+            "website": "https://developer.android.com/jetpack/androidx/releases/activity#1.13.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.activity:activity-compose",
+            "artifactVersion": "1.13.0",
+            "name": "Activity Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/activity#1.13.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.activity:activity-ktx",
+            "artifactVersion": "1.13.0",
+            "name": "Activity Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/activity#1.13.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.annotation:annotation",
+            "artifactVersion": "1.10.0",
+            "name": "Annotation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/annotation#1.10.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.annotation:annotation-experimental",
+            "artifactVersion": "1.5.0",
+            "name": "Experimental annotation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/annotation#1.5.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.appcompat:appcompat",
+            "artifactVersion": "1.8.0",
+            "name": "AppCompat",
+            "website": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.8.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.appcompat:appcompat-resources",
+            "artifactVersion": "1.8.0",
+            "name": "AppCompat Resources",
+            "website": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.8.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.arch.core:core-common",
+            "artifactVersion": "2.2.0",
+            "name": "Android Arch-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.arch.core:core-runtime",
+            "artifactVersion": "2.2.0",
+            "name": "Android Arch-Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.asynclayoutinflater:asynclayoutinflater",
+            "artifactVersion": "1.0.0",
+            "name": "Support Async Layout Inflater",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.autofill:autofill",
+            "artifactVersion": "1.0.0",
+            "name": "AndroidX Autofill",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.browser:browser",
+            "artifactVersion": "1.10.0",
+            "name": "Browser",
+            "website": "https://developer.android.com/jetpack/androidx/releases/browser#1.10.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.collection:collection",
+            "artifactVersion": "1.6.0",
+            "name": "collections",
+            "website": "https://developer.android.com/jetpack/androidx/releases/collection#1.6.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.collection:collection-ktx",
+            "artifactVersion": "1.6.0",
+            "name": "Collections Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/collection#1.6.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.animation:animation",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Animation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-animation#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.animation:animation-core",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Animation Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-animation#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.foundation:foundation",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Foundation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.foundation:foundation-layout",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Layouts",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.material3:material3",
+            "artifactVersion": "1.4.0",
+            "name": "Compose Material3 Components",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.material:material-ripple",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Material Ripple",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-material#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.runtime:runtime",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.runtime:runtime-annotation",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Runtime Annotation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.runtime:runtime-retain",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Runtime Retain",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.runtime:runtime-saveable",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Saveable",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-runtime#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui",
+            "artifactVersion": "1.12.1",
+            "name": "Compose UI",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-geometry",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Geometry",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-graphics",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Graphics",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-text",
+            "artifactVersion": "1.12.1",
+            "name": "Compose UI Text",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-tooling-preview",
+            "artifactVersion": "1.12.1",
+            "name": "Compose UI Preview Tooling",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-unit",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Unit",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose.ui:ui-util",
+            "artifactVersion": "1.12.1",
+            "name": "Compose Util",
+            "website": "https://developer.android.com/jetpack/androidx/releases/compose-ui#1.12.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.compose:compose-bom",
+            "artifactVersion": "2026.09.00",
+            "name": "Jetpack Compose Libraries BOM",
+            "website": "https://developer.android.com/jetpack",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.concurrent:concurrent-futures",
+            "artifactVersion": "1.2.0",
+            "name": "Futures",
+            "website": "https://developer.android.com/jetpack/androidx/releases/concurrent#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.concurrent:concurrent-futures-ktx",
+            "artifactVersion": "1.2.0",
+            "name": "Futures Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/concurrent#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.constraintlayout:constraintlayout",
+            "artifactVersion": "2.2.2",
+            "name": "ConstraintLayout",
+            "website": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#2.2.2",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.constraintlayout:constraintlayout-core",
+            "artifactVersion": "1.1.2",
+            "name": "ConstraintLayout Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#1.1.2",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.coordinatorlayout:coordinatorlayout",
+            "artifactVersion": "1.0.0",
+            "name": "Support Coordinator Layout",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.core:core",
+            "artifactVersion": "1.19.1",
+            "name": "Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.19.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.core:core-ktx",
+            "artifactVersion": "1.19.1",
+            "name": "Core Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.19.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.core:core-viewtree",
+            "artifactVersion": "1.0.0",
+            "name": "androidx.core:core-viewtree",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.0.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.cursoradapter:cursoradapter",
+            "artifactVersion": "1.0.0",
+            "name": "Support Cursor Adapter",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.customview:customview",
+            "artifactVersion": "1.0.0",
+            "name": "Support Custom View",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.customview:customview-poolingcontainer",
+            "artifactVersion": "1.0.0",
+            "name": "androidx.customview:poolingcontainer",
+            "website": "https://developer.android.com/jetpack/androidx/releases/customview#1.0.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.databinding:viewbinding",
+            "artifactVersion": "9.3.1",
+            "name": "androidx.databinding:viewbinding",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.documentfile:documentfile",
+            "artifactVersion": "1.0.0",
+            "name": "Support Document File",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.drawerlayout:drawerlayout",
+            "artifactVersion": "1.0.0",
+            "name": "Support Drawer Layout",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.emoji2:emoji2",
+            "artifactVersion": "1.4.0",
+            "name": "Emoji2",
+            "website": "https://developer.android.com/jetpack/androidx/releases/emoji2#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.emoji2:emoji2-views-helper",
+            "artifactVersion": "1.4.0",
+            "name": "Emoji2 Views Helper",
+            "website": "https://developer.android.com/jetpack/androidx/releases/emoji2#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.exifinterface:exifinterface",
+            "artifactVersion": "1.3.6",
+            "name": "Support ExifInterface",
+            "website": "https://developer.android.com/jetpack/androidx/releases/exifinterface#1.3.6",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.fragment:fragment",
+            "artifactVersion": "1.9.1",
+            "name": "fragment",
+            "website": "https://developer.android.com/jetpack/androidx/releases/fragment#1.9.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.fragment:fragment-compose",
+            "artifactVersion": "1.9.1",
+            "name": "Fragment Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/fragment#1.9.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.fragment:fragment-ktx",
+            "artifactVersion": "1.9.1",
+            "name": "Fragment Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/fragment#1.9.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.graphics:graphics-path",
+            "artifactVersion": "1.0.1",
+            "name": "Android Graphics Path",
+            "website": "https://developer.android.com/jetpack/androidx/releases/graphics#1.0.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.interpolator:interpolator",
+            "artifactVersion": "1.0.0",
+            "name": "Support Interpolators",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.legacy:legacy-support-core-ui",
+            "artifactVersion": "1.0.0",
+            "name": "Support core UI",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.legacy:legacy-support-core-utils",
+            "artifactVersion": "1.0.0",
+            "name": "Support core utils",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-common",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-common-java8",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle-Common for Java 8",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle LiveData",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata-core",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle LiveData Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata-core-ktx",
+            "artifactVersion": "2.11.0",
+            "name": "LiveData Core Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-process",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle Process",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-runtime",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-runtime-compose",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle Runtime Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-runtime-ktx",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-service",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle Service",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle ViewModel",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel-compose",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle ViewModel Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel-ktx",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle ViewModel Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel-savedstate",
+            "artifactVersion": "2.11.0",
+            "name": "Lifecycle ViewModel with SavedState",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.loader:loader",
+            "artifactVersion": "1.0.0",
+            "name": "Support loader",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.localbroadcastmanager:localbroadcastmanager",
+            "artifactVersion": "1.0.0",
+            "name": "Support Local Broadcast Manager",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-common",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 common module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-common-ktx",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 common KTX module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-container",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 Container module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-database",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 database module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-datasource",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 DataSource module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-decoder",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 decoder module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-exoplayer",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 ExoPlayer module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-extractor",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 Extractor module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media3:media3-session",
+            "artifactVersion": "1.11.0",
+            "name": "Media3 Session module",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.media:media",
+            "artifactVersion": "1.7.0",
+            "name": "Media",
+            "website": "https://developer.android.com/jetpack/androidx/releases/media#1.7.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.navigation3:navigation3-runtime",
+            "artifactVersion": "1.2.0",
+            "name": "Androidx Navigation 3 Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/navigation3#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.navigation3:navigation3-ui",
+            "artifactVersion": "1.2.0",
+            "name": "Androidx Navigation 3 UI",
+            "website": "https://developer.android.com/jetpack/androidx/releases/navigation3#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.navigationevent:navigationevent",
+            "artifactVersion": "1.1.1",
+            "name": "Navigation Event",
+            "website": "https://developer.android.com/jetpack/androidx/releases/navigationevent#1.1.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.navigationevent:navigationevent-compose",
+            "artifactVersion": "1.1.1",
+            "name": "NavigationEvent Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/navigationevent#1.1.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.print:print",
+            "artifactVersion": "1.0.0",
+            "name": "Support Print",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.profileinstaller:profileinstaller",
+            "artifactVersion": "1.4.0",
+            "name": "Profile Installer",
+            "website": "https://developer.android.com/jetpack/androidx/releases/profileinstaller#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.recyclerview:recyclerview",
+            "artifactVersion": "1.4.0",
+            "name": "RecyclerView",
+            "website": "https://developer.android.com/jetpack/androidx/releases/recyclerview#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.resourceinspection:resourceinspection-annotation",
+            "artifactVersion": "1.0.1",
+            "name": "Android Resource Inspection - Annotations",
+            "website": "https://developer.android.com/jetpack/androidx/releases/resourceinspection#1.0.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.room:room-common",
+            "artifactVersion": "2.8.5",
+            "name": "Room-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/room#2.8.5",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.room:room-ktx",
+            "artifactVersion": "2.8.5",
+            "name": "Room Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/room#2.8.5",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.room:room-runtime",
+            "artifactVersion": "2.8.5",
+            "name": "Room-Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/room#2.8.5",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.savedstate:savedstate",
+            "artifactVersion": "1.4.0",
+            "name": "Saved State",
+            "website": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.savedstate:savedstate-compose",
+            "artifactVersion": "1.4.0",
+            "name": "Saved State Compose",
+            "website": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.savedstate:savedstate-ktx",
+            "artifactVersion": "1.4.0",
+            "name": "SavedState Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.slidingpanelayout:slidingpanelayout",
+            "artifactVersion": "1.0.0",
+            "name": "Support Sliding Pane Layout",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.sqlite:sqlite",
+            "artifactVersion": "2.6.2",
+            "name": "SQLite",
+            "website": "https://developer.android.com/jetpack/androidx/releases/sqlite#2.6.2",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.sqlite:sqlite-framework",
+            "artifactVersion": "2.6.2",
+            "name": "SQLite Framework Integration",
+            "website": "https://developer.android.com/jetpack/androidx/releases/sqlite#2.6.2",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.startup:startup-runtime",
+            "artifactVersion": "1.1.1",
+            "name": "Android App Startup Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/startup#1.1.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.swiperefreshlayout:swiperefreshlayout",
+            "artifactVersion": "1.0.0",
+            "name": "Support Custom View",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.tracing:tracing",
+            "artifactVersion": "2.0.0",
+            "name": "Tracing",
+            "website": "https://developer.android.com/jetpack/androidx/releases/tracing#2.0.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.tracing:tracing-ktx",
+            "artifactVersion": "2.0.0",
+            "name": "Tracing Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/tracing#2.0.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.vectordrawable:vectordrawable",
+            "artifactVersion": "1.1.0",
+            "name": "Support VectorDrawable",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.vectordrawable:vectordrawable-animated",
+            "artifactVersion": "1.1.0",
+            "name": "Support AnimatedVectorDrawable",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.versionedparcelable:versionedparcelable",
+            "artifactVersion": "1.1.1",
+            "name": "VersionedParcelable",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.viewpager:viewpager",
+            "artifactVersion": "1.0.0",
+            "name": "Support View Pager",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.webkit:webkit",
+            "artifactVersion": "1.17.0",
+            "name": "Webkit",
+            "website": "https://developer.android.com/jetpack/androidx/releases/webkit#1.17.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.window:window",
+            "artifactVersion": "1.5.0",
+            "name": "WindowManager",
+            "website": "https://developer.android.com/jetpack/androidx/releases/window#1.5.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.window:window-core",
+            "artifactVersion": "1.5.0",
+            "name": "WindowManager Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/window#1.5.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.work:work-runtime",
+            "artifactVersion": "2.12.0",
+            "name": "WorkManager Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/work#2.12.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.work:work-runtime-ktx",
+            "artifactVersion": "2.12.0",
+            "name": "WorkManager Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/work#2.12.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.guava:failureaccess",
+            "artifactVersion": "1.0.2",
+            "name": "Guava InternalFutureFailureAccess and InternalFutures",
+            "website": "https://github.com/google/guava/failureaccess",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.guava:guava",
+            "artifactVersion": "33.3.1-android",
+            "name": "Guava: Google Core Libraries for Java",
+            "website": "https://github.com/google/guava",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.guava:listenablefuture",
+            "artifactVersion": "9999.0-empty-to-avoid-conflict-with-guava",
+            "name": "Guava ListenableFuture only",
+            "website": "https://github.com/google/guava/listenablefuture",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.jakewharton.timber:timber",
+            "artifactVersion": "5.0.1",
+            "name": "Timber",
+            "website": "https://github.com/JakeWharton/timber",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.mcxiaoke.koi:core",
+            "artifactVersion": "0.5.5",
+            "name": "Koi Library Core Module",
+            "website": "https://github.com/mcxiaoke/kotlin-koi",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.bouncycastle:bcprov-jdk18on",
+            "artifactVersion": "1.86",
+            "name": "Bouncy Castle Provider",
+            "website": "https://www.bouncycastle.org/download/bouncy-castle-java/",
+            "licenses": [
+                "73252b46f36df25ef51a7994de439aea"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-parcelize-runtime",
+            "artifactVersion": "2.4.20",
+            "name": "Parcelize Runtime",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-reflect",
+            "artifactVersion": "2.4.20",
+            "name": "Kotlin Reflect",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib",
+            "artifactVersion": "2.4.21",
+            "name": "Kotlin Stdlib",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-coroutines-android",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-bom",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-coroutines-bom",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-coroutines-core",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-datetime",
+            "artifactVersion": "0.8.0",
+            "name": "kotlinx-datetime",
+            "website": "https://github.com/Kotlin/kotlinx-datetime",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-serialization-bom",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-serialization-bom",
+            "website": "https://github.com/Kotlin/kotlinx.serialization",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-serialization-core",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-serialization-core",
+            "website": "https://github.com/Kotlin/kotlinx.serialization",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-serialization-json",
+            "artifactVersion": "1.11.0",
+            "name": "kotlinx-serialization-json",
+            "website": "https://github.com/Kotlin/kotlinx.serialization",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains:annotations",
+            "artifactVersion": "23.0.0",
+            "name": "JetBrains Java Annotations",
+            "website": "https://github.com/JetBrains/java-annotations",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jsoup:jsoup",
+            "artifactVersion": "1.23.2",
+            "name": "jsoup Java HTML Parser",
+            "website": "https://jsoup.org/",
+            "licenses": [
+                "MIT"
+            ]
+        },
+        {
+            "uniqueId": "org.jspecify:jspecify",
+            "artifactVersion": "1.0.0",
+            "name": "JSpecify annotations",
+            "website": "http://jspecify.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.readium.kotlin-toolkit:readium-navigator",
+            "artifactVersion": "3.4.0",
+            "name": "readium-navigator",
+            "website": "https://github.com/readium/kotlin-toolkit",
+            "licenses": [
+                "35191b70082118c99b05fb11c25b7a6d"
+            ]
+        },
+        {
+            "uniqueId": "org.readium.kotlin-toolkit:readium-shared",
+            "artifactVersion": "3.4.0",
+            "name": "readium-shared",
+            "website": "https://github.com/readium/kotlin-toolkit",
+            "licenses": [
+                "35191b70082118c99b05fb11c25b7a6d"
+            ]
+        },
+        {
+            "uniqueId": "org.readium.kotlin-toolkit:readium-streamer",
+            "artifactVersion": "3.4.0",
+            "name": "readium-streamer",
+            "website": "https://github.com/readium/kotlin-toolkit",
+            "licenses": [
+                "35191b70082118c99b05fb11c25b7a6d"
+            ]
+        }
+    ],
+    "licenses": {
+        "35191b70082118c99b05fb11c25b7a6d": {
+            "name": "BSD-3-Clause license",
+            "url": "https://github.com/readium/kotlin-toolkit/blob/main/LICENSE",
+            "hash": "35191b70082118c99b05fb11c25b7a6d"
+        },
+        "73252b46f36df25ef51a7994de439aea": {
+            "name": "Bouncy Castle Licence",
+            "url": "https://www.bouncycastle.org/licence.html",
+            "hash": "73252b46f36df25ef51a7994de439aea"
+        },
+        "Apache-2.0": {
+            "name": "The Apache License, Version 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+            "internalHash": "Apache-2.0",
+            "spdxId": "Apache-2.0",
+            "hash": "Apache-2.0"
+        },
+        "MIT": {
+            "name": "The MIT License",
+            "url": "https://jsoup.org/license",
+            "internalHash": "MIT",
+            "spdxId": "MIT",
+            "hash": "MIT"
+        }
+    }
+}

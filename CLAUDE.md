@@ -35,6 +35,7 @@ Detalles y evidencia: `docs/contexto-y-decisiones.md`.
 - Pruebas: `./gradlew test`
 - Lint: `./gradlew lint`
 - Instalar en el teléfono: `./gradlew installFdroidDebug` (Pixel conectado por USB con depuración activada)
+- Regenerar la lista de licencias (tras cambiar dependencias): `./gradlew :app:exportLibraryDefinitions -PaboutLibraries.exportVariant=playRelease`
 
 (El agente de infraestructura actualiza esta sección cuando cambien.)
 

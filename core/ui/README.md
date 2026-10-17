@@ -29,5 +29,5 @@ Zips originales: Inter-4.1.zip `9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde
   (igual con 600 y 700). Las fuentes Literata son `literata_regular.ttf`, `literata_semibold.ttf`, `literata_italic.ttf`. Se cargan de assets en `Fonts.kt`.
 
 ## Íconos
-Material Symbols **Rounded**, peso 400, relleno 0, tamaño óptico 24, vectores de Android ya generados por Google (`symbols/android/<nombre>/materialsymbolsrounded/<nombre>_24px.xml`) en https://github.com/google/material-design-icons, commit `737e3324305806514d7909874fa1818ae1808232`. Licencia Apache-2.0 en `ICONOS-LICENSE.txt`.
+Material Symbols **Rounded**, peso 400, relleno 0, tamaño óptico 24, vectores de Android ya generados por Google (`symbols/android/<nombre>/materialsymbolsrounded/<nombre>_24px.xml`) en https://github.com/google/material-design-icons, commit `737e3324305806514d7909874fa1818ae1808232`. Licencia Apache-2.0 en `app/src/main/assets/licencias/avisos/material-symbols.txt` (se muestra en «Licencias»).
 Cambio local único: `?attr/colorControlNormal` pasó a `?android:attr/colorControlNormal` (la biblioteca no incluye AppCompat). Nombres: `ic_<nombre>`.

@@ -1,6 +1,7 @@
 plugins {
     id("lectorbilingue.android.application")
     id("lectorbilingue.android.compose")
+    alias(libs.plugins.aboutlibraries)
 }
 
 // Copia SOLO sustitutos.txt (textos sin copyright) a una carpeta generada; así un archivo
@@ -31,6 +32,36 @@ androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(copyBenchAssets, CopyBenchAssets::outputDir)
     }
+}
+
+// Lista de licencias de las librerías (pantalla «Licencias»). Se genera A MANO y se guarda en el repo:
+//   ./gradlew :app:exportLibraryDefinitions -PaboutLibraries.exportVariant=playRelease
+// Siempre solo (sin lint ni assemble en el mismo comando): escribe en src/main/assets, que esas tareas leen.
+// El CI la vuelve a generar y falla si cambió (una dependencia nueva sin su licencia en la lista).
+// Es el plugin "core" (no el de Android): no se engancha a la compilación ni mete nada en el APK.
+aboutLibraries {
+    offlineMode = true // sin red al compilar: los textos de licencia van en assets/licencias/textos/
+    collect {
+        fetchRemoteLicense = false
+        fetchRemoteFunding = false
+    }
+    export {
+        outputFile = file("src/main/assets/licencias/librerias.json")
+        prettyPrint = true
+        // Sin fecha de generación ni datos que no mostramos: el archivo sale igual en cualquier máquina.
+        excludeFields.addAll("metadata", "description", "developers", "organization", "funding", "scm")
+    }
+}
+
+// LicensesTest lee el catálogo real (assets y LICENSE): se declaran como entradas para que la prueba vuelva a
+// correr cuando cambian (si no, Gradle la daría por "al día" con archivos nuevos).
+tasks.withType<Test>().configureEach {
+    inputs.dir(layout.projectDirectory.dir("src/main/assets/licencias"))
+        .withPropertyName("catalogoLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(rootProject.layout.projectDirectory.dir("core/ui/src/main/assets/lector/fuentes"))
+        .withPropertyName("fuentesLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(rootProject.layout.projectDirectory.file("LICENSE"))
+        .withPropertyName("licenciaApp").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 android {

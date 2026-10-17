@@ -1,0 +1,6 @@
+OpenDyslexic 2.001 (Abelardo Gonzalez), copia que trae Readium.
+Aviso de copyright y licencia tal como viene dentro de la fuente (tabla 'name', campo Copyright):
+
+Original Fonts are © Bitstream. OpenDyslexic changes and additional glyphs by Abelardo Gonzalez are licensed under a Creative Commons Attribution 3.0 Unported License.
+Based on a work at http://dyslexicfonts.com. ♡2012 by Abelardo Gonzalez. Copying is an act of love. Please copy.
+Bitstream license available here: http://opendyslexic.org/legal/

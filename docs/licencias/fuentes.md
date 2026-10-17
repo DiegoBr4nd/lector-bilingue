@@ -37,4 +37,4 @@ Origen: repositorio de Google Fonts `google/fonts`, carpeta `ofl/atkinsonhyperle
 | `atkinson_hyperlegible_bold.ttf` | `AtkinsonHyperlegible-Bold.ttf` | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
 | `OFL-AtkinsonHyperlegible.txt` | `OFL.txt` (licencia OFL del proyecto) | `f32d22b3908fcad2c86a74000614ec22e6a7f66ea7e867e616026a27aebdc143` |
 
-Readium trae además sus propias fuentes (AccessibleDfA, iA Writer Duospace, OpenDyslexic) dentro de su biblioteca.
+Readium trae además sus propias fuentes (AccessibleDfA, iA Writer Duospace, OpenDyslexic) dentro de su biblioteca; sus avisos están en la pantalla «Licencias» (ver `docs/licencias/textos.md`).

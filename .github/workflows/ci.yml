@@ -53,6 +53,13 @@ jobs:
       - name: Lint, pruebas y APKs
         run: ./gradlew --no-daemon lint test assembleFdroidRelease assemblePlayRelease
 
+      # La lista de licencias de las librerías está en el repo (assets/licencias/librerias.json). Si alguien cambia
+      # dependencias sin regenerarla, este paso falla: regenerar con el comando de docs/build.md.
+      - name: La lista de licencias está al día
+        run: |
+          ./gradlew --no-daemon :app:exportLibraryDefinitions -PaboutLibraries.exportVariant=playRelease
+          git diff --exit-code -- app/src/main/assets/licencias/librerias.json
+
       # Lista exacta: cualquier permiso nuevo en el manifest fusionado de release rompe el CI.
       # DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION es interno de AndroidX (firma, sin capacidades).
       - name: El manifest fusionado solo pide los permisos permitidos
