@@ -123,6 +123,7 @@ fun LibraryScreen(
     onLanguages: () -> Unit,
     onDeveloper: (() -> Unit)?,
     onHowTo: () -> Unit,
+    onAbout: () -> Unit,
     onOpenBook: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -189,6 +190,7 @@ fun LibraryScreen(
         modifier = modifier,
         showHowToCard = tipsLoaded && TipId.LIBRARY_HOWTO !in seenTips,
         onHowToCardClose = { app.settings.markTipSeen(TipId.LIBRARY_HOWTO) },
+        onAbout = onAbout,
     )
     failedId?.let { id ->
         OpenFailedDialog(
@@ -224,6 +226,7 @@ fun LibraryContent(
     /** Tarjeta "¿Primera vez? Mira cómo se usa la app" arriba de la lista (3c-3, puerta de Juan). */
     showHowToCard: Boolean = false,
     onHowToCardClose: () -> Unit = {},
+    onAbout: () -> Unit = {},
 ) {
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
@@ -248,7 +251,7 @@ fun LibraryContent(
                     IconButton(onClick = onHowTo, modifier = Modifier.size(48.dp)) {
                         Icon(painterResource(LectorIcons.Help), contentDescription = stringResource(R.string.library_menu_howto))
                     }
-                    OverflowMenu(onLanguages, onHowTo, onDeveloper)
+                    OverflowMenu(onLanguages, onHowTo, onAbout, onDeveloper)
                 },
                 // En reposo, del color del fondo: sin franja de otro tono. Al desplazar la lista sí cambia (se nota el borde).
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -351,7 +354,7 @@ private fun Modifier.animatedItem(scope: LazyItemScope, reduceMotion: Boolean): 
     if (reduceMotion) this else with(scope) { this@animatedItem.animateItem() }
 
 @Composable
-private fun OverflowMenu(onLanguages: () -> Unit, onHowTo: () -> Unit, onDeveloper: (() -> Unit)?) {
+private fun OverflowMenu(onLanguages: () -> Unit, onHowTo: () -> Unit, onAbout: () -> Unit, onDeveloper: (() -> Unit)?) {
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
@@ -372,6 +375,14 @@ private fun OverflowMenu(onLanguages: () -> Unit, onHowTo: () -> Unit, onDevelop
                 onClick = {
                     menuOpen = false
                     onHowTo()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_menu_about)) },
+                leadingIcon = { Icon(painterResource(LectorIcons.Info), contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onAbout()
                 },
             )
             if (onDeveloper != null) {

@@ -21,8 +21,8 @@ class MainActivity : ComponentActivity() {
                     hub = app.hub,
                     translationCache = app.translations,
                     onClose = { finish() },
-                    library = { onLanguages, onDeveloper, onHowTo ->
-                        LibraryScreen(app, onLanguages, onDeveloper, onHowTo, onOpenBook = { id -> startActivity(ReaderActivity.intent(this, id)) })
+                    library = { onLanguages, onDeveloper, onHowTo, onAbout ->
+                        LibraryScreen(app, onLanguages, onDeveloper, onHowTo, onAbout, onOpenBook = { id -> startActivity(ReaderActivity.intent(this, id)) })
                     },
                 )
             }

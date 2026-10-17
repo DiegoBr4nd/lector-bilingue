@@ -9,6 +9,10 @@ sealed interface Route {
     data object Languages : Route
     data object Developer : Route
     data object HowTo : Route
+    data object About : Route
+    data object Licenses : Route
+    /** Texto de una licencia; [id] es el de [io.github.diegobr4nd.lectorbilingue.data.LicenseEntry]. */
+    data class License(val id: String) : Route
 
     companion object {
         /** La Bienvenida tiene 3 pasos. */
@@ -23,6 +27,9 @@ internal fun Route.encode(): String = when (this) {
     Route.Languages -> "languages"
     Route.Developer -> "developer"
     Route.HowTo -> "howto"
+    Route.About -> "about"
+    Route.Licenses -> "licenses"
+    is Route.License -> "license:$id"
 }
 
 /** Lo inválido da `null`: un paso fuera de 1..3, un texto raro, o Desarrollador en una versión que no lo trae. */
@@ -33,5 +40,8 @@ internal fun decodeRoute(text: String): Route? = when {
     text == "languages" -> Route.Languages
     text == "howto" -> Route.HowTo
     text == "developer" -> if (DeveloperEntries.current.available) Route.Developer else null
+    text == "about" -> Route.About
+    text == "licenses" -> Route.Licenses
+    text.startsWith("license:") -> text.removePrefix("license:").takeIf { it.isNotBlank() }?.let { Route.License(it) }
     else -> null
 }

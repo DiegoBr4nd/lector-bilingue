@@ -19,6 +19,9 @@ import io.github.diegobr4nd.lectorbilingue.data.AppSettings
 import io.github.diegobr4nd.lectorbilingue.data.ModelHubApi
 import io.github.diegobr4nd.lectorbilingue.data.TranslationCacheApi
 import io.github.diegobr4nd.lectorbilingue.ui.DeveloperEntries
+import io.github.diegobr4nd.lectorbilingue.ui.about.AboutScreen
+import io.github.diegobr4nd.lectorbilingue.ui.about.LicenseTextScreen
+import io.github.diegobr4nd.lectorbilingue.ui.about.LicensesScreen
 import io.github.diegobr4nd.lectorbilingue.ui.rememberReduceMotion
 import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
 import io.github.diegobr4nd.lectorbilingue.ui.languages.LanguagesScreen
@@ -34,7 +37,7 @@ fun AppNav(
     translationCache: TranslationCacheApi? = null,
     onClose: () -> Unit = {},
     // "Ranura" (slot): un hueco que llena quien llama (MainActivity pone la Biblioteca; las pruebas, lo que necesiten).
-    library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?, onHowTo: () -> Unit) -> Unit = { _, _, _ -> },
+    library: @Composable (onLanguages: () -> Unit, onDeveloper: (() -> Unit)?, onHowTo: () -> Unit, onAbout: () -> Unit) -> Unit = { _, _, _, _ -> },
 ) {
     val backStack = rememberSaveable(
         saver = listSaver<MutableList<Route>, String>(
@@ -89,6 +92,7 @@ fun AppNav(
                         { backStack.add(Route.Languages) },
                         if (developer.available) ({ backStack.add(Route.Developer) }) else null,
                         { backStack.add(Route.HowTo) },
+                        { backStack.add(Route.About) },
                     )
                 }
                 Route.Languages -> NavEntry(key) {
@@ -96,6 +100,15 @@ fun AppNav(
                 }
                 Route.HowTo -> NavEntry(key) {
                     HowToScreen(onBack = { pop() }, onResetTips = { settings.resetTips() })
+                }
+                Route.About -> NavEntry(key) {
+                    AboutScreen(onBack = { pop() }, onLicenses = { backStack.add(Route.Licenses) })
+                }
+                Route.Licenses -> NavEntry(key) {
+                    LicensesScreen(onBack = { pop() }, onOpen = { id -> backStack.add(Route.License(id)) })
+                }
+                is Route.License -> NavEntry(key) {
+                    LicenseTextScreen(id = key.id, onBack = { pop() })
                 }
                 Route.Developer -> NavEntry(key) {
                     // Sin pantalla de desarrollador (release) esta ruta no se alcanza: Routes la descarta.
