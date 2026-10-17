@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="engine_test_title">Prueba del motor (temporal)</string>
     <string name="model_loading">Cargando modelo…</string>
     <string name="model_ready">Modelo listo</string>
@@ -19,7 +19,8 @@
     <string name="bench_max">Peor caso (párrafo más lento): %1$d ms</string>
     <string name="mark_ok">Cumple</string>
     <string name="mark_fail">No cumple</string>
-    <string name="working_description">Trabajando, espera un momento</string>
+    <!-- «momento» está bien escrito en español; el corrector de lint lo confunde con el inglés "memento". -->
+    <string name="working_description" tools:ignore="Typos">Trabajando, espera un momento</string>
     <string name="bench_measuring">Midiendo… puede tardar un minuto</string>
     <string name="translating">Traduciendo…</string>
     <string name="error_translate">No se pudo traducir. Inténtalo de nuevo.</string>
@@ -44,7 +45,6 @@
     <string name="msg_invalid_zip">El archivo .zip no es un modelo válido</string>
     <string name="msg_import_ok">Modelo importado</string>
     <string name="msg_unknown">Ocurrió un error inesperado</string>
-    <string name="cancel_download_button">Cancelar descarga</string>
     <string name="msg_import_no_match">Este zip no corresponde a ningún modelo del catálogo</string>
     <string name="download_queued">Esperando conexión a internet…</string>
     <string name="cancelling">Cancelando…</string>

@@ -141,7 +141,8 @@
     <string name="languages_engine_auto">Automático</string>
     <string name="languages_engine_auto_line">Automático elige %1$s en tu teléfono (%2$s GB).</string>
     <string name="languages_import">Importar desde archivo (.zip)</string>
-    <string name="languages_working">Un momento…</string>
+    <!-- «momento» está bien escrito en español; el corrector de lint lo confunde con el inglés "memento". -->
+    <string name="languages_working" tools:ignore="Typos">Un momento…</string>
     <string name="languages_retry">Intentar de nuevo</string>
     <string name="languages_delete_title">¿Borrar %1$s?</string>
     <string name="languages_delete_body">Modelo %2$s. Liberarás %1$d MB. Para volver a usarlo tendrás que descargarlo otra vez.</string>

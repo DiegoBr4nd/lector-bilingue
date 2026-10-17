@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Los motores nativos se compilan solo para arm64-v8a (teléfonos). Los Chromebook x86 no están en el
+         lanzamiento; añadir x86_64 duplicaría ~20 MB de .so. Se revisa si algún día se publica para ChromeOS. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+</lint>

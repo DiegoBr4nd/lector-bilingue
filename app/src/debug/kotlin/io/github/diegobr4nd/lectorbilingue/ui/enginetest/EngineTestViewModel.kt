@@ -429,9 +429,9 @@ class EngineTestViewModel(application: Application) : AndroidViewModel(applicati
                 if (!hasCatalog) {
                     ModelMessage.NO_CATALOG_IMPORT
                 } else {
-                    val input = withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri) }
-                        ?: throw IOException()
-                    input.use { Models.importModel(app, it) }
+                    withContext(Dispatchers.IO) {
+                        (app.contentResolver.openInputStream(uri) ?: throw IOException()).use { Models.importModel(app, it) }
+                    }
                     null
                 }
             } catch (e: CancellationException) {
