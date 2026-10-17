@@ -329,24 +329,22 @@ fun LibraryContent(
         }
     }
 
-    deletingId?.let { id ->
-        val book = state.books.firstOrNull { it.id == id }
-        // Un libro que se está abriendo no se borra (el Lector lo recibiría ya borrado).
-        if (book == null || state.openingId == id) {
-            deletingId = null
-        } else {
-            ConfirmDialog(
-                title = stringResource(R.string.library_delete_title, displayTitle(book)),
-                body = stringResource(R.string.library_delete_body),
-                confirmLabel = stringResource(R.string.library_delete_confirm),
-                onConfirm = {
-                    deletingId = null
-                    onDelete(id)
-                },
-                onDismiss = { deletingId = null },
-                destructive = true,
-            )
-        }
+    // Un libro que ya no está, o que se está abriendo, no se borra (el Lector lo recibiría ya borrado). Se calcula sin
+    // escribir estado mientras se dibuja; la elección vieja se olvida en un efecto, después.
+    val deleting = deletingId?.let { id -> state.books.firstOrNull { it.id == id }?.takeIf { state.openingId != id } }
+    if (deletingId != null && deleting == null) LaunchedEffect(deletingId) { deletingId = null }
+    deleting?.let { book ->
+        ConfirmDialog(
+            title = stringResource(R.string.library_delete_title, displayTitle(book)),
+            body = stringResource(R.string.library_delete_body),
+            confirmLabel = stringResource(R.string.library_delete_confirm),
+            onConfirm = {
+                deletingId = null
+                onDelete(book.id)
+            },
+            onDismiss = { deletingId = null },
+            destructive = true,
+        )
     }
 }
 

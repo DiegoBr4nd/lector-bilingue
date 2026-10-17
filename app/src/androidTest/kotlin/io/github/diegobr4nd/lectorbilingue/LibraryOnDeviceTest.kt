@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -96,6 +99,31 @@ class LibraryOnDeviceTest {
         assertNull(deleted) // Nada se borra sin confirmar.
         rule.onNode(hasText("Borrar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         rule.runOnIdle { assertEquals(id, deleted) }
+    }
+
+    /**
+     * Auditoría Compose (I2): si el libro empieza a abrirse con el diálogo de borrar abierto, el diálogo se cierra y no
+     * vuelve solo cuando termina de abrirse (la elección se olvida en un efecto, sin escribir estado al dibujar).
+     */
+    @Test
+    fun siElLibroSeAbreElDialogoDeBorrarSeCierraYNoVuelve() {
+        var state by mutableStateOf(sample)
+        rule.setContent {
+            LectorTheme {
+                LibraryContent(
+                    state = state, onAdd = {}, onOpen = {}, onDelete = {},
+                    onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                )
+            }
+        }
+        val action = rule.onNodeWithText("Libro de muestra").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == "Borrar libro" }
+        rule.runOnIdle { action.action() }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertIsDisplayed()
+        rule.runOnIdle { state = sample.copy(openingId = id) }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertDoesNotExist()
+        rule.runOnIdle { state = sample }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertDoesNotExist()
     }
 
     @Test

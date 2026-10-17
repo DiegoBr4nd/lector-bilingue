@@ -521,7 +521,8 @@ fun ReaderScreen(
         // salvo el del borde (TipRules.cardVisible). El ViewModel sabe si se ve: solo se marca lo que se vio.
         val bottomBarShown = barsVisible && (positionText(label) != null || hasPrevious || hasNext)
         val bottomBar = remember { MutableTransitionState(bottomBarShown) }
-        bottomBar.targetState = bottomBarShown
+        // Después de dibujar (no durante): escribir estado en plena composición obliga a otra pasada.
+        SideEffect { bottomBar.targetState = bottomBarShown }
         val cardVisible = TipRules.cardVisible(tip, barsVisible)
         LaunchedEffect(cardVisible) { vm.setTipOnScreen(cardVisible) }
         // El último consejo mostrado: su texto no desaparece durante el fundido de salida.
