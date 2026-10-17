@@ -97,3 +97,33 @@ object Licenses {
 
     private fun AssetManager.has(path: String): Boolean = runCatching { open(path).close() }.isSuccess
 }
+
+/**
+ * Los textos de licencia vienen cortados a ~80 columnas; en un teléfono (y más con letra al 200 %) esos cortes caen en
+ * mitad de la frase. Esto une las líneas de un mismo párrafo con un espacio y deja todo lo demás tal cual: líneas en
+ * blanco, líneas con sangría, viñetas, secciones numeradas («1.», «2)», «a)», «(a)»), líneas de copyright y títulos
+ * en mayúsculas. Es idempotente (aplicarla dos veces da lo mismo). Solo para mostrar: los archivos no cambian.
+ */
+fun reflowLicense(text: String): String {
+    val out = mutableListOf<String>()
+    for (raw in text.replace("\r\n", "\n").split('\n')) {
+        val line = if (raw.isBlank()) "" else raw
+        val prev = out.lastOrNull()
+        if (prev.isNullOrEmpty() || line.isEmpty() || startsOwnLine(line) || isAllCaps(line) != isAllCaps(prev)) {
+            out += line
+        } else {
+            out[out.lastIndex] = prev.trimEnd() + " " + line
+        }
+    }
+    return out.joinToString("\n")
+}
+
+// Viñeta, sección numerada o con letra («1.», «2.1.», «2)», «a)», «(a)», «(iv)»), línea de copyright o comentario de
+// código («//», como la cabecera de XH Scanner).
+private val ownLineStart =
+    Regex("""^([-*•#]|//|\d+(\.\d+)*[.)](\s|$)|[A-Za-z][.)](\s|$)|\([A-Za-z0-9]+\)|copyright\b|©)""", RegexOption.IGNORE_CASE)
+
+private fun startsOwnLine(line: String): Boolean = line.first().isWhitespace() || ownLineStart.containsMatchIn(line)
+
+/** Una línea sin minúsculas y con al menos dos letras: un título, o parte de un párrafo todo en mayúsculas. */
+private fun isAllCaps(line: String): Boolean = line.count { it.isLetter() } >= 2 && line.none { it.isLowerCase() }

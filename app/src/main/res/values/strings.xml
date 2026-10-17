@@ -263,11 +263,12 @@
     <string name="about_version">Versión %1$s</string>
     <string name="about_privacy">Traduce dentro del teléfono. Tus libros y lo que lees nunca salen de él.</string>
     <string name="about_feedback">Enviar comentarios</string>
-    <string name="about_feedback_no_app">No hay una app de correo en este teléfono. Escríbenos a %1$s</string>
+    <string name="about_feedback_no_app">No hay una app de correo en este teléfono. Escríbenos a:</string>
     <string name="about_models_title">Modelos de traducción</string>
-    <string name="about_model_opus">OPUS-MT, de la Universidad de Helsinki (Jörg Tiedemann y colaboradores). Licencia CC-BY-4.0. Convertidos al formato CTranslate2 (int8) para el teléfono.</string>
+    <string name="about_model_opus">OPUS-MT, del Language Technology Research Group de la Universidad de Helsinki. Licencia CC-BY-4.0. Adaptados para funcionar dentro del teléfono.</string>
     <string name="about_model_opus_en_es">Modelo inglés → español</string>
     <string name="about_model_opus_es_en">Modelo español → inglés</string>
+    <string name="about_model_opus_license">Licencia CC-BY-4.0</string>
     <string name="about_model_firefox">Firefox Translations, de Mozilla. Licencia MPL-2.0.</string>
     <string name="about_model_firefox_open">Firefox Translations</string>
     <string name="about_licenses">Licencias de código abierto</string>
@@ -278,4 +279,5 @@
     <string name="licenses_open">Ver licencia</string>
     <string name="licenses_source_code">Código fuente</string>
     <string name="licenses_error">No se pudo cargar la lista de licencias.</string>
+    <string name="licenses_text_error">No se pudo abrir esta licencia.</string>
 </resources>

@@ -2,18 +2,23 @@ package io.github.diegobr4nd.lectorbilingue.ui.about
 
 import android.content.Intent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -31,7 +36,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -39,6 +46,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
@@ -52,6 +60,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.tips.startSafely
 
 const val OPUS_EN_ES_URL = "https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-es"
 const val OPUS_ES_EN_URL = "https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-cat_oci_spa-en"
+const val CC_BY_40_URL = "https://creativecommons.org/licenses/by/4.0/"
 const val FIREFOX_TRANSLATIONS_URL = "https://github.com/mozilla/translations"
 
 /**
@@ -81,7 +90,18 @@ fun AboutScreen(
             verticalArrangement = Arrangement.spacedBy(Spacing.l),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.m)) {
-                Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(72.dp))
+                // El círculo de marca, como el ícono del teléfono: el libro blanco solo no se ve sobre el fondo crema.
+                Box(
+                    Modifier.size(56.dp).clip(CircleShape).background(colorResource(R.color.ic_launcher_background)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // La capa del ícono adaptable trae 1/3 de margen alrededor: se dibuja más grande y el círculo la recorta.
+                    Image(
+                        painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = null,
+                        modifier = Modifier.requiredSize(84.dp),
+                    )
+                }
                 Column {
                     Text(appName, style = MaterialTheme.typography.headlineSmall.copy(fontFamily = ReadingFontFamily))
                     Text(
@@ -98,12 +118,13 @@ fun AboutScreen(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.about_feedback)) }
             if (noMailApp) {
+                // La dirección va en su propia línea: con letra grande no se parte a mitad de palabra. Una sola región
+                // «polite» para las dos líneas: TalkBack lee el aviso y la dirección juntos, una vez.
                 SelectionContainer {
-                    Text(
-                        stringResource(R.string.about_feedback_no_app, FEEDBACK_EMAIL),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    )
+                    Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                        Text(stringResource(R.string.about_feedback_no_app), style = MaterialTheme.typography.bodyMedium)
+                        Text(FEEDBACK_EMAIL, style = MaterialTheme.typography.titleMedium)
+                    }
                 }
             }
             Text(
@@ -112,9 +133,11 @@ fun AboutScreen(
                 modifier = Modifier.semantics { heading() },
             )
             Text(stringResource(R.string.about_model_opus), style = MaterialTheme.typography.bodyMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.s)) {
+            // Los enlaces ya no traen relleno a los lados: el espacio entre ellos lo pone la fila.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xl)) {
                 LinkButton(stringResource(R.string.about_model_opus_en_es)) { openExternal(context, OPUS_EN_ES_URL) }
                 LinkButton(stringResource(R.string.about_model_opus_es_en)) { openExternal(context, OPUS_ES_EN_URL) }
+                LinkButton(stringResource(R.string.about_model_opus_license)) { openExternal(context, CC_BY_40_URL) }
             }
             Text(stringResource(R.string.about_model_firefox), style = MaterialTheme.typography.bodyMedium)
             LinkButton(stringResource(R.string.about_model_firefox_open)) { openExternal(context, FIREFOX_TRANSLATIONS_URL) }
@@ -122,17 +145,24 @@ fun AboutScreen(
                 onClick = onLicenses,
                 shape = ButtonShape,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.about_licenses)) }
+            ) { Text(stringResource(R.string.about_licenses), textAlign = TextAlign.Center) }
             BottomInsetSpacer()
         }
     }
 }
 
-/** Botón de texto que abre el navegador; TalkBack dice «Abrir <nombre> en el navegador, botón». */
+/**
+ * Botón de texto que abre el navegador; TalkBack dice «Abrir <nombre> en el navegador, botón». Sin relleno a los lados:
+ * el texto queda alineado con los párrafos de encima (la altura táctil sigue siendo de 48 dp).
+ */
 @Composable
 internal fun LinkButton(label: String, onClick: () -> Unit) {
     val desc = stringResource(R.string.free_books_open_desc, label)
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = desc }) { Text(label) }
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 0.dp),
+        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = desc },
+    ) { Text(label) }
 }
 
 /** Fila de arriba con atrás y título (igual que «Cómo se usa»). */

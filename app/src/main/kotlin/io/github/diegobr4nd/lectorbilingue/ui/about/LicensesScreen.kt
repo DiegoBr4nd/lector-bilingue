@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +27,7 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.LicenseEntry
 import io.github.diegobr4nd.lectorbilingue.data.LicenseGroup
 import io.github.diegobr4nd.lectorbilingue.data.Licenses
+import io.github.diegobr4nd.lectorbilingue.data.reflowLicense
 import io.github.diegobr4nd.lectorbilingue.ui.BottomInsetSpacer
 import io.github.diegobr4nd.lectorbilingue.ui.ScreenFrame
 import io.github.diegobr4nd.lectorbilingue.ui.tips.openExternal
@@ -74,16 +74,27 @@ fun LicensesContent(state: LicensesState, onBack: () -> Unit, onOpen: (String) -
                         }
                     }
                     items(rows, key = { it.id }) { e ->
-                        ListItem(
-                            headlineContent = { Text(if (e.group == LicenseGroup.APP) appName else e.name) },
-                            supportingContent = { Text(e.license) },
-                            modifier = Modifier.heightIn(min = 48.dp).clickable(onClickLabel = openLabel) { onOpen(e.id) },
-                        )
+                        LicenseRow(if (e.group == LicenseGroup.APP) appName else e.name, e.license, openLabel) { onOpen(e.id) }
                     }
                 }
                 item(key = "end") { BottomInsetSpacer() }
             }
         }
+    }
+}
+
+/**
+ * Una fila: nombre y licencia, sin fondo propio (se ve el fondo de la pantalla) y alineada con los encabezados de grupo.
+ * TalkBack: «<nombre>, <licencia>, botón, toca dos veces para ver licencia».
+ */
+@Composable
+private fun LicenseRow(name: String, license: String, openLabel: String, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClickLabel = openLabel, onClick = onClick).padding(vertical = Spacing.s),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(name, style = MaterialTheme.typography.bodyLarge)
+        Text(license, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -109,7 +120,8 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
         value = withContext(Dispatchers.IO) {
             val entry = Licenses.load(assets)?.firstOrNull { it.id == id }
             val text = entry?.let { Licenses.readTexts(assets, it) }
-            if (entry != null && text != null) LicenseTextState.Ready(entry, text) else LicenseTextState.Broken
+            // Se unen las líneas cortadas a ~80 columnas solo para mostrarlas (el archivo no cambia).
+            if (entry != null && text != null) LicenseTextState.Ready(entry, reflowLicense(text)) else LicenseTextState.Broken
         }
     }
     val appName = stringResource(R.string.app_name)
@@ -118,7 +130,7 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
             LicenseTextState.Loading -> TitleRow(stringResource(R.string.licenses_title), onBack)
             LicenseTextState.Broken -> {
                 TitleRow(stringResource(R.string.licenses_title), onBack)
-                Text(stringResource(R.string.licenses_error), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.licenses_text_error), style = MaterialTheme.typography.bodyLarge)
             }
             is LicenseTextState.Ready -> {
                 TitleRow(if (s.entry.group == LicenseGroup.APP) appName else s.entry.name, onBack)
