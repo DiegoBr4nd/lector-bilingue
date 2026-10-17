@@ -336,7 +336,11 @@ fun LibraryContent(
     deleting?.let { book ->
         ConfirmDialog(
             title = stringResource(R.string.library_delete_title, displayTitle(book)),
-            body = stringResource(R.string.library_delete_body),
+            body = stringResource(
+                R.string.library_delete_body,
+                stringResource(R.string.library_menu_languages),
+                stringResource(R.string.languages_cache_delete),
+            ),
             confirmLabel = stringResource(R.string.library_delete_confirm),
             onConfirm = {
                 deletingId = null

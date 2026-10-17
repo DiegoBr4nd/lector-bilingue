@@ -3,6 +3,10 @@ package io.github.diegobr4nd.lectorbilingue
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.diegobr4nd.lectorbilingue.books.BookFiles
+import io.github.diegobr4nd.lectorbilingue.books.BookImporter
+import io.github.diegobr4nd.lectorbilingue.books.BookRepository
+import io.github.diegobr4nd.lectorbilingue.books.db.BookEntity
 import io.github.diegobr4nd.lectorbilingue.books.db.LectorDatabase
 import io.github.diegobr4nd.lectorbilingue.books.db.TranslationEntity
 import io.github.diegobr4nd.lectorbilingue.data.EngineProvider
@@ -78,6 +82,35 @@ class SecureDeleteOnDeviceTest {
             scope.cancel()
             db.close()
             worker.close()
+        }
+    }
+
+    /**
+     * Auditoría de seguridad (M3): borrar un libro (con el camino de la app, [BookRepository.delete]) no deja su título
+     * ni su posición en el .db ni en el -wal. Archivo propio y carpeta temporal: nunca la biblioteca de Juan.
+     */
+    @Test
+    fun tras_borrar_un_libro_su_titulo_no_queda_en_db_ni_wal() = runBlocking {
+        val titulo = "titulo-unico-secure-delete-${System.nanoTime()}"
+        val db = LectorDatabase.open(context, nombre)
+        val carpeta = File(context.cacheDir, "secure-delete-books").apply { deleteRecursively(); mkdirs() }
+        try {
+            val dao = db.books()
+            val id = "00000000-0000-0000-0000-00000000d31e"
+            dao.insert(BookEntity(id, titulo, null, null, 1L, null, 0.3f, "{\"href\":\"$titulo.xhtml\"}"))
+            val archivo = context.getDatabasePath(nombre)
+            val wal = File(archivo.path + "-wal")
+            assertTrue(contiene(archivo, titulo) || contiene(wal, titulo), "control: el título debería estar antes de borrar")
+
+            val files = BookFiles(carpeta)
+            BookRepository(dao, files, BookImporter(files, dao, { error("no se usa") }, { _, _ -> })).delete(id)
+            assertEquals(null, dao.get(id))
+
+            assertFalse(contiene(archivo, titulo), "el título quedó en el .db")
+            assertFalse(contiene(wal, titulo), "el título quedó en el -wal")
+        } finally {
+            db.close()
+            carpeta.deleteRecursively()
         }
     }
 }

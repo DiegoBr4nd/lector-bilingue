@@ -96,6 +96,11 @@ class LibraryOnDeviceTest {
         val action = row.fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == "Borrar libro" }
         rule.runOnIdle { action.action() }
         rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertIsDisplayed()
+        // Auditoría de seguridad (M3): avisa de que las traducciones guardadas se borran aparte, con el botón real.
+        rule.onNodeWithText(
+            "Las traducciones guardadas no se borran aquí: en Idiomas, toca «Borrar» junto a «Traducciones guardadas».",
+            substring = true,
+        ).assertIsDisplayed()
         assertNull(deleted) // Nada se borra sin confirmar.
         rule.onNode(hasText("Borrar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         rule.runOnIdle { assertEquals(id, deleted) }

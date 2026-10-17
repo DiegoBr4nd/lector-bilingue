@@ -22,9 +22,17 @@ class BookRepository(
 
     suspend fun get(id: String): Book? = dao.get(id)?.toBook()
 
-    suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        dao.delete(id)
-        files.deleteBook(id)
+    /**
+     * Quita la fila, borra el EPUB y la portada, y al final vacía el WAL: que no queden título, autor ni posición en sus
+     * copias de páginas. Si el vaciado fallara, lo borrado ya está borrado y SQLite lo vacía solo más adelante: no se
+     * cierra la app por eso. Las traducciones guardadas no son por libro: se borran aparte, en Idiomas.
+     */
+    suspend fun delete(id: String) {
+        withContext(Dispatchers.IO) {
+            dao.delete(id)
+            files.deleteBook(id)
+            runCatching { dao.checkpointWal() }
+        }
     }
 
     suspend fun savePosition(id: String, locator: String, progress: Float) =

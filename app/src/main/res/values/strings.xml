@@ -68,7 +68,9 @@
     <string name="library_progress">%1$d %% leído</string>
     <string name="library_delete">Borrar libro</string>
     <string name="library_delete_title">¿Borrar «%1$s»?</string>
-    <string name="library_delete_body">Se borra la copia de la app y la posición de lectura. El archivo original de tu teléfono no se toca.</string>
+    <!-- %1$s = «Idiomas» (library_menu_languages); %2$s = el botón «Borrar» de las traducciones (languages_cache_delete).
+         «Traducciones guardadas» es el comienzo de esa fila (languages_cache_label). -->
+    <string name="library_delete_body">Se borra la copia de la app y la posición de lectura. El archivo original de tu teléfono no se toca. Las traducciones guardadas no se borran aquí: en %1$s, toca «%2$s» junto a «Traducciones guardadas».</string>
     <string name="library_delete_confirm">Borrar</string>
     <string name="library_open_failed_title">No se pudo abrir este libro</string>
     <string name="library_open_failed_body">El archivo de la app parece dañado.</string>

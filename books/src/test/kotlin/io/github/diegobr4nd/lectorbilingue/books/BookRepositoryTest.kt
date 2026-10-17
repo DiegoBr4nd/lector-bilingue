@@ -22,6 +22,15 @@ class BookRepositoryTest {
         assertNull(dao.get(id)); assertFalse(files.epub(id).exists()); assertFalse(files.cover(id).exists())
     }
 
+    // Auditoría de seguridad (M3): título, autor y posición no se quedan en lector.db-wal tras borrar el libro.
+    @Test fun `borrar vacia el WAL despues de quitar la fila`() = runTest {
+        val files = BookFiles(tmp.root)
+        val dao = FakeBookDao().apply { insert(BookEntity(id, "T", null, null, 1, null, 0f, null)) }
+        val repo = BookRepository(dao, files, BookImporter(files, dao, { error("no") }, { _, _ -> }))
+        repo.delete(id)
+        assertEquals(listOf("delete", "PRAGMA wal_checkpoint(TRUNCATE)"), dao.maintenance)
+    }
+
     @Test fun `libros con portada como archivo y progreso`() = runTest {
         val files = BookFiles(tmp.root)
         val dao = FakeBookDao().apply { insert(BookEntity(id, "T", "A", "$id.cover.png", 1, null, 0.5f, null)) }
