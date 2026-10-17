@@ -72,7 +72,7 @@ class LicensesTest {
             // Fuentes que trae el navegador de Readium dentro de su AAR (van en el APK).
             "ia-writer-duospace", "accessible-dfa", "opendyslexic",
             // JavaScript que trae el navegador de Readium dentro de su AAR (MIT/ISC, con sus avisos).
-            "readium-js", "readium-divina",
+            "readium-js",
         )
         assertTrue(ids.containsAll(expected), "faltan: ${expected - ids}")
     }

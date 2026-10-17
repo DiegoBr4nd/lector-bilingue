@@ -81,6 +81,8 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
     // BuildConfig.VERSION_NAME y FLAVOR para «Acerca de» y el correo de comentarios.
     buildFeatures { buildConfig = true }
+    // Readium trae su reproductor de cómics (Divina) en assets/readium/divina/; la app solo lee EPUB, así que no viaja.
+    androidResources { ignoreAssetsPatterns += "<dir>divina" }
 }
 
 dependencies {
