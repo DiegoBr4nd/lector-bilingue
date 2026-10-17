@@ -19,7 +19,7 @@ Reglas que no se rompen:
 
 ```bash
 mkdir -p /c/Users/JUAN/llaves
-"/c/Program Files/Android/Android Studio/jbr/bin/keytool" -genkeypair -v \
+winpty "/c/Program Files/Android/Android Studio/jbr/bin/keytool" -genkeypair -v \
   -keystore /c/Users/JUAN/llaves/lector-subida.jks -alias subida \
   -keyalg RSA -keysize 4096 -validity 10000 \
   -dname "CN=Tu nombre, O=Lector bilingue, C=XX"
@@ -31,15 +31,18 @@ Antes de pegarlo, cambia:
 - `O=` es la organización; puedes dejarla.
 
 Qué pasa al correrlo:
-- Te pide una contraseña para el keystore y otra para la llave (puede ser la misma). Al teclear no se ve nada.
+- Te pide una contraseña para el keystore y otra para la llave (puede ser la misma).
+- `winpty` (viene con Git para Windows) hace que Git Bash esconda lo que tecleas. Sin él, **puede que se vea lo que tecleas**. Si dice `winpty: command not found`, quítalo del comando y teclea sin nadie mirando la pantalla.
 - `-validity 10000` son unos 27 años; Play lo exige largo.
 - Termina con un mensaje que dice que generó el par de claves.
 
 Contraseñas:
 - Largas (frase de 4 o 5 palabras) y que no uses en otro sitio.
+- **Sin barra invertida** (`\`): rompe el archivo `.properties` del paso 2.
 - Guárdalas en un gestor de contraseñas o en papel, **separadas** del archivo `.jks`.
 
 Respaldos (el `.jks` no se puede regenerar):
+- **Al respaldo va solo el `.jks`; nunca el `.properties`** (el del paso 2 lleva las contraseñas en texto plano).
 - Copia `lector-subida.jks` a un USB.
 - Copia a un segundo lugar físico distinto (otro USB en otra casa, por ejemplo).
 - No lo subas a la nube sin cifrar, ni al correo, ni a GitHub.
@@ -53,7 +56,15 @@ Si lo pierdes:
 
 **Gradle** es el programa que compila la app. Lee la llave desde un archivo tuyo, fuera del proyecto.
 
-1. Crea con el Bloc de notas el archivo `C:\Users\JUAN\llaves\lector-subida.properties` con este contenido (cambia los `…` por tus contraseñas):
+Este archivo lleva las contraseñas, así que va en **otra carpeta**, no junto al `.jks`: quien copie `llaves\` (por ejemplo, al USB de respaldo) no se lleva la llave y su contraseña juntas.
+
+1. Crea la carpeta:
+
+```bash
+mkdir -p /c/Users/JUAN/.gradle/lector-firma
+```
+
+2. Crea con el Bloc de notas el archivo `C:\Users\JUAN\.gradle\lector-firma\lector-subida.properties` con este contenido (cambia los `…` por tus contraseñas):
 
 ```properties
 storeFile=C:/Users/JUAN/llaves/lector-subida.jks
@@ -62,10 +73,12 @@ keyAlias=subida
 keyPassword=…
 ```
 
-2. Abre (o crea) `C:\Users\JUAN\.gradle\gradle.properties` y añade esta línea:
+   Al guardar: **Archivo > Guardar como**, en «Tipo» elige **Todos los archivos** y escribe el nombre completo `lector-subida.properties`. Si no, el Bloc de notas lo guarda como `lector-subida.properties.txt` y Gradle no lo encuentra.
+
+3. Abre (o crea) `C:\Users\JUAN\.gradle\gradle.properties` y añade esta línea (guárdalo igual, con «Todos los archivos»):
 
 ```properties
-lector.firma=C:/Users/JUAN/llaves/lector-subida.properties
+lector.firma=C:/Users/JUAN/.gradle/lector-firma/lector-subida.properties
 ```
 
 Ojo con las rutas:
@@ -149,7 +162,8 @@ Google exige que los desarrolladores de Android verifiquen su identidad y regist
 - [Anuncio en el blog de Android Developers](https://android-developers.googleblog.com/2026/06/android-developer-verification.html)
 
 Resumen (confirma las fechas en esas páginas, pueden cambiar):
-- **Apps en Play**: Play Console registra el paquete por ti, ligado a tu cuenta y a tu firma. Mira la página de inicio de Play Console por si queda alguna app sin registrar; el plazo anunciado era el 30 de septiembre de 2026.
+- **Fechas**: el 30 de septiembre de 2026 empezó a exigirse solo en Brasil, Indonesia, Singapur y Tailandia. En el resto del mundo se exige desde 2027.
+- **Apps en Play**: Play Console registra el paquete por ti, automáticamente, ligado a tu cuenta y a tu firma. Mira la página de inicio de Play Console por si te pide algo.
 - **Fuera de Play** (F-Droid, APK suelto; viene después del lanzamiento): hace falta registrar el paquete aparte, demostrando que eres dueño de la app con un APK firmado con tu llave, y verificar tu identidad. Eso se decide en esa fase.
 
 ## 8. Copia de prueba en el Pixel (~15 min)
@@ -165,8 +179,14 @@ MSYS_NO_PATHCONV=1 adb install app/build/outputs/apk/play/prueba/app-play-prueba
 ```
 
 - El Pixel debe aparecer en `adb devices` (depuración USB activada).
+- `adb` viene con Android Studio, en la carpeta `platform-tools` del SDK (`C:\Users\JUAN\AppData\Local\Android\Sdk\platform-tools\adb.exe`). Si Git Bash dice `adb: command not found`, pega antes esta línea (vale hasta cerrar la ventana):
+
+```bash
+export PATH="$PATH:/c/Users/JUAN/AppData/Local/Android/Sdk/platform-tools"
+```
+
 - Usa `adb install` sin `-r`. Es otro paquete, así que no pisa tu app.
-- Si dice que ya está instalada, bórrala primero (paso 6 del recorrido).
+- Si dice que ya está instalada, bórrala primero (paso 7 del recorrido).
 
 Recorrido:
 1. Bienvenida: descarga un idioma con el motor rápido (Firefox) y otro con el de calidad (OPUS).
@@ -174,6 +194,22 @@ Recorrido:
 3. Toca un párrafo y mira la traducción. Prueba los modos Intercalado y Solo traducción.
 4. Ajustes de lectura, Índice y cambio de capítulo.
 5. «Acerca de», «Licencias» (el enlace al código debe abrir el tag `v0.9.0`) y «Enviar comentarios».
-6. Borrar la copia: Ajustes de Android > Apps > «Lector (prueba)» > Desinstalar. Tu app «Lector» queda igual.
+6. **Cero conexiones al leer**: lo pide la revisión de seguridad antes de subir el AAB (ver abajo).
+7. Borrar la copia: Ajustes de Android > Apps > «Lector (prueba)» > Desinstalar. Tu app «Lector» queda igual.
+
+### Cero conexiones al leer (paso 6)
+
+Comprueba que la versión recortada por R8, la misma que va a Play, no usa internet al leer ni al traducir. Hazlo **después** de descargar los modelos (paso 1).
+
+1. Abre Ajustes de Android > Apps > «Lector (prueba)» > **Datos móviles y Wi‑Fi**. Anota los números que muestra.
+   - Si esa pantalla solo cuenta los datos móviles, apaga el Wi‑Fi durante la prueba y usa los datos móviles: así todo lo que use la app queda contado ahí.
+2. Vuelve a «Lector (prueba)», con internet encendido. **No abras Idiomas ni la Bienvenida** durante la prueba: esas pantallas sí buscan idiomas nuevos en internet, a propósito.
+3. Lee y traduce unos **20 párrafos**, repartidos en los tres modos: Tocar, Intercalado y Solo traducción.
+4. Toca un enlace del libro que vaya a una página web y, en el aviso, **no lo confirmes** (Cancelar).
+5. Espera un minuto (el contador tarda en ponerse al día) y vuelve a la pantalla del paso 1. **El contador no debe cambiar.**
+6. Activa el **modo avión** y repite los pasos 3 y 4. Todo debe funcionar igual: abrir, traducir y cambiar de modo.
+7. Guarda la evidencia: capturas de la pantalla del contador, antes y después. **Ninguna captura con texto del libro** (tiene derechos de autor).
+
+Si el contador cambia o algo deja de funcionar en modo avión, **no subas el AAB**: anota qué hiciste y avisa a Claude.
 
 Si algo falla, anota qué hiciste y qué pasó, y avisa a Claude.

@@ -9,6 +9,10 @@ captures/
 .cxx/
 *.keystore
 *.jks
+# Otros formatos de llave (PKCS#12 y el archivo PEPK de Play): tampoco al repo
+*.p12
+*.pfx
+*.pepk
 
 # Textos privados de Juan (derechos de autor): nunca a git
 private/
