@@ -15,7 +15,7 @@ Descargadas de los repos oficiales, versión fija. Una sola copia en `src/main/a
 | `atkinson_hyperlegible_italic.ttf` | idem (`AtkinsonHyperlegible-Italic.ttf`) | `021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514` |
 | `atkinson_hyperlegible_bold.ttf` | idem (`AtkinsonHyperlegible-Bold.ttf`) | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
 
-Lista completa : `docs/licencias/fuentes.md`.
+Lista completa: `docs/licencias/fuentes.md` (cada fuente con su autor, el zip o commit de origen, el archivo original del que sale cada `.ttf` y su SHA-256).
 
 Zips originales: Inter-4.1.zip `9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e`; 3.103.zip `f7fb973cafb26cf785cbebaeaf51c18f87c15a3bcf4d82a7d4857564db5b056d`.
 
