@@ -2,6 +2,7 @@ package io.github.diegobr4nd.lectorbilingue.books
 
 import io.github.diegobr4nd.lectorbilingue.books.db.BookDao
 import io.github.diegobr4nd.lectorbilingue.books.db.BookEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -31,7 +32,13 @@ class BookRepository(
         withContext(Dispatchers.IO) {
             dao.delete(id)
             files.deleteBook(id)
-            runCatching { dao.checkpointWal() }
+            try {
+                dao.checkpointWal()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Ignorado a propósito: ver la explicación de arriba.
+            }
         }
     }
 

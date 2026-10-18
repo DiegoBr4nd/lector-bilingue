@@ -98,6 +98,8 @@ jobs:
           grep -q "base/lib/arm64-v8a/libslimtbridge.so" "$RUNNER_TEMP/aab.txt"
           awk '/base\/lib\// && !/arm64-v8a/ {f=1} END{exit f}' "$RUNNER_TEMP/aab.txt" || { echo "::error::ABI distinta de arm64"; exit 1; }
           if grep -q "readium/divina" "$RUNNER_TEMP/aab.txt"; then echo "::error::Divina en el AAB"; exit 1; fi
+          # En CI no hay llave de subida: el AAB debe salir sin firmar (ningún META-INF/*.RSA|EC|DSA).
+          if grep -qE 'META-INF/[^/]+\.(RSA|EC|DSA)$' "$RUNNER_TEMP/aab.txt"; then echo "::error::AAB firmado en CI"; exit 1; fi
           unzip -p "$aab" 'base/dex/*.dex' > "$RUNNER_TEMP/aabdex.bin"
           unzip -p "$aab" base/resources.pb > "$RUNNER_TEMP/aabres.bin"
           test -s "$RUNNER_TEMP/aabdex.bin" && test -s "$RUNNER_TEMP/aabres.bin"

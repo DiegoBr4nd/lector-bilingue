@@ -126,8 +126,8 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
     }
     val appName = stringResource(R.string.app_name)
     // Mientras carga o si falla, el título es «Licencias»; listo, el nombre de la librería (o de la app).
-    val title = (state as? LicenseTextState.Ready)?.entry?.let { if (it.group == LicenseGroup.APP) appName else it.name }
-        ?: stringResource(R.string.licenses_title)
+    val name = (state as? LicenseTextState.Ready)?.entry?.let { if (it.group == LicenseGroup.APP) appName else it.name }
+    val title = name ?: stringResource(R.string.licenses_title)
     ScreenFrame(title, onBack, modifier) {
         when (val s = state) {
             LicenseTextState.Loading -> Unit
@@ -137,6 +137,8 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(Spacing.m),
                 ) {
+                    // Con letra al 200 % el título de la barra queda en una línea con puntos suspensivos: aquí va el nombre completo.
+                    Text(s.entry.let { if (it.group == LicenseGroup.APP) appName else it.name }, style = MaterialTheme.typography.titleMedium)
                     Text(s.entry.license, style = MaterialTheme.typography.titleSmall)
                     if (s.entry.group == LicenseGroup.APP) {
                         val url = Licenses.sourceCodeUrl(BuildConfig.VERSION_NAME)

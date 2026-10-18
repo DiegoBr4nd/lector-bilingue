@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -102,6 +103,8 @@ class AboutOnDeviceTest {
         compose.setContent { LectorTheme { LicenseTextScreen(id = "lector-bilingue", onBack = {}) } }
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("https://github.com/DiegoBr4nd/lector-bilingue/tree/v0.9.0")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("GNU GENERAL PUBLIC LICENSE", substring = true)).assertExists()
+        // El nombre completo también va en el contenido (no encabezado): la barra lo recorta con letra grande.
+        compose.onNode(hasText("Lector bilingüe") and !isHeading()).assertExists()
     }
 
     @Test fun unaLicenciaQueYaNoExisteMuestraElError() {
