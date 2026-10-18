@@ -42,10 +42,12 @@ fun AppNav(
     val backStack = rememberSaveable(
         saver = listSaver<MutableList<Route>, String>(
             save = { list -> list.map { it.encode() } },
-            restore = { saved -> mutableStateListOf<Route>().apply { saved.mapNotNullTo(this) { decodeRoute(it) } } },
+            // Nunca vacía (ni al recuperarla): así no hay que arreglarla mientras se dibuja.
+            restore = { saved ->
+                mutableStateListOf<Route>().apply { addAll(restoreRoutes(saved) { StartRules.start(settings.welcomeDone) }) }
+            },
         ),
     ) { mutableStateListOf(StartRules.start(settings.welcomeDone)) }
-    if (backStack.isEmpty()) backStack.add(StartRules.start(settings.welcomeDone))
 
     val developer = DeveloperEntries.current
 

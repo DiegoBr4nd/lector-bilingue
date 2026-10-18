@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("lectorbilingue.android.application")
     id("lectorbilingue.android.compose")
@@ -53,8 +55,9 @@ aboutLibraries {
     }
 }
 
-// LicensesTest lee el catálogo real (assets y LICENSE): se declaran como entradas para que la prueba vuelva a
-// correr cuando cambian (si no, Gradle la daría por "al día" con archivos nuevos).
+// LicensesTest lee el catálogo real (assets y LICENSE) y la versión del build (versionCode, versionName):
+// se declaran como entradas para que la prueba vuelva a correr cuando cambian (si no, Gradle la daría por
+// "al día" con archivos nuevos).
 tasks.withType<Test>().configureEach {
     inputs.dir(layout.projectDirectory.dir("src/main/assets/licencias"))
         .withPropertyName("catalogoLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
@@ -62,14 +65,24 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("fuentesLicencias").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.layout.projectDirectory.file("LICENSE"))
         .withPropertyName("licenciaApp").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+        .withPropertyName("versionBuild").withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+// Firma de release con la llave de SUBIDA de Juan (docs/publicar-en-play.md). La ruta a su archivo de propiedades
+// llega por ~/.gradle/gradle.properties (lector.firma=…) o la variable LECTOR_FIRMA: nunca desde el repositorio.
+// Sin ella, release sale sin firmar y la compilación sigue (CI, Claude, F-Droid).
+val firmaArchivo = providers.gradleProperty("lector.firma").orElse(providers.environmentVariable("LECTOR_FIRMA"))
+    .filter { it.isNotBlank() } // vacío = ausente (p. ej. LECTOR_FIRMA= en un entorno)
 
 android {
     namespace = "io.github.diegobr4nd.lectorbilingue"
     defaultConfig {
         applicationId = "io.github.diegobr4nd.lectorbilingue"
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.9.0"
+        // Solo arm64: los motores son arm64 y Androidx (graphics-path) traía además x86 y armeabi-v7a al AAB.
+        ndk { abiFilters += "arm64-v8a" }
     }
     // Los esquemas exportados de Room alimentan la prueba de migración en el teléfono.
     sourceSets { getByName("androidTest").assets.srcDir("$rootDir/books/schemas") }
@@ -78,6 +91,40 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
     // BuildConfig.VERSION_NAME y FLAVOR para «Acerca de» y el correo de comentarios.
     buildFeatures { buildConfig = true }
+    // Readium trae su reproductor de cómics (Divina) en assets/readium/divina/; la app solo lee EPUB, así que no viaja.
+    androidResources { ignoreAssetsPatterns += "<dir>divina" }
+    signingConfigs {
+        if (firmaArchivo.isPresent) {
+            val ruta = file(firmaArchivo.get())
+            check(ruta.isFile) { "No existe el archivo de firma indicado en lector.firma / LECTOR_FIRMA" }
+            val props = Properties().apply { ruta.reader().use { load(it) } }
+            fun valor(clave: String): String = props.getProperty(clave)?.takeIf { it.isNotBlank() }
+                ?: error("Falta «$clave» en el archivo de firma") // nunca se muestra el valor
+            create("subida") {
+                storeFile = file(valor("storeFile"))
+                storePassword = valor("storePassword")
+                keyAlias = valor("keyAlias")
+                keyPassword = valor("keyPassword")
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            if (firmaArchivo.isPresent) signingConfig = signingConfigs.getByName("subida")
+            // Símbolos de las .so dentro del AAB (Play los usa para leer cierres nativos); el APK no cambia.
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
+        }
+        // Copia release para probar en el Pixel JUNTO a la app de Juan (spec 6b §3): R8 como release, firma de debug,
+        // otro applicationId (datos propios). Nunca se instala encima de io.github.diegobr4nd.lectorbilingue.
+        create("prueba") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".prueba"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+    }
+    // La copia de prueba usa el mismo «sin pantalla de desarrollador» que release.
+    sourceSets.getByName("prueba").kotlin.directories.add("src/release/kotlin")
 }
 
 dependencies {

@@ -45,3 +45,7 @@ internal fun decodeRoute(text: String): Route? = when {
     text.startsWith("license:") -> text.removePrefix("license:").takeIf { it.isNotBlank() }?.let { Route.License(it) }
     else -> null
 }
+
+/** La pila guardada, sin lo inválido. Nunca vacía: si no queda ninguna ruta, empieza por [start]. */
+internal fun restoreRoutes(saved: List<String>, start: () -> Route): List<Route> =
+    saved.mapNotNull { decodeRoute(it) }.ifEmpty { listOf(start()) }

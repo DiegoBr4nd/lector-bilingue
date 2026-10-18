@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -82,10 +83,12 @@ fun ModelRow(
                 shape = ButtonShape,
                 modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = cancelLabel },
             ) { Text(stringResource(R.string.action_cancel)) }
+            // Borrar, como toda acción que borra, en el color de error (en el botón: apagado se atenúa).
             ModelRowState.Installed, ModelRowState.InUse -> TextButton(
                 onClick = onDelete,
                 enabled = enabled,
                 shape = ButtonShape,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = deleteLabel },
             ) { Text(stringResource(R.string.action_delete)) }
         }

@@ -147,6 +147,15 @@ Si los archivos ya existen, el script se niega a reemplazarlos; hay que añadir 
 - Lee el original y pon nota de 1 a 5 a la traducción A y a la B. Tu avance se guarda solo.
 - Al terminar, pulsa "Revelar" y elige `private/evaluacion-clave.json`. Verás el promedio de cada beam, cuántos textos ganó cada uno y la velocidad (palabras por segundo, mediana y peor caso).
 
+## Publicar en Google Play
+Firmar el AAB, subirlo a prueba interna y etiquetar la versión: ver [publicar-en-play.md](publicar-en-play.md).
+
+Copia release de prueba para el Pixel (R8 como release, paquete `.prueba`, nombre «Lector (prueba)», firma de debug; convive con la app de Juan):
+```bash
+./gradlew assemblePlayPrueba
+MSYS_NO_PATHCONV=1 adb install app/build/outputs/apk/play/prueba/app-play-prueba.apk
+```
+
 ## Catálogo firmado de modelos
 
 Cómo publicar un modelo, armar `catalog.json` (`tools/catalog/build_catalog.py`) y firmarlo con minisign: ver [catalogo.md](catalogo.md).

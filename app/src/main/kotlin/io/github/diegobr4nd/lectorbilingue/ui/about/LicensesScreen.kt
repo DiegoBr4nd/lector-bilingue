@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import io.github.diegobr4nd.lectorbilingue.BuildConfig
 import io.github.diegobr4nd.lectorbilingue.R
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.data.LicenseEntry
@@ -55,8 +56,7 @@ fun LicensesScreen(onBack: () -> Unit, onOpen: (String) -> Unit, modifier: Modif
 fun LicensesContent(state: LicensesState, onBack: () -> Unit, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
     val appName = stringResource(R.string.app_name)
     val openLabel = stringResource(R.string.licenses_open)
-    ScreenFrame(modifier) {
-        TitleRow(stringResource(R.string.licenses_title), onBack)
+    ScreenFrame(stringResource(R.string.licenses_title), onBack, modifier) {
         when (state) {
             LicensesState.Loading -> Unit
             LicensesState.Broken -> Text(stringResource(R.string.licenses_error), style = MaterialTheme.typography.bodyLarge)
@@ -125,22 +125,23 @@ fun LicenseTextScreen(id: String, onBack: () -> Unit, modifier: Modifier = Modif
         }
     }
     val appName = stringResource(R.string.app_name)
-    ScreenFrame(modifier) {
+    // Mientras carga o si falla, el título es «Licencias»; listo, el nombre de la librería (o de la app).
+    val name = (state as? LicenseTextState.Ready)?.entry?.let { if (it.group == LicenseGroup.APP) appName else it.name }
+    val title = name ?: stringResource(R.string.licenses_title)
+    ScreenFrame(title, onBack, modifier) {
         when (val s = state) {
-            LicenseTextState.Loading -> TitleRow(stringResource(R.string.licenses_title), onBack)
-            LicenseTextState.Broken -> {
-                TitleRow(stringResource(R.string.licenses_title), onBack)
-                Text(stringResource(R.string.licenses_text_error), style = MaterialTheme.typography.bodyLarge)
-            }
+            LicenseTextState.Loading -> Unit
+            LicenseTextState.Broken -> Text(stringResource(R.string.licenses_text_error), style = MaterialTheme.typography.bodyLarge)
             is LicenseTextState.Ready -> {
-                TitleRow(if (s.entry.group == LicenseGroup.APP) appName else s.entry.name, onBack)
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(Spacing.m),
                 ) {
+                    // Con letra al 200 % el título de la barra queda en una línea con puntos suspensivos: aquí va el nombre completo.
+                    Text(s.entry.let { if (it.group == LicenseGroup.APP) appName else it.name }, style = MaterialTheme.typography.titleMedium)
                     Text(s.entry.license, style = MaterialTheme.typography.titleSmall)
-                    val url = s.entry.url
-                    if (s.entry.group == LicenseGroup.APP && url != null) {
+                    if (s.entry.group == LicenseGroup.APP) {
+                        val url = Licenses.sourceCodeUrl(BuildConfig.VERSION_NAME)
                         LinkButton(stringResource(R.string.licenses_source_code)) { openExternal(context, url) }
                         Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

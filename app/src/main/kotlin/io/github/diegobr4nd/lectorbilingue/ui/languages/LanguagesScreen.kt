@@ -20,9 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,7 +62,6 @@ import io.github.diegobr4nd.lectorbilingue.core.ui.components.EngineKind
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
 import io.github.diegobr4nd.lectorbilingue.core.ui.components.ModelRow
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ButtonShape
-import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 import io.github.diegobr4nd.lectorbilingue.core.ui.R as UiR
 import io.github.diegobr4nd.lectorbilingue.data.AppSettings
@@ -172,18 +171,7 @@ fun LanguagesContent(
     onConfirmClearCache: () -> Unit = {},
     onDismissClearCache: () -> Unit = {},
 ) {
-    ScreenFrame(modifier) {
-        Row(Modifier.fillMaxWidth().padding(vertical = Spacing.s), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                Icon(painterResource(LectorIcons.ArrowBack), contentDescription = stringResource(R.string.languages_back))
-            }
-            Spacer(Modifier.width(Spacing.s))
-            Text(
-                stringResource(R.string.languages_title),
-                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = ReadingFontFamily),
-                modifier = Modifier.semantics { heading() },
-            )
-        }
+    ScreenFrame(stringResource(R.string.languages_title), onBack, modifier) {
         Column(
             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Spacing.m),
@@ -271,12 +259,14 @@ private fun CacheRow(bytes: Long?, enabled: Boolean, onClear: () -> Unit) {
             size == null -> null
             else -> stringResource(R.string.languages_cache_delete_description, size)
         }
+        // El rojo va en el botón, no en el texto: así, apagado, se atenúa como cualquier botón apagado.
         TextButton(
             onClick = onClear,
             enabled = enabled && LanguagesRules.canClearCache(bytes),
             shape = ButtonShape,
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
             modifier = Modifier.heightIn(min = 48.dp).semantics { description?.let { contentDescription = it } },
-        ) { Text(stringResource(R.string.languages_cache_delete), color = MaterialTheme.colorScheme.error) }
+        ) { Text(stringResource(R.string.languages_cache_delete)) }
     }
 }
 

@@ -64,4 +64,15 @@ class RoutesTest {
         assertEquals(Route.Welcome(3), StartRules.next(Route.Welcome(3)))
         assertEquals(Route.Library, StartRules.next(Route.Library))
     }
+
+    // Auditoría Compose (I2): la pila nunca se recupera vacía, así AppNav no tiene que arreglarla mientras dibuja.
+    @Test fun `una pila guardada sin rutas validas se recupera con la de inicio`() {
+        assertEquals(listOf(Route.Library), restoreRoutes(listOf("nada", "welcome:9")) { Route.Library })
+        assertEquals(listOf(Route.Welcome(1)), restoreRoutes(emptyList()) { Route.Welcome(1) })
+    }
+
+    @Test fun `una pila guardada valida se recupera igual y sin pedir la de inicio`() {
+        val saved = listOf(Route.Library, Route.About, Route.Licenses).map { it.encode() }
+        assertEquals(listOf(Route.Library, Route.About, Route.Licenses), restoreRoutes(saved) { error("no hace falta") })
+    }
 }

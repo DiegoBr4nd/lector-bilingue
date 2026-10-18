@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -16,6 +19,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
@@ -92,9 +96,39 @@ class LibraryOnDeviceTest {
         val action = row.fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == "Borrar libro" }
         rule.runOnIdle { action.action() }
         rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertIsDisplayed()
+        // Auditoría de seguridad (M3): avisa de que las traducciones guardadas se borran aparte, con el botón real.
+        rule.onNodeWithText(
+            "Las traducciones guardadas no se borran aquí: en Idiomas, toca «Borrar» junto a «Traducciones guardadas».",
+            substring = true,
+        ).assertIsDisplayed()
         assertNull(deleted) // Nada se borra sin confirmar.
         rule.onNode(hasText("Borrar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         rule.runOnIdle { assertEquals(id, deleted) }
+    }
+
+    /**
+     * Auditoría Compose (I2): si el libro empieza a abrirse con el diálogo de borrar abierto, el diálogo se cierra y no
+     * vuelve solo cuando termina de abrirse (la elección se olvida en un efecto, sin escribir estado al dibujar).
+     */
+    @Test
+    fun siElLibroSeAbreElDialogoDeBorrarSeCierraYNoVuelve() {
+        var state by mutableStateOf(sample)
+        rule.setContent {
+            LectorTheme {
+                LibraryContent(
+                    state = state, onAdd = {}, onOpen = {}, onDelete = {},
+                    onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                )
+            }
+        }
+        val action = rule.onNodeWithText("Libro de muestra").fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == "Borrar libro" }
+        rule.runOnIdle { action.action() }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertIsDisplayed()
+        rule.runOnIdle { state = sample.copy(openingId = id) }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertDoesNotExist()
+        rule.runOnIdle { state = sample }
+        rule.onNodeWithText("¿Borrar «Libro de muestra»?").assertDoesNotExist()
     }
 
     @Test
@@ -125,13 +159,45 @@ class LibraryOnDeviceTest {
         rule.runOnIdle { assertEquals(id, opened) }
     }
 
+    /** Auditoría M3 (I2): el aviso trae un botón de 48 dp («Descargar») que lleva a Idiomas; el texto ya no dice «· Descargar». */
     @Test
     fun elAvisoDeIdiomasLlevaAIdiomas() {
         var languages = 0
         show(sample.copy(notice = LanguageNotice.NoLanguages), onLanguages = { languages++ })
-        rule.onNodeWithText("Aún no tienes idiomas · Descargar").assertHeightIsAtLeast(48.dp).performClick()
+        rule.onNodeWithText("Aún no tienes idiomas").assertIsDisplayed()
+        rule.onNodeWithText("· Descargar", substring = true).assertDoesNotExist()
+        rule.onNode(hasText("Descargar") and hasClickAction()).assertHeightIsAtLeast(48.dp).performClick()
         rule.onNodeWithContentDescription("Más opciones").assertHeightIsAtLeast(48.dp)
         rule.runOnIdle { assertEquals(1, languages) }
+    }
+
+    @Test
+    fun siLaDescargaFalloElBotonDiceVerIdiomas() {
+        var languages = 0
+        show(sample.copy(notice = LanguageNotice.Failed("en-es")), onLanguages = { languages++ })
+        rule.onNodeWithText("Falló la descarga de", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Reintentar en Idiomas", substring = true).assertDoesNotExist()
+        rule.onNode(hasText("Ver idiomas") and hasClickAction()).assertHeightIsAtLeast(48.dp).performClick()
+        rule.runOnIdle { assertEquals(1, languages) }
+    }
+
+    /** Con letra al 200 % el texto se ve entero y el botón baja debajo (como la banda del Lector). */
+    @Test
+    fun conLetraGrandeElBotonDelAvisoVaDebajoDelTexto() {
+        rule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 2f)) {
+                LectorTheme {
+                    LibraryContent(
+                        state = sample.copy(notice = LanguageNotice.NoLanguages), onAdd = {}, onOpen = {}, onDelete = {},
+                        onLanguages = {}, onHowTo = {}, onDeveloper = null, snackbar = SnackbarHostState(),
+                    )
+                }
+            }
+        }
+        val text = rule.onNodeWithText("Aún no tienes idiomas").fetchSemanticsNode().boundsInRoot
+        val button = rule.onNode(hasText("Descargar") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        assertTrue(button.top >= text.bottom - 1f, "el botón no bajó: texto ${text.bottom}, botón ${button.top}")
     }
 
     @Test
@@ -146,11 +212,14 @@ class LibraryOnDeviceTest {
         assertEquals(listOf("Libro sin título", "0 % leído"), untitled[SemanticsProperties.Text].map { it.text })
     }
 
+    /** TalkBack: una sola acción (el botón, «abrir Idiomas»); el texto se lee pero no es un segundo botón. */
     @Test
     fun elAvisoDiceQueAbreIdiomas() {
         show(sample.copy(notice = LanguageNotice.NoLanguages))
-        val notice = rule.onNodeWithText("Aún no tienes idiomas · Descargar").fetchSemanticsNode().config
-        assertEquals("abrir Idiomas", notice[SemanticsActions.OnClick].label)
+        rule.onNodeWithText("Aún no tienes idiomas").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        val button = rule.onNode(hasText("Descargar") and hasClickAction()).fetchSemanticsNode().config
+        assertEquals("abrir Idiomas", button[SemanticsActions.OnClick].label)
+        rule.onAllNodes(hasClickAction() and hasText("Descargar", substring = true)).assertCountEquals(1)
     }
 
     @Test

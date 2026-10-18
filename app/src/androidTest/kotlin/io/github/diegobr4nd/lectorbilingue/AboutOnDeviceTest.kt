@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,6 +35,7 @@ import io.github.diegobr4nd.lectorbilingue.ui.about.DeviceInfo
 import io.github.diegobr4nd.lectorbilingue.ui.about.FEEDBACK_EMAIL
 import io.github.diegobr4nd.lectorbilingue.ui.about.LicenseTextScreen
 import io.github.diegobr4nd.lectorbilingue.ui.about.LicensesScreen
+import io.github.diegobr4nd.lectorbilingue.ui.howto.HowToScreen
 import io.github.diegobr4nd.lectorbilingue.ui.nav.AppNav
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
@@ -99,8 +101,10 @@ class AboutOnDeviceTest {
 
     @Test fun laLicenciaDeLaAppTraeElCodigoFuente() {
         compose.setContent { LectorTheme { LicenseTextScreen(id = "lector-bilingue", onBack = {}) } }
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("https://github.com/DiegoBr4nd/lector-bilingue")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("https://github.com/DiegoBr4nd/lector-bilingue/tree/v0.9.0")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("GNU GENERAL PUBLIC LICENSE", substring = true)).assertExists()
+        // El nombre completo también va en el contenido (no encabezado): la barra lo recorta con letra grande.
+        compose.onNode(hasText("Lector bilingüe") and !isHeading()).assertExists()
     }
 
     @Test fun unaLicenciaQueYaNoExisteMuestraElError() {
@@ -132,6 +136,24 @@ class AboutOnDeviceTest {
             compose.waitForIdle()
         }
         compose.onNodeWithText("Abrir acerca de").assertIsDisplayed()
+    }
+
+    // ---------- Auditoría M3 (I3): la barra superior común ----------
+
+    @Test fun acercaDeTieneLaBarraComun() = compose.assertSharedTopBar("Acerca de") {
+        AboutScreen(onBack = {}, onLicenses = {}, info = info, startMail = { true })
+    }
+
+    @Test fun licenciasTieneLaBarraComun() = compose.assertSharedTopBar("Licencias") {
+        LicensesScreen(onBack = {}, onOpen = {})
+    }
+
+    @Test fun elTextoDeLicenciaTieneLaBarraComun() = compose.assertSharedTopBar("Lector bilingüe") {
+        LicenseTextScreen(id = "lector-bilingue", onBack = {})
+    }
+
+    @Test fun comoSeUsaTieneLaBarraComun() = compose.assertSharedTopBar("Cómo se usa") {
+        HowToScreen(onBack = {}, onResetTips = {})
     }
 }
 

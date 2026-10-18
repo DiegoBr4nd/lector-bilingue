@@ -9,6 +9,10 @@ captures/
 .cxx/
 *.keystore
 *.jks
+# Otros formatos de llave (PKCS#12 y el archivo PEPK de Play): tampoco al repo
+*.p12
+*.pfx
+*.pepk
 
 # Textos privados de Juan (derechos de autor): nunca a git
 private/
@@ -22,3 +26,6 @@ __pycache__/
 
 # Bocetos y bitácoras locales de las herramientas de Claude (nunca al repo)
 .superpowers/
+
+# Archivo de firma de la llave de subida (vive fuera del repo; por si se copia aquí por error)
+lector-subida.properties

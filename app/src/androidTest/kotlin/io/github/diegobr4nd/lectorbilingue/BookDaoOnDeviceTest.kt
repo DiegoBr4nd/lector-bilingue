@@ -46,4 +46,11 @@ class BookDaoOnDeviceTest {
         dao.delete("a")
         assertNull(dao.get("a"))
     }
+
+    /** Auditoría de seguridad (M3): el vaciado del WAL tras borrar corre de verdad en Room (0 = se pudo). */
+    @Test fun borrarYVaciarElWal() = runBlocking {
+        dao.insert(book("a", added = 1))
+        dao.delete("a")
+        assertEquals(0, dao.checkpointWal())
+    }
 }

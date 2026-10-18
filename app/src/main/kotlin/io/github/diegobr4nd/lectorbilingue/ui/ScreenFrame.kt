@@ -13,40 +13,85 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.diegobr4nd.lectorbilingue.R
+import io.github.diegobr4nd.lectorbilingue.core.ui.components.LectorIcons
+import io.github.diegobr4nd.lectorbilingue.core.ui.theme.ReadingFontFamily
 import io.github.diegobr4nd.lectorbilingue.core.ui.theme.Spacing
 
 /** Ancho máximo del contenido: en tabletas las pantallas no se estiran de lado a lado. */
 val ScreenMaxWidth = 560.dp
 
 /**
- * Fondo, márgenes seguros arriba y a los lados (barras del sistema) y ancho máximo comunes a Inicio e Idiomas.
- * El final lo resuelve [BottomInsetSpacer].
+ * Barra superior común de Idiomas, Cómo se usa, Acerca de y Licencias (auditoría M3, I3): la misma `TopAppBar` que la
+ * Biblioteca. Título en una línea (TalkBack lo lee entero) marcado como encabezado y «Volver» de 48 dp. En reposo es
+ * del color del fondo; con [scrollBehavior], al desplazar el contenido cambia de tono y se nota el borde.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScreenFrame(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        // Arriba y a los lados se respetan las barras; abajo no: el contenido se desliza bajo la barra de gestos
-        // y [BottomInsetSpacer] deja el final libre.
-        Box(
-            Modifier.windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
-            ),
-            contentAlignment = Alignment.TopCenter,
-        ) {
+fun LectorTopBar(title: String, onBack: () -> Unit, scrollBehavior: TopAppBarScrollBehavior?, modifier: Modifier = Modifier) {
+    TopAppBar(
+        title = {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge.copy(fontFamily = ReadingFontFamily),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                Icon(painterResource(LectorIcons.ArrowBack), contentDescription = stringResource(R.string.languages_back))
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+        scrollBehavior = scrollBehavior,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Pantalla con [LectorTopBar] arriba (Idiomas, Cómo se usa, Acerca de y Licencias): fondo, márgenes seguros a los
+ * lados y ancho máximo del contenido. La barra respeta la de estado; abajo no hay margen: el contenido se desliza bajo
+ * la barra de gestos y [BottomInsetSpacer] deja el final libre.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScreenFrame(title: String, onBack: () -> Unit, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    // «Fijada» (pinned): la barra no se esconde al desplazar, solo cambia de tono.
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
+    Scaffold(
+        modifier = modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
+        topBar = { LectorTopBar(title, onBack, scroll) },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+    ) { inner ->
+        Box(Modifier.padding(inner).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Column(
                 Modifier.widthIn(max = ScreenMaxWidth).fillMaxSize().padding(horizontal = Spacing.xl),
                 content = content,

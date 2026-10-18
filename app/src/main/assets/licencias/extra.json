@@ -3,7 +3,6 @@
   "entries": [
     { "id": "lector-bilingue", "group": "app", "name": "Lector bilingüe", "license": "GPL-3.0-or-later", "texts": ["licencias/textos/GPL-3.0-or-later.txt"], "url": "https://github.com/DiegoBr4nd/lector-bilingue" },
     { "id": "readium-js", "group": "libraries", "name": "Scripts de Readium (approx-string-match, css-selector-generator, hash.js, string.prototype.matchall y dependencias)", "license": "MIT / ISC", "texts": ["licencias/avisos/readium-js.txt"], "url": "https://github.com/readium/kotlin-toolkit/tree/3.4.0/readium/navigator/src/main/assets/_scripts" },
-    { "id": "readium-divina", "group": "libraries", "name": "Lector Divina de Readium (PixiJS, Hammer.js y dependencias)", "license": "BSD-3-Clause / MIT / ISC", "texts": ["licencias/avisos/readium-divina.txt"], "url": "https://github.com/edrlab/divina-player-js" },
     { "id": "desugar-jdk-libs", "group": "libraries", "name": "desugar_jdk_libs (Google)", "license": "GPL-2.0-with-classpath-exception", "texts": ["licencias/textos/GPL-2.0-with-classpath-exception.txt"], "url": "https://github.com/google/desugar_jdk_libs" },
     { "id": "ctranslate2", "group": "native", "name": "CTranslate2", "license": "MIT", "texts": ["licencias/avisos/ctranslate2.txt"], "url": "https://github.com/OpenNMT/CTranslate2" },
     { "id": "ruy", "group": "native", "name": "ruy (Google)", "license": "Apache-2.0", "texts": ["licencias/avisos/ruy.txt"], "url": "https://github.com/google/ruy" },
